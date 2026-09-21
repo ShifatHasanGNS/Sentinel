@@ -213,16 +213,40 @@ build_watchtower :: proc(h: ^Hierarchy) {
 	defer geo.Destroy(&railing_post)
 	append_ring_y(&root, railing_post, TOWER_RAILING_POST_COUNT, TOWER_PLATFORM_SIZE * 0.5, TOWER_HEIGHT+TOWER_PLATFORM_THICKNESS*0.5+TOWER_RAILING_HEIGHT*0.5)
 
-	roof := geo.Tetrahedron(TOWER_ROOF_SIZE)
-	defer geo.Destroy(&roof)
-	// A regular tetrahedron's own natural height doesn't match
-	// TOWER_ROOF_HEIGHT; scaled non-uniformly on Y via the transform
-	// (not the generator) to read as a shallow peaked cap.
-	roof_transform := la.mul(
-		la.matrix4_translate(la.Vector3f32{0, TOWER_HEIGHT + TOWER_PLATFORM_THICKNESS * 0.5 + TOWER_ROOF_HEIGHT * 0.5, 0}),
-		la.matrix4_scale(la.Vector3f32{1, TOWER_ROOF_HEIGHT / TOWER_ROOF_SIZE, 1}),
-	)
-	geo.Append_Mesh(&root, roof, roof_transform)
+	// Roof: 4 identical slabs, each pitched inward and swept 90 degrees
+	// apart around Y — a proper 4-sided (square) pyramid cap. NOT a single
+	// non-uniformly-scaled Tetrahedron (an earlier version of this file
+	// used one): a regular tetrahedron's 4 corners split 2-high/2-low, so
+	// flattening it on Y gives a RIDGE (two high corners joined by an
+	// edge), not a single apex — viewed end-on along that hidden ridge
+	// diagonal it coincidentally looked like a clean point, but from any
+	// other angle (e.g. straight down one of the tower's sides) it read as
+	// an open, inverted wedge with the platform visible through it. Caught
+	// by a dedicated geometry-inspection pass, not the original build —
+	// see PROGRESS.md. This uses the same per-side "tilt, position, then
+	// sweep around Y" composition as append_ring_y (rotate-outermost,
+	// CLAUDE.md/PROGRESS.md's Session 3 "rotate * translate, not
+	// translate * rotate" lesson), just 4 fixed 90-degree steps instead of
+	// a loop over an arbitrary count, since a square pyramid always has
+	// exactly 4 sides.
+	roof_half_base: f32 = TOWER_ROOF_SIZE * 0.5
+	roof_pitch := math.atan2(TOWER_ROOF_HEIGHT, roof_half_base)
+	roof_slant := math.sqrt(roof_half_base*roof_half_base + TOWER_ROOF_HEIGHT*TOWER_ROOF_HEIGHT)
+	roof_base_y: f32 = TOWER_HEIGHT + TOWER_PLATFORM_THICKNESS*0.5
+
+	roof_slab := geo.Cube(TOWER_ROOF_SIZE, 0.06, roof_slant)
+	defer geo.Destroy(&roof_slab)
+	for side in 0 ..< 4 {
+		angle := f32(side) * (math.PI * 0.5)
+		transform := la.mul(
+			la.matrix4_rotate(angle, la.Vector3f32{0, 1, 0}),
+			la.mul(
+				la.matrix4_translate(la.Vector3f32{0, roof_base_y + TOWER_ROOF_HEIGHT*0.5, roof_half_base*0.5}),
+				la.matrix4_rotate(roof_pitch, la.Vector3f32{1, 0, 0}),
+			),
+		)
+		geo.Append_Mesh(&root, roof_slab, transform)
+	}
 
 	geo.Upload(&root)
 	tower := Add_Node(h, "Watchtower", NO_PARENT, position_transform(WATCHTOWER_POSITION), root, Default_Material(COLOR_TOWER))
@@ -463,6 +487,25 @@ build_bunker :: proc(h: ^Hierarchy) {
 	defer geo.Destroy(&bag_piece)
 	bag := geo.Empty_Mesh()
 	append_ring_y(&bag, bag_piece, BUNKER_BAG_SEGMENTS, BUNKER_BAG_RADIUS, 0)
+
+	// append_ring_y only builds the ring's SIDE wall — a tube open at both
+	// ends, not a solid bag. Confirmed by a dedicated geometry-inspection
+	// capture, not visible at write time: from anywhere above roughly
+	// eye-level (which is most of this project's usual camera angles) you
+	// can see straight through the open top into the hollow interior,
+	// reading as a cluster of little pipes rather than stacked sandbags —
+	// see PROGRESS.md. Capped top and bottom with a small flat Cube "lid"
+	// on the SHARED bag template (added once here, so every instance below
+	// gets it for free through Append_Mesh, no per-instance cost). A
+	// square lid can't match the ring's hexagonal cross-section exactly;
+	// sized smaller than the ring's own diameter so its corners stay
+	// inside the hexagon's flats rather than poking past the silhouette.
+	cap_size: f32 = BUNKER_BAG_RADIUS * 1.5
+	cap := geo.Cube(cap_size, 0.06, cap_size)
+	defer geo.Destroy(&cap)
+	append_translated(&bag, cap, la.Vector3f32{0, BUNKER_ROW_HEIGHT*0.5, 0})
+	append_translated(&bag, cap, la.Vector3f32{0, -BUNKER_ROW_HEIGHT*0.5, 0})
+
 	defer geo.Destroy(&bag)
 
 	// 3 straight runs (left, back, right) walked by a formula, staggered
@@ -610,10 +653,29 @@ build_barracks :: proc(h: ^Hierarchy) {
 
 		t := (f32(i) + 0.5) / f32(BARRACKS_WINDOW_COUNT)
 		window_local := Identity_Transform()
-		// Recessed slightly INTO the wall (not flush/proud), matching the
-		// spec's "recessed or inset quads" — a small negative Z offset
-		// from the wall surface.
-		window_local.Position = {(t - 0.5) * (BARRACKS_SIZE.x - 0.8), BARRACKS_SIZE.y * 0.6, BARRACKS_SIZE.z*0.5 - 0.03}
+		// On the BACK (-Z) wall, not the front — the front is the door's
+		// wall, and an evenly-spaced 3-window row is symmetric about X=0,
+		// which is exactly the door's own X position, so a middle window on
+		// the front wall would sit right on top of the door. Moving the
+		// whole row to the back wall avoids that overlap by construction
+		// rather than by carving an asymmetric gap out of the spacing
+		// formula. A Plane's local normal is always +Z (Library/Geometry/
+		// Geometry.odin), so it needs a 180-degree yaw to face -Z (outward
+		// on this wall) instead of into the building.
+		//
+		// PROUD of the wall (a small POSITIVE offset past -SIZE.z*0.5, not
+		// a negative one) — the previous version placed the window BEHIND
+		// the wall's own outward-facing surface, i.e. embedded inside the
+		// solid Cube body with no actual opening cut into it, so the wall's
+		// opaque front face permanently occluded it from every exterior
+		// angle (this is a Cube, not a wall with a real cut-out; there is
+		// no CSG in this project, CLAUDE.md §2). Confirmed invisible via a
+		// dedicated geometry-inspection capture, not caught at write time —
+		// see PROGRESS.md. Proud placement matches how the door (a solid
+		// Cube, so it inherently pokes out by half its own thickness) is
+		// already visible.
+		window_local.Position = {(t - 0.5) * (BARRACKS_SIZE.x - 0.8), BARRACKS_SIZE.y * 0.6, -BARRACKS_SIZE.z*0.5 - 0.02}
+		window_local.Rotation.y = math.PI
 		Add_Node(h, fmt_window_name(i), barracks, window_local, window, MATERIAL_GLASS)
 	}
 }
@@ -675,7 +737,7 @@ TANK_HULL_SIZE :: la.Vector3f32{2.2, 0.7, 4.2}
 TANK_TREAD_HEIGHT :: 0.5
 TANK_ROAD_WHEEL_COUNT :: 5
 TANK_ROAD_WHEEL_RADIUS :: 0.22
-TANK_ROAD_WHEEL_SEGMENTS :: 5
+TANK_ROAD_WHEEL_SEGMENTS :: 6 // matches JEEP_WHEEL_SEGMENTS and CLAUDE.md §2 item 8's 6-10 segment guidance; 5 read as fragmented at close/oblique angles (see PROGRESS.md)
 TANK_TURRET_SIZE :: la.Vector3f32{1.5, 0.55, 1.8}
 TANK_BARREL_LENGTH :: 2.4
 
