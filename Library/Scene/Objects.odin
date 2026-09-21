@@ -779,11 +779,30 @@ build_tank :: proc(h: ^Hierarchy) {
 	defer geo.Destroy(&hull)
 	append_translated(&root, hull, la.Vector3f32{0, TANK_TREAD_HEIGHT + TANK_HULL_SIZE.y*0.5, 0})
 
-	glacis := geo.Tetrahedron(TANK_HULL_SIZE.x * 0.9)
+	// Glacis (sloped front armor plate): a single thin Cube slab, tilted so
+	// its INNER edge is flush with the hull's own front-top corner and its
+	// OUTER edge reaches forward to tread level — a proper wedge, not the
+	// non-uniformly-scaled Tetrahedron this used to be. Same bug class as
+	// the watchtower roof's old Tetrahedron-roof (see build_watchtower and
+	// PROGRESS.md's geometry-audit writeup): a regular tetrahedron's 4
+	// corners split 2-high/2-low along a DIAGONAL, not a clean single-axis
+	// ridge, so flattening it produced an oddly-angled flat panel jutting
+	// sideways out of the hull rather than a forward-sloping plate —
+	// visible only from a broadside profile view, not the front/3-4 angles
+	// originally checked. Reuses the exact "tilt, position, done" slab
+	// technique already proven on the barracks roof and the watchtower's
+	// 4-sided pyramid fix (both derived the same way: outer/low edge and
+	// inner/high edge pinned to their exact target points, pitch solved
+	// from the rise/run between them).
+	glacis_rise: f32 = TANK_HULL_SIZE.y
+	glacis_reach: f32 = 0.9 // how far the bottom tip extends forward, past the hull's own front face
+	glacis_pitch := math.atan2(glacis_rise, glacis_reach)
+	glacis_slant := math.sqrt(glacis_rise*glacis_rise + glacis_reach*glacis_reach)
+	glacis := geo.Cube(TANK_HULL_SIZE.x, 0.06, glacis_slant)
 	defer geo.Destroy(&glacis)
 	glacis_transform := la.mul(
-		la.matrix4_translate(la.Vector3f32{0, TANK_TREAD_HEIGHT + TANK_HULL_SIZE.y*0.5, TANK_HULL_SIZE.z*0.5}),
-		la.matrix4_scale(la.Vector3f32{1, TANK_HULL_SIZE.y / (TANK_HULL_SIZE.x*0.9), 0.6}),
+		la.matrix4_translate(la.Vector3f32{0, TANK_TREAD_HEIGHT + glacis_rise*0.5, TANK_HULL_SIZE.z*0.5 + glacis_reach*0.5}),
+		la.matrix4_rotate(glacis_pitch, la.Vector3f32{1, 0, 0}),
 	)
 	geo.Append_Mesh(&root, glacis, glacis_transform)
 
@@ -791,12 +810,21 @@ build_tank :: proc(h: ^Hierarchy) {
 	// the tank's turret headlights, baked into the composite rather than
 	// given child nodes: THIS spec says only "on the hull," unlike the
 	// jeep's Session 5 spec which explicitly asked for child nodes (see
-	// this file's header for that distinction).
+	// this file's header for that distinction). Mounted at the hull's
+	// front-TOP corners specifically — exactly where the glacis plate's
+	// own inner edge is flush with the hull's front face, so a box poking
+	// out past that face there is proud of BOTH surfaces at once. The
+	// previous position (mid-height) sat entirely BEHIND the glacis
+	// plate's own surface at that height once the glacis became a
+	// correctly-sloped wedge (the plate's forward reach grows with
+	// distance from the top), which would have hidden it behind the
+	// plate — confirmed by the same geometry-inspection pass that found
+	// the glacis bug above, not assumed.
 	headlight := geo.Cube(0.16, 0.16, 0.1)
 	defer geo.Destroy(&headlight)
 	for side in 0 ..< 2 {
 		sign: f32 = -1 if side == 0 else 1
-		append_translated(&root, headlight, la.Vector3f32{sign * TANK_HULL_SIZE.x * 0.35, TANK_TREAD_HEIGHT + TANK_HULL_SIZE.y*0.75, TANK_HULL_SIZE.z*0.5 - 0.15})
+		append_translated(&root, headlight, la.Vector3f32{sign * TANK_HULL_SIZE.x * 0.35, TANK_TREAD_HEIGHT + TANK_HULL_SIZE.y - 0.1, TANK_HULL_SIZE.z*0.5 + 0.05})
 	}
 
 	tread := geo.Cube(0.35, TANK_TREAD_HEIGHT, TANK_HULL_SIZE.z+0.2)
