@@ -6,11 +6,11 @@ GLSL** and **GLFW**. Vector/matrix math uses Odin's own `core:math/linalg`;
 no scene-graph library, no precomputed geometry/light-position data —
 everything else is generated at runtime.
 
-This repository is currently a **project skeleton**: folder/package layout,
-stub files, and the reused `Library/Engine/` GL wrapper (audited and usable
-as provided — see `Library/Engine/Shader/Shader.odin`). No project geometry,
-scene, or rendering logic has been implemented yet. Implementation follows
-the session plan in `Prompts.md`, in order, one session at a time.
+Implementation follows the session plan in `Prompts.md`, in order, one
+session at a time; see `PROGRESS.md` for exactly which roadmap steps are
+done. As of the current session, all 9 scene objects, the full hierarchical
+light rig (21 lights), barracks-window area-light sampling, and a live
+Flat/Gouraud/Phong shading toggle are implemented and running.
 
 Note: `CLAUDE.md` §8/§13 sketch `Engine/`, `Geometry/`, and `Scene/` as
 top-level siblings of `Source/`. This repo instead nests them one level
@@ -56,7 +56,7 @@ Sentinel/
 │   ├── Camera/             # SENTINEL-specific: free-fly + Patrol-Mode camera, projections
 │   └── Lights/             # SENTINEL-specific: light structs, runtime placement/animation
 ├── Source/                 # main package: window, main loop, mode switching, input
-├── Shaders/                 # hand-written GLSL (Scene.vert / Scene.frag)
+├── Shaders/                 # hand-written GLSL, one combined file (see below)
 └── Debug/                   # self-verification: --capture screenshot tooling
 ```
 
@@ -76,10 +76,10 @@ and exits — see `Debug/README.md`.
 
 ## Controls
 
-Free-fly camera controls, added this session (roadmap step 2). Object
-selection/translate/rotate and the remaining Inspection Mode toggles
-(shading mode, culling, depth-test, wireframe) arrive in roadmap step 10 and
-will be added to this table then, not replace it.
+Free-fly camera controls (roadmap step 2) plus the debug/comparison toggles
+added through roadmap step 7. Object selection/translate/rotate and the
+remaining Inspection Mode state machine arrive in roadmap step 10 and will
+be added to this table then, not replace it.
 
 | Key / input      | Action                                                    |
 | ---------------- | ---------------------------------------------------------- |
@@ -90,6 +90,11 @@ will be added to this table then, not replace it.
 | `Shift` (either)  | Sprint (multiplies move speed)                              |
 | `P`               | Toggle perspective / orthographic projection                |
 | Scroll wheel      | Zoom the orthographic volume (only while in orthographic projection) |
+| `L`               | Toggle light gizmos (type-coded markers + aim lines for every active light) |
+| `+` / `-` (or numpad `+`/`-`) | Increase / decrease barracks-window area-light sample count (1-8) |
+| `J`               | Toggle per-pixel jitter on area-light sampling               |
+| `1` / `2` / `3`   | Shading mode: Flat / Gouraud / Phong (shown in the window title) |
+| `G`               | Toggle ground-grid resolution (1x1 quad vs. 24x24 subdivided grid) |
 | `Esc`             | Quit                                                         |
 
 CLI flags for `--capture` runs (see `Debug/README.md`):
@@ -98,11 +103,17 @@ CLI flags for `--capture` runs (see `Debug/README.md`):
 | ----------------------------- | ----------------------------------------------------------------------- |
 | `--capture <frames> <path>`   | Render `frames` frames, save a screenshot to `path`, then exit          |
 | `--projection <perspective\|orthographic>` | Starting projection mode (default `perspective`) |
+| `--gizmos`                    | Start with light gizmos visible                                        |
+| `--area-samples <N>`          | Starting barracks-window area-light sample count, 1-8 (default 4)      |
+| `--area-jitter`               | Start with area-light per-pixel jitter enabled                         |
+| `--shading <flat\|gouraud\|phong>` | Starting shading mode (default `phong`)                          |
+| `--ground-resolution <low\|high>` | Starting ground-grid resolution (default `low`, i.e. 1x1)         |
 
-Interactive input (mouse look, WASD/QE movement, `P`, scroll) is
-intentionally disabled during a `--capture` run so captured frames stay
-reproducible regardless of the real system cursor/keyboard state —
-`--projection` is the supported way to change what a capture run looks at.
+Interactive input (mouse look, WASD/QE movement, `P`, scroll, `L`, `+`/`-`,
+`J`, `1`/`2`/`3`, `G`) is intentionally disabled during a `--capture` run so
+captured frames stay reproducible regardless of the real system
+cursor/keyboard state — the CLI flags above are the supported way to change
+what a capture run looks like instead.
 
 ## Syllabus coverage
 

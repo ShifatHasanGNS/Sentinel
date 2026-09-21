@@ -331,6 +331,47 @@ Append_Mesh :: proc(dst: ^Mesh, src: Mesh, transform: la.Matrix4f32) {
 	}
 }
 
+// Smooth_Cylinder_Normals overwrites every vertex's stored NORMAL with the
+// analytically correct outward-RADIAL direction for a cylinder around the
+// given axis, replacing whatever flat per-face normal that vertex had
+// before (roadmap step 7, CLAUDE.md §6.1's flat/Gouraud/Phong comparison —
+// Gouraud and Phong only look different from Flat where normals actually
+// VARY across a face, which never happens on this project's faceted
+// geometry unless something does this).
+//
+// This is a per-vertex FORMULA (the component of `vertex.Position -
+// axis_point` perpendicular to `axis_direction`), not a neighbour-
+// averaging/mesh-welding pass — CLAUDE.md §2 item 5's "no precomputed
+// data" applies to a smoothing pass exactly as much as to geometry itself,
+// and a formula sidesteps needing to match up duplicated vertices at
+// segment seams: this project's ring segments (append_ring_x/y in
+// Library/Scene/Objects.odin) deliberately OVERLAP each other slightly
+// (their own tangential-width formula has a >1 overlap factor), so
+// adjacent segments' "shared" edges don't actually sit at identical
+// positions the way a welding pass would need.
+//
+// Call this on a ring/cylinder-shaped mesh's own LOCAL vertex data —
+// meaning BEFORE it's Append_Mesh'd into a larger composite, while
+// `axis_point`/`axis_direction` are still given in that same local space
+// (append_ring_x/y's own axis: point at (x_offset,0,0) or (0,y_offset,0),
+// direction (1,0,0) or (0,1,0) respectively, matching whichever axis that
+// ring sweeps around).
+Smooth_Cylinder_Normals :: proc(mesh: ^Mesh, axis_point: la.Vector3f32, axis_direction: la.Vector3f32) {
+	axis := la.normalize(axis_direction)
+	for &vertex in mesh.Vertices {
+		offset := vertex.Position - axis_point
+		radial := offset - la.dot(offset, axis) * axis
+		// A vertex sitting exactly ON the axis has no well-defined radial
+		// direction (the formula degenerates to the zero vector) — leave
+		// its existing flat normal alone rather than normalizing noise.
+		// None of this project's own ring segments currently have a vertex
+		// there, but a future one might.
+		if la.length(radial) > 1e-5 {
+			vertex.Normal = la.normalize(radial)
+		}
+	}
+}
+
 // Upload creates this Mesh's GL vertex/index buffers and vertex array from
 // its current CPU-side Vertices/Indices (via Library/Engine), ready for
 // Draw. Call once, after all Append_Mesh calls that build this Mesh are

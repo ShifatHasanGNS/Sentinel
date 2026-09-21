@@ -456,6 +456,12 @@ build_jeep :: proc(h: ^Hierarchy) {
 	defer geo.Destroy(&wheel_segment)
 	wheel := geo.Empty_Mesh()
 	append_ring_x(&wheel, wheel_segment, JEEP_WHEEL_SEGMENTS, JEEP_WHEEL_RADIUS, 0)
+	// Smooth cylinder normals (roadmap step 7) — one of the "a few curved
+	// parts" this session picks to actually show Gouraud/Phong differing
+	// from Flat (CLAUDE.md §6.1); axis matches append_ring_x's own sweep
+	// axis (X, through the ring's local origin here since x_offset above
+	// is 0). The rest of the jeep stays faceted.
+	geo.Smooth_Cylinder_Normals(&wheel, la.Vector3f32{0, 0, 0}, la.Vector3f32{1, 0, 0})
 	defer geo.Destroy(&wheel)
 
 	for corner in 0 ..< 4 {
@@ -592,6 +598,13 @@ build_radar :: proc(h: ^Hierarchy) {
 	dish_segment := geo.Cube(0.5, 0.08, dish_tangential_width)
 	dish := geo.Empty_Mesh()
 	append_ring_y(&dish, dish_segment, RADAR_DISH_SEGMENTS, RADAR_DISH_RADIUS*0.55, 0)
+	// Smooth cylinder normals (roadmap step 7, CLAUDE.md §6.1) — the radar
+	// dish is the task's own named example. Axis matches append_ring_y's
+	// sweep axis (Y, through the local origin here since y_offset above is
+	// 0); the later 35-degree tilt is a NODE transform applied after this,
+	// so it doesn't affect which axis the mesh's own local data is smooth
+	// around.
+	geo.Smooth_Cylinder_Normals(&dish, la.Vector3f32{0, 0, 0}, la.Vector3f32{0, 1, 0})
 	geo.Destroy(&dish_segment)
 	geo.Upload(&dish)
 
@@ -843,6 +856,11 @@ build_tank :: proc(h: ^Hierarchy) {
 	defer geo.Destroy(&wheel_segment)
 	road_wheel := geo.Empty_Mesh()
 	append_ring_x(&road_wheel, wheel_segment, TANK_ROAD_WHEEL_SEGMENTS, TANK_ROAD_WHEEL_RADIUS, 0)
+	// Smooth cylinder normals (roadmap step 7) — same treatment as the
+	// jeep's wheels above; the rest of the tank (hull, glacis, turret,
+	// barrel — all flat-faced boxes/slabs, no genuine curve) stays
+	// faceted, since there's nothing curved there to smooth.
+	geo.Smooth_Cylinder_Normals(&road_wheel, la.Vector3f32{0, 0, 0}, la.Vector3f32{1, 0, 0})
 	defer geo.Destroy(&road_wheel)
 
 	for side in 0 ..< 2 {

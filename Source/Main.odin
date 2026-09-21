@@ -127,6 +127,25 @@
 // vars below, driven by `+`/`-`/`J` (or --area-samples/--area-jitter for a
 // --capture run) so an N=1-vs-N=8 comparison is a live keypress away.
 //
+// Session 10 status (roadmap step 7, Shaders/Scene.glsl +
+// Library/Geometry.Smooth_Cylinder_Normals): flat/Gouraud/Phong shading,
+// switchable live with keys `1`/`2`/`3` (or --shading for a --capture
+// run) — uploaded as `u_ShadingMode` each frame, shown in the window
+// title (updated on each keypress, see key_callback). The ground plane
+// (previously ONE giant Plane) is now a runtime-generated GRID of small
+// Plane cells stitched together via Append_Mesh — `G` toggles between a
+// LOW (1x1, i.e. the old single-quad behaviour) and HIGH resolution, so
+// Gouraud's "misses a spotlight highlight that falls inside a large
+// triangle" failure mode is directly demonstrable: LOW resolution's giant
+// triangles can only evaluate lighting at 4 far-apart corners, HIGH
+// resolution's many small triangles approximate the highlight far better
+// (still an approximation vs. Phong's per-fragment result, just a visibly
+// closer one). See Library/Geometry/Geometry.odin's Smooth_Cylinder_
+// Normals for why a few curved parts (radar dish, jeep/tank wheels) were
+// given actual smooth normals this session — without that, Gouraud/Phong
+// can't look any different from Flat on this project's otherwise-faceted
+// geometry, since every vertex of one face already shares one normal.
+//
 // Source/Input.odin (added once Inspection Mode exists, roadmap step 10):
 // GLFW key/mouse callbacks, object selection, and the remaining interactive
 // controls this session doesn't need yet (CLAUDE.md §7's suggested key
@@ -254,12 +273,41 @@ DEMO_JEEP_DRIFT_AMPLITUDE :: 2.5 // world units along Z
 // asks to be able to show live via the +/- keys below.
 DEFAULT_AREA_LIGHT_SAMPLE_COUNT :: 4
 
+// Shading mode (roadmap step 7, CLAUDE.md §6.1) — values match Shaders/
+// Scene.glsl's own SHADING_FLAT/SHADING_GOURAUD/SHADING_PHONG #defines
+// exactly (kept in sync by hand, same cross-language situation as
+// MAX_LIGHTS/MAX_AREA_SAMPLES). Phong is the default: identical to every
+// prior session's behaviour, so a plain `./Sentinel` with no flags looks
+// the same as it always has.
+SHADING_FLAT :: i32(0)
+SHADING_GOURAUD :: i32(1)
+SHADING_PHONG :: i32(2)
+DEFAULT_SHADING_MODE :: SHADING_PHONG
+
+// Window titles per shading mode (key_callback sets one of these on every
+// 1/2/3 press) — the task's own "show the current mode on screen or in the
+// window title" ask, done via the title since this project has no text-
+// rendering infrastructure to draw an on-screen label with.
+SHADING_MODE_TITLE := [3]cstring{"SENTINEL - Flat", "SENTINEL - Gouraud", "SENTINEL - Phong"}
+
+// Ground grid resolution (roadmap step 7's own task text: "subdivide the
+// ground into a grid mesh... with a resolution toggle"). LOW matches the
+// single quad every prior session used; HIGH is dense enough that a
+// spotlight's cone (a few units across, Library/Lights.FLOODLIGHT_RANGE/
+// SEARCHLIGHT_RANGE-scale) spans many cells rather than sitting entirely
+// inside one giant triangle — see build_ground_mesh's own comment for the
+// cell-size reasoning.
+GROUND_GRID_LOW_RESOLUTION :: 1
+GROUND_GRID_HIGH_RESOLUTION :: 24
+
 main :: proc() {
 	capture_frames, capture_path, do_capture := parse_capture_flag(os.args[1:])
 	start_projection := parse_projection_flag(os.args[1:])
 	gizmos_visible = parse_gizmos_flag(os.args[1:])
 	area_light_sample_count = parse_area_samples_flag(os.args[1:])
 	area_light_jitter = parse_area_jitter_flag(os.args[1:])
+	shading_mode = parse_shading_flag(os.args[1:])
+	ground_resolution = parse_ground_resolution_flag(os.args[1:])
 
 	if !glfw.Init() {
 		fmt.eprintln("Failed to initialize GLFW")
@@ -276,7 +324,7 @@ main :: proc() {
 	// on-screen flash for a run that closes itself after N frames.
 	glfw.WindowHint(glfw.VISIBLE, !do_capture)
 
-	window := glfw.CreateWindow(DEFAULT_WINDOW_WIDTH, DEFAULT_WINDOW_HEIGHT, "SENTINEL", nil, nil)
+	window := glfw.CreateWindow(DEFAULT_WINDOW_WIDTH, DEFAULT_WINDOW_HEIGHT, SHADING_MODE_TITLE[shading_mode], nil, nil)
 	if window == nil {
 		fmt.eprintln("Failed to create GLFW window")
 		os.exit(1)
@@ -319,8 +367,9 @@ main :: proc() {
 	}
 	fmt.printfln("Scene: %d objects, %d nodes total", object_count, node_count)
 
-	ground_mesh := build_ground_mesh()
+	ground_mesh := build_ground_mesh(ground_resolution)
 	defer geo.Destroy(&ground_mesh)
+	fmt.printfln("Ground grid: %dx%d cells (G to toggle), shading mode: %s", ground_resolution, ground_resolution, SHADING_MODE_TITLE[shading_mode])
 	ground_material := scenepkg.Default_Material(la.Vector3f32{0.05, 0.05, 0.06})
 	// Fixed once, not recomputed per frame: unlike the 9 real objects and
 	// every light (both required to recompute every frame — CLAUDE.md §2
@@ -415,6 +464,21 @@ main :: proc() {
 			scroll_delta_y = 0
 		}
 
+		// Ground grid resolution changed (key G) — rebuild the mesh's CPU
+		// data and re-upload its GPU buffers. Unlike every uniform toggle
+		// in this file, this one genuinely changes the mesh's TOPOLOGY
+		// (how many cells/vertices), not just a value read at draw time,
+		// so it can't be a plain per-frame uniform upload — the old
+		// GPU-side buffers have to be destroyed and new ones built. Only
+		// happens on the frame right after a G press, not every frame.
+		if ground_resolution_toggle_requested {
+			geo.Destroy(&ground_mesh)
+			ground_resolution = GROUND_GRID_HIGH_RESOLUTION if ground_resolution == GROUND_GRID_LOW_RESOLUTION else GROUND_GRID_LOW_RESOLUTION
+			ground_mesh = build_ground_mesh(ground_resolution)
+			fmt.printfln("Ground grid: %dx%d cells", ground_resolution, ground_resolution)
+			ground_resolution_toggle_requested = false
+		}
+
 		// A synthetic frame-based clock, not glfw.GetTime(): --capture's
 		// reproducibility (CLAUDE.md §1.2 — same command, same output every
 		// run) depends on frame N always landing at the same pose, which
@@ -471,6 +535,7 @@ main :: proc() {
 		jitter_value: i32 = 0
 		if area_light_jitter do jitter_value = 1
 		sd.SetUniform(&shader, "u_AreaLightJitter", jitter_value)
+		sd.SetUniform(&shader, "u_ShadingMode", shading_mode)
 
 		scenepkg.Draw_Node(&shader, view, projection, ground_model, &ground_mesh, ground_material)
 
@@ -528,6 +593,17 @@ gizmos_visible: bool
 area_light_sample_count: int
 area_light_jitter: bool
 
+// shading_mode drives Shaders/Scene.glsl's u_ShadingMode (keys 1/2/3,
+// roadmap step 7). ground_resolution/ground_resolution_toggle_requested
+// drive the ground grid's cell count (key G) — the toggle is a REQUEST
+// flag rather than flipping ground_resolution directly, same "callback
+// sets a flag, the main loop does the actual work" pattern
+// projection_toggle_requested already uses, since rebuilding the grid
+// touches GPU/Engine state a "c" callback shouldn't reach into directly.
+shading_mode: i32
+ground_resolution: int
+ground_resolution_toggle_requested: bool
+
 key_callback :: proc "c" (window: glfw.WindowHandle, key, scancode, action, mods: i32) {
 	if key == glfw.KEY_ESCAPE && action == glfw.PRESS {
 		glfw.SetWindowShouldClose(window, true)
@@ -551,18 +627,61 @@ key_callback :: proc "c" (window: glfw.WindowHandle, key, scancode, action, mods
 	if key == glfw.KEY_J && action == glfw.PRESS {
 		area_light_jitter = !area_light_jitter
 	}
+	if key == glfw.KEY_1 && action == glfw.PRESS {
+		shading_mode = SHADING_FLAT
+		glfw.SetWindowTitle(window, SHADING_MODE_TITLE[shading_mode])
+	}
+	if key == glfw.KEY_2 && action == glfw.PRESS {
+		shading_mode = SHADING_GOURAUD
+		glfw.SetWindowTitle(window, SHADING_MODE_TITLE[shading_mode])
+	}
+	if key == glfw.KEY_3 && action == glfw.PRESS {
+		shading_mode = SHADING_PHONG
+		glfw.SetWindowTitle(window, SHADING_MODE_TITLE[shading_mode])
+	}
+	if key == glfw.KEY_G && action == glfw.PRESS {
+		ground_resolution_toggle_requested = true
+	}
 }
 
 // build_ground_mesh builds and uploads the ground plane's LOCAL-space mesh
-// once (see GROUND_SIZE/GROUND_Y and ground_model above for how it's
-// positioned). geo.Plane lies in the local XY plane facing +Z
-// (Library/Geometry/Geometry.odin's own comment); ground_model's -90°
-// rotation about X is what lays it flat facing +Y, done once at draw time
-// rather than baked into the mesh's own vertices, so this stays consistent
-// with every other mesh in this project (local-space geometry + a separate
-// world transform).
-build_ground_mesh :: proc() -> geo.Mesh {
-	mesh := geo.Plane(GROUND_SIZE, GROUND_SIZE)
+// as a `resolution` x `resolution` grid of small geo.Plane cells, stitched
+// together via Append_Mesh — CLAUDE.md §2 item 6's only allowed way to
+// build anything beyond a single Cube/Tetrahedron/Plane instance, so this
+// is a composition loop over Plane, not a new dedicated grid generator.
+// geo.Plane lies in the local XY plane facing +Z (Library/Geometry/
+// Geometry.odin's own comment); each cell is placed at its own (x, y)
+// offset within that same local plane, and the WHOLE grid still gets
+// ground_model's single -90-degree rotation about X at draw time to lay
+// it flat facing +Y — unchanged from before this session, and why cell
+// placement below only ever touches x/y, never z.
+//
+// Why resolution matters (roadmap step 7's own task text): GOURAUD
+// evaluates lighting at each triangle's 3 corners and interpolates the
+// RESULT — a spotlight's hot centre landing inside one giant triangle (the
+// old single-quad ground, resolution=1) can never show up, since none of
+// the 4 corners of that one quad were anywhere near the light. More, smaller
+// cells (a higher resolution) means more vertices actually sampling
+// lighting near where the light actually is, so Gouraud's approximation
+// gets visibly closer to Phong's per-fragment result — never perfect, but
+// closer. Source/Main.odin's `G` key toggles between GROUND_GRID_LOW_
+// RESOLUTION and _HIGH_RESOLUTION specifically to make that comparison a
+// live keypress away.
+build_ground_mesh :: proc(resolution: int) -> geo.Mesh {
+	mesh := geo.Empty_Mesh()
+
+	cell_size := GROUND_SIZE / f32(resolution)
+	cell := geo.Plane(cell_size, cell_size)
+	defer geo.Destroy(&cell)
+
+	for row in 0 ..< resolution {
+		for col in 0 ..< resolution {
+			x := -GROUND_SIZE*0.5 + cell_size*(f32(col) + 0.5)
+			y := -GROUND_SIZE*0.5 + cell_size*(f32(row) + 0.5)
+			geo.Append_Mesh(&mesh, cell, la.matrix4_translate(la.Vector3f32{x, y, 0}))
+		}
+	}
+
 	geo.Upload(&mesh)
 	return mesh
 }
@@ -690,4 +809,64 @@ parse_area_jitter_flag :: proc(args: []string) -> bool {
 		if arg == "--area-jitter" do return true
 	}
 	return false
+}
+
+// parse_shading_flag looks for "--shading <flat|gouraud|phong>" anywhere in
+// argv — the non-interactive way to pick a starting shading mode for a
+// --capture run (keys 1/2/3 are skipped during --capture, same as every
+// other live input), specifically so the same-view flat/Gouraud/Phong
+// comparison this session's task asks for doesn't depend on live
+// key-press timing. Defaults to DEFAULT_SHADING_MODE (Phong).
+parse_shading_flag :: proc(args: []string) -> i32 {
+	for i := 0; i < len(args); i += 1 {
+		if args[i] != "--shading" do continue
+
+		if i + 1 >= len(args) {
+			fmt.eprintln("--shading requires one argument: <flat|gouraud|phong>")
+			os.exit(1)
+		}
+
+		switch args[i + 1] {
+		case "flat":
+			return SHADING_FLAT
+		case "gouraud":
+			return SHADING_GOURAUD
+		case "phong":
+			return SHADING_PHONG
+		case:
+			fmt.eprintfln("--shading: expected 'flat', 'gouraud', or 'phong', got '%s'", args[i + 1])
+			os.exit(1)
+		}
+	}
+
+	return DEFAULT_SHADING_MODE
+}
+
+// parse_ground_resolution_flag looks for "--ground-resolution <low|high>"
+// anywhere in argv — the non-interactive way to pick a starting ground
+// grid density for a --capture run (the G key is skipped during
+// --capture), same reasoning as parse_shading_flag above. Defaults to
+// GROUND_GRID_LOW_RESOLUTION, matching every prior session's single-quad
+// ground.
+parse_ground_resolution_flag :: proc(args: []string) -> int {
+	for i := 0; i < len(args); i += 1 {
+		if args[i] != "--ground-resolution" do continue
+
+		if i + 1 >= len(args) {
+			fmt.eprintln("--ground-resolution requires one argument: <low|high>")
+			os.exit(1)
+		}
+
+		switch args[i + 1] {
+		case "low":
+			return GROUND_GRID_LOW_RESOLUTION
+		case "high":
+			return GROUND_GRID_HIGH_RESOLUTION
+		case:
+			fmt.eprintfln("--ground-resolution: expected 'low' or 'high', got '%s'", args[i + 1])
+			os.exit(1)
+		}
+	}
+
+	return GROUND_GRID_LOW_RESOLUTION
 }

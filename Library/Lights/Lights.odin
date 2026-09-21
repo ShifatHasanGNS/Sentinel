@@ -323,13 +323,24 @@ Build_Rig :: proc(scene: ^scenepkg.Hierarchy) -> [dynamic]Light {
 	// Watchtower floodlights: 2 spots, children of the rotating floodlight
 	// head — offsets match the head's own 2 lamp-housing boxes
 	// (Objects.odin's build_watchtower: `{sign_x*0.3, 0.2, 0}`). Aimed
-	// outward and down; roadmap step 9's real Patrol Mode sweep will rotate
-	// the HEAD node itself, which both these spots ride along with for
-	// free since their offset/direction are local to it.
+	// mostly DOWN with only a slight forward tilt (steeper than Session 8's
+	// original `{0,-0.3,-1}`, which was mostly forward with only a slight
+	// downward tilt): a watchtower floodlight realistically lights its OWN
+	// base's ground, not the horizon, and the shallow original angle sent
+	// the cone's ground contact point ~24 units away — beyond
+	// FLOODLIGHT_RANGE's own falloff, so it never usefully lit anything.
+	// `{0,-1,-0.15}` lands the cone a few units from the tower's own base,
+	// comfortably inside FLOODLIGHT_RANGE (roadmap step 7's own task asks
+	// for a capture showing "a spot cone on a big ground quad", which needs
+	// a cone that actually reaches the ground within range to show at
+	// all). Roadmap step 9's real Patrol Mode sweep will still rotate the
+	// HEAD node itself for the side-to-side part, which both these spots
+	// ride along with for free since their offset/direction are local to
+	// it.
 	floodlight_head := find_node_or_panic(scene, "Watchtower Floodlight Head")
 	for side in 0 ..< 2 {
 		sign: f32 = -1 if side == 0 else 1
-		append(&lights, Make_Spot(floodlight_head, la.Vector3f32{sign * 0.3, 0.2, 0}, la.Vector3f32{0, -0.3, -1}, la.Vector3f32{1.0, 1.0, 0.95}, FLOODLIGHT_INTENSITY, FLOODLIGHT_RANGE, FLOODLIGHT_INNER_ANGLE, FLOODLIGHT_OUTER_ANGLE))
+		append(&lights, Make_Spot(floodlight_head, la.Vector3f32{sign * 0.3, 0.2, 0}, la.Vector3f32{0, -1, -0.15}, la.Vector3f32{1.0, 1.0, 0.95}, FLOODLIGHT_INTENSITY, FLOODLIGHT_RANGE, FLOODLIGHT_INNER_ANGLE, FLOODLIGHT_OUTER_ANGLE))
 	}
 
 	// Jeep headlights: 2 spots, children of the jeep's own headlight NODES
