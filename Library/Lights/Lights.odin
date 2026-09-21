@@ -1,39 +1,36 @@
 // Package Lights — light structs, runtime placement, and animation. Split
 // out from `Library/Scene` into its own package per the user's Session 0
 // decision on CLAUDE.md §11 item 7. Depends on `Library/Scene` (Material,
-// Draw_Node — gizmos are drawn through the exact same path every real
-// object uses) and `Library/Geometry` (gizmo meshes are built from Cube,
-// same as everything else in this project).
+// Draw_Node, Find_Node, World_Point/World_Direction, and several objects'
+// own size constants — see Build_Rig below) and `Library/Geometry` (gizmo
+// meshes are built from Cube, same as everything else in this project).
 //
-// Roadmap step 4 (CLAUDE.md §9; Prompts.md Session 7): the `Light` struct
-// below (mirrored field-for-field by Shaders/Scene.glsl's `Light` GLSL
-// struct — see that file's own comment), a fixed-max uniform-array upload,
-// and a TEMPORARY formula-placed rig (Build_Temporary_Rig) so the shader's
-// per-type lighting loop has something real to light the scene with before
-// roadmap step 5 exists.
+// Roadmap step 4 (CLAUDE.md §9; Prompts.md Session 7) built the `Light`
+// struct (mirrored field-for-field by Shaders/Scene.glsl's `Light` GLSL
+// struct — see that file's own comment), the fixed-max uniform-array
+// upload, and a TEMPORARY formula-placed rig with no hierarchy attachment.
 //
-// What step 4 deliberately does NOT do yet: attach any light to a Scene
-// hierarchy node. Every light in Build_Temporary_Rig has a fixed
-// world-space position/direction computed once from a formula (a ring
-// radius/count, a height) — NOT derived from a parent node's world matrix
-// the way CLAUDE.md §5.3 ultimately requires (jeep headlights following the
-// jeep, tank turret searchlight following the turret, etc.). That
-// attachment — recomputing each attached light's world position/direction
-// EVERY frame from Scene.World_Position/World_Direction, never cached
-// (CLAUDE.md §2 item 10) — is roadmap step 5's job (Prompts.md Session 8),
-// which will most likely replace Build_Temporary_Rig with a real rig built
-// from the actual node names Library/Scene/Objects.odin's Session 5/6
-// sections already documented (Watchtower Floodlight Head, Jeep Headlight
-// Left/Right, Radar Beacon, Tank Hull, Tank Turret, Gun Emplacement, and
-// Library/Scene.Fence_Post_Position for the fence lamps) — see PROGRESS.md.
+// Roadmap step 5 (Prompts.md Session 8) REPLACES that temporary rig with
+// the real one: every light now stores a ParentNode index plus a
+// LocalOffset/LocalDirection, and Update_From_Scene recomputes each
+// light's world Position/Direction EVERY FRAME from its parent's current
+// world matrix (never cached, CLAUDE.md §2 item 10) — the same "derive
+// from a live world matrix" pattern Scene.Draw_Node already uses for mesh
+// transforms, now applied to lights. Build_Rig attaches each light to the
+// actual Scene node CLAUDE.md §5.3 names: Watchtower Floodlight Head, Jeep
+// Headlight Left/Right, Radar Beacon, Tank Hull, Tank Turret, Gun
+// Emplacement, Perimeter Fence (via Scene.Fence_Post_Position for the
+// lamps). Barracks window area lights are NOT built here — CLAUDE.md §6.3
+// needs the sampled-area-light technique roadmap step 6 (Session 9) adds;
+// their slots are simply left unused in the meantime (MAX_LIGHTS = 32 has
+// comfortable headroom past this session's 18).
 //
 // Light rig target (Requirements.md §3, CLAUDE.md §5.2, Plan.md §3): 18-21
 // lights across point/spot/area/directional, comfortably exceeding the 9
-// objects. This session's TEMPORARY rig alone already reaches 12 (1
-// moonlight + 8 point + 3 spot) — deliberately more than the 9 objects even
-// before step 5's real rig replaces it, so the "lights > objects" print
-// this session adds is already meaningfully true, not just structurally
-// ready.
+// objects. Build_Rig reaches exactly 18 (1 moonlight + 8 fence lamps + 2
+// floodlights + 2 jeep headlights + 2 tank headlights + 1 tank searchlight
+// + 1 radar beacon + 1 gun work light) — the low end of that range now,
+// with roadmap step 6's 2-3 barracks area lights reaching the rest.
 package Lights
 
 import "core:fmt"
@@ -57,12 +54,23 @@ Light_Type :: enum i32 {
 	Area        = 3, // reserved for roadmap step 6 (CLAUDE.md §6.3); unused by the shader until then
 }
 
-// Light mirrors Shaders/Scene.glsl's `Light` struct field-for-field (see
-// that file for exactly how each field is used in the lighting equation).
+// Light mirrors Shaders/Scene.glsl's `Light` struct field-for-field for the
+// upload-facing fields (see that file for exactly how each is used in the
+// lighting equation), plus three ATTACHMENT fields (roadmap step 5) that
+// never reach the shader directly: ParentNode names which Scene node this
+// light rides on, and LocalOffset/LocalDirection are its position/aim IN
+// THAT NODE'S OWN LOCAL SPACE. Position/Direction below are the derived
+// WORLD-space values Update_From_Scene recomputes every frame from those —
+// treat them as read-only outputs, not something to set directly (Make_*
+// below leave them zero-valued; the first Update_From_Scene call fills
+// them in before anything reads them).
 Light :: struct {
 	Type:                 Light_Type,
-	Position:             la.Vector3f32, // world-space; meaningful for Point/Spot
-	Direction:            la.Vector3f32, // world-space, normalized; meaningful for Directional/Spot
+	ParentNode:            int,           // Scene.NO_PARENT for a world-fixed light (moonlight)
+	LocalOffset:           la.Vector3f32, // local-space position offset from ParentNode's origin; Point/Spot only
+	LocalDirection:        la.Vector3f32, // local-space aim, before the parent's own rotation; Spot/Directional only
+	Position:             la.Vector3f32, // world-space; meaningful for Point/Spot — RECOMPUTED, see above
+	Direction:            la.Vector3f32, // world-space, normalized; meaningful for Directional/Spot — RECOMPUTED, see above
 	Color:                la.Vector3f32,
 	Intensity:            f32,
 	ConstantAttenuation:  f32,
@@ -73,8 +81,14 @@ Light :: struct {
 	Enabled:              bool,
 }
 
-Make_Directional :: proc(direction, color: la.Vector3f32, intensity: f32) -> Light {
-	return Light{Type = .Directional, Direction = la.normalize(direction), Color = color, Intensity = intensity, Enabled = true}
+// Make_Directional's `parent` is almost always Scene.NO_PARENT (moonlight
+// has no natural parent object and a directional light has no meaningful
+// Position anyway), but takes one anyway rather than special-casing
+// Directional out of the attachment system entirely — a future light
+// (e.g. a searchlight-style directional beam on some future object) could
+// still want one.
+Make_Directional :: proc(parent: int, local_direction, color: la.Vector3f32, intensity: f32) -> Light {
+	return Light{Type = .Directional, ParentNode = parent, LocalDirection = la.normalize(local_direction), Color = color, Intensity = intensity, Enabled = true}
 }
 
 // Point_Attenuation_For_Range derives the classic constant/linear/quadratic
@@ -91,11 +105,12 @@ Point_Attenuation_For_Range :: proc(range: f32) -> (constant, linear, quadratic:
 	return 1.0, 4.5 / range, 75.0 / (range * range)
 }
 
-Make_Point :: proc(position, color: la.Vector3f32, intensity, range: f32) -> Light {
+Make_Point :: proc(parent: int, local_offset, color: la.Vector3f32, intensity, range: f32) -> Light {
 	constant, linear, quadratic := Point_Attenuation_For_Range(range)
 	return Light{
 		Type = .Point,
-		Position = position,
+		ParentNode = parent,
+		LocalOffset = local_offset,
 		Color = color,
 		Intensity = intensity,
 		ConstantAttenuation = constant,
@@ -105,12 +120,13 @@ Make_Point :: proc(position, color: la.Vector3f32, intensity, range: f32) -> Lig
 	}
 }
 
-Make_Spot :: proc(position, direction, color: la.Vector3f32, intensity, range, inner_angle_degrees, outer_angle_degrees: f32) -> Light {
+Make_Spot :: proc(parent: int, local_offset, local_direction, color: la.Vector3f32, intensity, range, inner_angle_degrees, outer_angle_degrees: f32) -> Light {
 	constant, linear, quadratic := Point_Attenuation_For_Range(range)
 	return Light{
 		Type = .Spot,
-		Position = position,
-		Direction = la.normalize(direction),
+		ParentNode = parent,
+		LocalOffset = local_offset,
+		LocalDirection = la.normalize(local_direction),
 		Color = color,
 		Intensity = intensity,
 		ConstantAttenuation = constant,
@@ -122,48 +138,190 @@ Make_Spot :: proc(position, direction, color: la.Vector3f32, intensity, range, i
 	}
 }
 
+// Update_From_Scene recomputes every light's world-space Position/
+// Direction from its ParentNode's CURRENT world matrix (`world_matrices`,
+// this frame's Scene.Compute_World_Matrices result) — never cached,
+// CLAUDE.md §2 item 10, exactly the requirement that makes a jeep
+// headlight follow the jeep and a tank turret searchlight follow the
+// turret through its own independent rotation on top of the hull's.
+//
+// A light with ParentNode == Scene.NO_PARENT (moonlight) is treated as
+// parented to an identity transform, so its LocalOffset/LocalDirection
+// pass through as its world Position/Direction unchanged — the same
+// "no parent = world-fixed" reading Scene.Compute_World_Matrices already
+// gives a root node.
+Update_From_Scene :: proc(lights: []Light, world_matrices: []la.Matrix4f32) {
+	for &light in lights {
+		world_matrix := la.MATRIX4F32_IDENTITY
+		if light.ParentNode != scenepkg.NO_PARENT {
+			world_matrix = world_matrices[light.ParentNode]
+		}
+
+		light.Position = scenepkg.World_Point(world_matrix, light.LocalOffset)
+		if light.Type == .Spot || light.Type == .Directional {
+			// Only Spot/Directional read Direction (Shaders/Scene.glsl's
+			// light_contribution); skipping it for Point avoids
+			// normalizing a possibly-zero LocalDirection (Make_Point never
+			// sets one) into a NaN.
+			light.Direction = la.normalize(scenepkg.World_Direction(world_matrix, light.LocalDirection))
+		}
+	}
+}
+
 // ---------------------------------------------------------------------------
-// Temporary demonstration rig (see this file's header for why it's
-// temporary and what replaces it at roadmap step 5).
+// The real light rig (roadmap step 5), attached through the Scene
+// hierarchy — see this file's header for the full node list and count.
 // ---------------------------------------------------------------------------
 
-TEMP_POINT_LIGHT_COUNT :: 8
-TEMP_POINT_LIGHT_RADIUS :: 16.0
-TEMP_POINT_LIGHT_HEIGHT :: 3.0
-TEMP_POINT_LIGHT_RANGE :: 14.0
+FENCE_LAMP_COUNT :: 8
+FENCE_LAMP_HEIGHT :: 1.6
+FENCE_LAMP_RANGE :: 7.0
+FENCE_LAMP_INTENSITY :: 1.4
 
-TEMP_SPOT_LIGHT_COUNT :: 3
-TEMP_SPOT_LIGHT_SPREAD :: 9.0 // how far apart the 3 spot positions are placed along X
-TEMP_SPOT_LIGHT_HEIGHT :: 10.0
-TEMP_SPOT_LIGHT_RANGE :: 18.0
+FLOODLIGHT_RANGE :: 22.0
+FLOODLIGHT_INTENSITY :: 6.0
+FLOODLIGHT_INNER_ANGLE :: 15.0
+FLOODLIGHT_OUTER_ANGLE :: 25.0
 
-// Build_Temporary_Rig places 1 directional + TEMP_POINT_LIGHT_COUNT point +
-// TEMP_SPOT_LIGHT_COUNT spot lights, all by formula (an evenly-spaced ring
-// for the points, an evenly-spaced row aimed straight down for the spots —
-// a deliberately simple layout distinct from roadmap step 5's real
-// fence-lamp-perimeter/hierarchical-attachment formulas, so this session's
-// scope stays self-contained). Caller owns the returned array
-// (`delete` it when done).
-Build_Temporary_Rig :: proc() -> [dynamic]Light {
-	lights := make([dynamic]Light, 0, 1 + TEMP_POINT_LIGHT_COUNT + TEMP_SPOT_LIGHT_COUNT)
+HEADLIGHT_RANGE :: 12.0
+HEADLIGHT_INTENSITY :: 4.0
+HEADLIGHT_INNER_ANGLE :: 10.0
+HEADLIGHT_OUTER_ANGLE :: 18.0
 
-	// Moonlight: cool, dim directional fill (CLAUDE.md §5.2) — same
-	// direction/colour Session 5's placeholder light used, so the base
-	// scene's overall look doesn't jump when this session replaces it with
-	// a real light array.
-	append(&lights, Make_Directional(la.Vector3f32{-0.4, -1.0, -0.3}, la.Vector3f32{0.55, 0.6, 0.75}, 0.6))
+SEARCHLIGHT_RANGE :: 20.0
+SEARCHLIGHT_INTENSITY :: 6.0
+SEARCHLIGHT_INNER_ANGLE :: 10.0
+SEARCHLIGHT_OUTER_ANGLE :: 18.0
 
-	for i in 0 ..< TEMP_POINT_LIGHT_COUNT {
-		angle := 2 * math.PI * f32(i) / f32(TEMP_POINT_LIGHT_COUNT)
-		position := la.Vector3f32{TEMP_POINT_LIGHT_RADIUS * math.cos(angle), TEMP_POINT_LIGHT_HEIGHT, TEMP_POINT_LIGHT_RADIUS * math.sin(angle)}
-		append(&lights, Make_Point(position, la.Vector3f32{1.0, 0.78, 0.45}, 2.2, TEMP_POINT_LIGHT_RANGE))
+BEACON_RANGE :: 6.0
+BEACON_INTENSITY :: 2.0
+
+WORK_LIGHT_RANGE :: 8.0
+WORK_LIGHT_INTENSITY :: 2.0
+
+MOONLIGHT_INTENSITY :: 0.6
+
+// find_node_or_panic looks up a required Scene node by name and panics
+// with a specific message if it's missing, rather than letting a bad index
+// (Scene.NO_PARENT, -1) silently propagate into Update_From_Scene and
+// either crash on an out-of-range slice access somewhere far from the real
+// cause, or — worse — get treated as "world-fixed" and place the light at
+// the origin. A missing node here means Library/Scene/Objects.odin and
+// this rig have drifted out of sync (e.g. a node got renamed) and should
+// fail loudly at startup.
+@(private = "file")
+find_node_or_panic :: proc(scene: ^scenepkg.Hierarchy, name: string) -> int {
+	index := scenepkg.Find_Node(scene, name)
+	if index == scenepkg.NO_PARENT {
+		panic(fmt.tprintf("Library/Lights.Build_Rig: Scene has no node named %q — Objects.odin and this rig have drifted out of sync", name))
+	}
+	return index
+}
+
+// Build_Rig attaches every light to the actual Scene node that carries it
+// (CLAUDE.md §5.3's required hierarchy chains), storing only a ParentNode
+// + LocalOffset/LocalDirection per light — the ACTUAL world Position/
+// Direction is left zero-valued here and filled in by the first
+// Update_From_Scene call, every frame after that, never cached (CLAUDE.md
+// §2 item 10). Building the rig itself only needs to run once at startup:
+// which node a light is parented to doesn't change frame to frame, only
+// where that node currently is.
+//
+// Several lights below duplicate a POSITION FORMULA that also appears in
+// Library/Scene/Objects.odin (e.g. the tank hull headlight offset) rather
+// than reading a dedicated child node, because those specific parts were
+// deliberately built BAKED IN, not as child nodes (Session 5/6's spec
+// wording — see Objects.odin's own comments on the tank hull headlights
+// and the gun emplacement work-light post for why). Referencing Objects.
+// odin's own exported size constants (Scene.TANK_HULL_SIZE and friends)
+// for those offsets, rather than re-typing the numbers, keeps this rig
+// automatically in sync if that geometry ever changes.
+Build_Rig :: proc(scene: ^scenepkg.Hierarchy) -> [dynamic]Light {
+	lights := make([dynamic]Light, 0, 18)
+
+	// Moonlight: cool, dim directional fill (CLAUDE.md §5.2), world-fixed
+	// (no natural parent object) — same direction/colour Session 5's
+	// placeholder and Session 7's temporary rig both used, so the scene's
+	// baseline "night" look doesn't jump between sessions.
+	append(&lights, Make_Directional(scenepkg.NO_PARENT, la.Vector3f32{-0.4, -1.0, -0.3}, la.Vector3f32{0.55, 0.6, 0.75}, MOONLIGHT_INTENSITY))
+
+	// Perimeter fence lamps: evenly spaced along the fence LOOP by the same
+	// Scene.Fence_Post_Position(t) formula Objects.odin's own post-placement
+	// loop uses (exported specifically for this, Session 5's own comment) —
+	// not tied to individual post positions, so the lamp count is free to
+	// differ from the post count. "Perimeter Fence" never moves (no
+	// rotation/translation of its own, and nothing in this project's
+	// current scope repositions it), but parenting the lamps to it anyway
+	// costs nothing and means they'd correctly follow it if a future
+	// session ever did.
+	fence := find_node_or_panic(scene, "Perimeter Fence")
+	for i in 0 ..< FENCE_LAMP_COUNT {
+		t := f32(i) / f32(FENCE_LAMP_COUNT)
+		post_point := scenepkg.Fence_Post_Position(t)
+		offset := post_point + la.Vector3f32{0, FENCE_LAMP_HEIGHT, 0}
+		append(&lights, Make_Point(fence, offset, la.Vector3f32{1.0, 0.8, 0.5}, FENCE_LAMP_INTENSITY, FENCE_LAMP_RANGE))
 	}
 
-	for i in 0 ..< TEMP_SPOT_LIGHT_COUNT {
-		x_offset := -TEMP_SPOT_LIGHT_SPREAD + 2 * TEMP_SPOT_LIGHT_SPREAD * f32(i) / f32(TEMP_SPOT_LIGHT_COUNT - 1)
-		position := la.Vector3f32{x_offset, TEMP_SPOT_LIGHT_HEIGHT, 0}
-		append(&lights, Make_Spot(position, la.Vector3f32{0, -1, 0}, la.Vector3f32{1.0, 1.0, 0.95}, 6.0, TEMP_SPOT_LIGHT_RANGE, 12.5, 20.0))
+	// Watchtower floodlights: 2 spots, children of the rotating floodlight
+	// head — offsets match the head's own 2 lamp-housing boxes
+	// (Objects.odin's build_watchtower: `{sign_x*0.3, 0.2, 0}`). Aimed
+	// outward and down; roadmap step 9's real Patrol Mode sweep will rotate
+	// the HEAD node itself, which both these spots ride along with for
+	// free since their offset/direction are local to it.
+	floodlight_head := find_node_or_panic(scene, "Watchtower Floodlight Head")
+	for side in 0 ..< 2 {
+		sign: f32 = -1 if side == 0 else 1
+		append(&lights, Make_Spot(floodlight_head, la.Vector3f32{sign * 0.3, 0.2, 0}, la.Vector3f32{0, -0.3, -1}, la.Vector3f32{1.0, 1.0, 0.95}, FLOODLIGHT_INTENSITY, FLOODLIGHT_RANGE, FLOODLIGHT_INNER_ANGLE, FLOODLIGHT_OUTER_ANGLE))
 	}
+
+	// Jeep headlights: 2 spots, children of the jeep's own headlight NODES
+	// (Session 5 gave these their own child nodes specifically so a light
+	// could attach directly, unlike the tank's baked-in ones below) — local
+	// offset (0,0,0) since the node's own position already IS the
+	// headlight's position; local direction +Z, the jeep's own forward
+	// (Objects.odin's build_jeep places both headlights and the windshield
+	// at positive local Z).
+	jeep_headlight_names := [2]string{"Jeep Headlight Left", "Jeep Headlight Right"}
+	for name in jeep_headlight_names {
+		node := find_node_or_panic(scene, name)
+		append(&lights, Make_Spot(node, la.Vector3f32{0, 0, 0}, la.Vector3f32{0, 0, 1}, la.Vector3f32{1.0, 1.0, 0.9}, HEADLIGHT_INTENSITY, HEADLIGHT_RANGE, HEADLIGHT_INNER_ANGLE, HEADLIGHT_OUTER_ANGLE))
+	}
+
+	// Tank headlights: 2 spots, children of the HULL specifically (per the
+	// task's own spec — the turret rotates independently and these must
+	// NOT follow it). Baked-in offset, not a child node (Objects.odin's
+	// build_tank: `{sign*HULL.x*0.35, TREAD_HEIGHT+HULL.y*0.75, HULL.z*0.5-0.15}`);
+	// local direction +Z, the hull's own forward (same face the glacis
+	// plate slopes toward).
+	tank_hull := find_node_or_panic(scene, "Tank Hull")
+	for side in 0 ..< 2 {
+		sign: f32 = -1 if side == 0 else 1
+		offset := la.Vector3f32{sign * scenepkg.TANK_HULL_SIZE.x * 0.35, scenepkg.TANK_TREAD_HEIGHT + scenepkg.TANK_HULL_SIZE.y*0.75, scenepkg.TANK_HULL_SIZE.z*0.5 - 0.15}
+		append(&lights, Make_Spot(tank_hull, offset, la.Vector3f32{0, 0, 1}, la.Vector3f32{1.0, 1.0, 0.9}, HEADLIGHT_INTENSITY, HEADLIGHT_RANGE, HEADLIGHT_INNER_ANGLE, HEADLIGHT_OUTER_ANGLE))
+	}
+
+	// Tank turret searchlight: 1 spot, child of the TURRET (per the task's
+	// spec — the clearest demonstration in the whole scene that a light
+	// tracks its parent through an INDEPENDENT rotation on top of the
+	// hull's own). Offset matches the searchlight housing baked into the
+	// turret mesh (Objects.odin: `{-0.5, TURRET.y*0.5+0.1, 0}`); direction
+	// +Z, the turret's own forward (matches the barrel).
+	tank_turret := find_node_or_panic(scene, "Tank Turret")
+	append(&lights, Make_Spot(tank_turret, la.Vector3f32{-0.5, scenepkg.TANK_TURRET_SIZE.y*0.5 + 0.1, 0}, la.Vector3f32{0, 0, 1}, la.Vector3f32{1.0, 1.0, 0.95}, SEARCHLIGHT_INTENSITY, SEARCHLIGHT_RANGE, SEARCHLIGHT_INNER_ANGLE, SEARCHLIGHT_OUTER_ANGLE))
+
+	// Radar beacon: 1 point, child of the "Radar Beacon" node itself
+	// (already its own child node of "Radar Mast", Session 5) — offset
+	// (0,0,0), the node's own position already IS the beacon.
+	radar_beacon := find_node_or_panic(scene, "Radar Beacon")
+	append(&lights, Make_Point(radar_beacon, la.Vector3f32{0, 0, 0}, la.Vector3f32{1.0, 0.2, 0.2}, BEACON_INTENSITY, BEACON_RANGE))
+
+	// Gun emplacement work light: 1 point, on its post — baked-in offset,
+	// not a child node (Objects.odin's build_gun_emplacement: the post sits
+	// at `{GUN_RING_RADIUS+0.5, GUN_WORK_LIGHT_POST_HEIGHT*0.5, 0}`
+	// centred, so its TOP — where a work light would actually sit — is at
+	// full GUN_WORK_LIGHT_POST_HEIGHT).
+	gun_emplacement := find_node_or_panic(scene, "Gun Emplacement")
+	append(&lights, Make_Point(gun_emplacement, la.Vector3f32{scenepkg.GUN_RING_RADIUS + 0.5, scenepkg.GUN_WORK_LIGHT_POST_HEIGHT, 0}, la.Vector3f32{1.0, 0.9, 0.7}, WORK_LIGHT_INTENSITY, WORK_LIGHT_RANGE))
 
 	return lights
 }

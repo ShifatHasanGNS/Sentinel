@@ -149,13 +149,21 @@ Compute_World_Matrices :: proc(h: ^Hierarchy) -> [dynamic]la.Matrix4f32 {
 	return world
 }
 
+// World_Point transforms an arbitrary LOCAL point (e.g. a light's local
+// offset from its parent's origin — Library/Lights.Update_From_Scene,
+// roadmap step 5) into world space. World_Position (below) is the common
+// special case of this at local_point = (0,0,0), the node's own origin.
+World_Point :: proc(world_matrix: la.Matrix4f32, local_point: la.Vector3f32) -> la.Vector3f32 {
+	p := la.mul(world_matrix, la.Vector4f32{local_point.x, local_point.y, local_point.z, 1})
+	return la.Vector3f32{p.x, p.y, p.z}
+}
+
 // World_Position extracts a world-space POINT (the node's own local
 // origin, transformed to world space) from a world matrix — transforming
 // (0,0,0,1) rather than reading a matrix column directly, so this doesn't
 // depend on knowing linalg's exact column-major element layout.
 World_Position :: proc(world_matrix: la.Matrix4f32) -> la.Vector3f32 {
-	p := la.mul(world_matrix, la.Vector4f32{0, 0, 0, 1})
-	return la.Vector3f32{p.x, p.y, p.z}
+	return World_Point(world_matrix, la.Vector3f32{0, 0, 0})
 }
 
 // World_Direction transforms a LOCAL direction (e.g. a light's local aim

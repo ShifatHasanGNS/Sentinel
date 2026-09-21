@@ -105,6 +105,19 @@
 //   - Light gizmos (Library/Lights.Draw_Gizmos), toggled live by `L` or
 //     forced on for a --capture run via --gizmos.
 //
+// Session 8 status (roadmap step 5, Library/Lights + Library/Scene/
+// Transform.odin): `Build_Temporary_Rig` is GONE, replaced by `Build_Rig`
+// (called once, against the real `scene`), and every light's world
+// Position/Direction is now recomputed each frame by `Update_From_Scene`
+// (called here, right after `Compute_World_Matrices`, before `Upload`) —
+// see Library/Lights/Lights.odin's own header for the full node list this
+// attaches to. This file also gained a small TEMPORARY demo animation
+// (the DEMO_* constants/block below) purely to make that attachment
+// visible in a still capture: nothing moved in Session 7's temporary rig,
+// so there was nothing yet to prove a light actually tracks a moving
+// parent. NOT roadmap step 9's real Patrol Mode — deliberately isolated so
+// that step can replace it outright.
+//
 // Source/Input.odin (added once Inspection Mode exists, roadmap step 10):
 // GLFW key/mouse callbacks, object selection, and the remaining interactive
 // controls this session doesn't need yet (CLAUDE.md §7's suggested key
@@ -206,6 +219,25 @@ AMBIENT_STRENGTH :: 0.18
 GROUND_SIZE :: 60.0
 GROUND_Y :: 0.0
 
+// Session 8 (roadmap step 5) TEMPORARY demo animation — proves lights
+// actually follow their parent nodes (a light's own Position/Direction is
+// invisible in a static capture; something has to move for that to show).
+// NOT roadmap step 9's real Patrol Mode: driven by a synthetic frame-count
+// clock (DEMO_time below), not a scripted patrol path/sweep, and applied
+// unconditionally rather than gated by a Patrol/Inspection mode that
+// doesn't exist yet. Deliberately kept small and isolated here so step 9
+// can replace it wholesale rather than untangle it from real logic.
+DEMO_TANK_HULL_SPIN_RATE :: 0.3 // rad/s
+// Opposite sign AND a different rate from the hull — makes the turret's
+// rotation visibly INDEPENDENT rather than just "along for the ride",
+// which is the whole point of this demo per the task's own wording
+// ("rotate the tank hull, then rotate the turret independently").
+DEMO_TANK_TURRET_SPIN_RATE :: -0.7 // rad/s
+DEMO_FLOODLIGHT_SWEEP_RATE :: 0.5 // rad/s, argument to sin() below
+DEMO_FLOODLIGHT_SWEEP_AMPLITUDE :: math.PI * 50.0 / 180.0 // +-50 degrees
+DEMO_JEEP_DRIFT_RATE :: 0.4 // rad/s, argument to sin() below
+DEMO_JEEP_DRIFT_AMPLITUDE :: 2.5 // world units along Z
+
 main :: proc() {
 	capture_frames, capture_path, do_capture := parse_capture_flag(os.args[1:])
 	start_projection := parse_projection_flag(os.args[1:])
@@ -281,7 +313,7 @@ main :: proc() {
 	// isn't either.
 	ground_model := la.mul(la.matrix4_translate(la.Vector3f32{0, GROUND_Y, 0}), la.matrix4_rotate(-math.PI * 0.5, la.Vector3f32{1, 0, 0}))
 
-	light_rig := lightspkg.Build_Temporary_Rig()
+	light_rig := lightspkg.Build_Rig(&scene)
 	defer delete(light_rig)
 	active_light_count := lightspkg.Active_Count(light_rig[:])
 	fmt.printfln(
@@ -290,6 +322,14 @@ main :: proc() {
 		object_count,
 		active_light_count > object_count,
 	)
+
+	// Session 8 demo-animation node indices, looked up ONCE (which array
+	// index a name maps to never changes after Build_Scene) — see the
+	// DEMO_* block in the main loop below for what actually moves.
+	demo_tank_hull := scenepkg.Find_Node(&scene, "Tank Hull")
+	demo_tank_turret := scenepkg.Find_Node(&scene, "Tank Turret")
+	demo_floodlight_head := scenepkg.Find_Node(&scene, "Watchtower Floodlight Head")
+	demo_jeep := scenepkg.Find_Node(&scene, "Jeep")
 
 	gizmo_meshes := lightspkg.Build_Gizmo_Meshes()
 	defer lightspkg.Destroy_Gizmo_Meshes(&gizmo_meshes)
@@ -356,6 +396,26 @@ main :: proc() {
 			scroll_delta_y = 0
 		}
 
+		// A synthetic frame-based clock, not glfw.GetTime(): --capture's
+		// reproducibility (CLAUDE.md §1.2 — same command, same output every
+		// run) depends on frame N always landing at the same pose, which
+		// real elapsed wall-clock time can't guarantee (render speed
+		// varies run to run; frame count doesn't). The nominal 60 is a
+		// pacing constant only, not a claim about the real refresh rate.
+		demo_time := f32(frame_count) / 60.0
+		if demo_tank_hull != scenepkg.NO_PARENT {
+			scene.Nodes[demo_tank_hull].Local.Rotation.y = demo_time * DEMO_TANK_HULL_SPIN_RATE
+		}
+		if demo_tank_turret != scenepkg.NO_PARENT {
+			scene.Nodes[demo_tank_turret].Local.Rotation.y = demo_time * DEMO_TANK_TURRET_SPIN_RATE
+		}
+		if demo_floodlight_head != scenepkg.NO_PARENT {
+			scene.Nodes[demo_floodlight_head].Local.Rotation.y = math.sin(demo_time * DEMO_FLOODLIGHT_SWEEP_RATE) * DEMO_FLOODLIGHT_SWEEP_AMPLITUDE
+		}
+		if demo_jeep != scenepkg.NO_PARENT {
+			scene.Nodes[demo_jeep].Local.Position = scenepkg.JEEP_POSITION + la.Vector3f32{0, 0, math.sin(demo_time * DEMO_JEEP_DRIFT_RATE) * DEMO_JEEP_DRIFT_AMPLITUDE}
+		}
+
 		gl.ClearColor(CLEAR_COLOR.x, CLEAR_COLOR.y, CLEAR_COLOR.z, CLEAR_COLOR.w); dbg.GL_Check()
 		gl.Clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT); dbg.GL_Check()
 
@@ -381,11 +441,12 @@ main :: proc() {
 		sd.SetUniform(&shader, "u_ViewPosition", camera.position.x, camera.position.y, camera.position.z)
 		sd.SetUniform(&shader, "u_AmbientColor", AMBIENT_COLOR.r, AMBIENT_COLOR.g, AMBIENT_COLOR.b)
 		sd.SetUniform(&shader, "u_AmbientStrength", f32(AMBIENT_STRENGTH))
-		// Light positions/directions/attenuation are re-uploaded fresh every
-		// frame from `light_rig`, never computed once and reused as though
-		// fixed (CLAUDE.md §2 item 10) — true even though this session's
-		// TEMPORARY rig doesn't animate yet, so the same call already does
-		// the right thing once roadmap step 5/9 makes lights move.
+		// Every light's world Position/Direction is re-derived fresh every
+		// frame from its parent's CURRENT world matrix, never computed once
+		// and reused as though fixed (CLAUDE.md §2 item 10) — this is what
+		// makes the demo animation above (and, later, real Patrol/
+		// Inspection Mode movement) actually visible on attached lights.
+		lightspkg.Update_From_Scene(light_rig[:], world_matrices[:])
 		lightspkg.Upload(&shader, light_rig[:])
 
 		scenepkg.Draw_Node(&shader, view, projection, ground_model, &ground_mesh, ground_material)
