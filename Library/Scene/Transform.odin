@@ -34,6 +34,7 @@ package Scene
 import la "core:math/linalg"
 
 import geo "../Geometry"
+import sd "../Engine/Shader"
 
 // NO_PARENT marks a root node (no parent) in `Node.Parent`, and doubles as
 // `Find_Node`'s "not found" return value — both mean the same thing, "no
@@ -188,4 +189,42 @@ Find_Node :: proc(h: ^Hierarchy, name: string) -> int {
 		if node.Name == name do return i
 	}
 	return NO_PARENT
+}
+
+// Draw_Node uploads one mesh's per-draw uniforms (MVP, model, normal
+// matrix, material) and issues its draw call. Factored out of Source/
+// Main.odin's node loop (roadmap step 4, Prompts.md Session 7) because it
+// now has THREE callers that all need the exact same sequence: real scene
+// nodes, the ground plane (Source/Main.odin — not part of the Hierarchy, so
+// not counted in the printed object count), and Library/Lights' debug
+// gizmos (Draw_Gizmos). One shared proc instead of three copies is the
+// literal reading of CLAUDE.md §2 item 9 ("both modes share ONE render
+// path") extended to "every drawn mesh shares one draw path" — not a
+// speculative abstraction, since all three call sites already existed or
+// were being added this session.
+//
+// A zero-mesh Node (a pure pivot with no geometry of its own, e.g. a future
+// light-attachment point) is silently skipped here rather than making every
+// caller repeat that check.
+Draw_Node :: proc(shader: ^sd.Shader, view, projection, model: la.Matrix4f32, mesh: ^geo.Mesh, material: Material) {
+	if len(mesh.Indices) == 0 do return
+
+	// Normal_Matrix recomputed from the LIVE model matrix every call, never
+	// cached (CLAUDE.md §2 item 10) — correct even once objects/gizmos move
+	// frame to frame (Inspection Mode, roadmap step 10).
+	normal_matrix := Normal_Matrix(model)
+	mvp := la.mul(projection, la.mul(view, model))
+	// Odin won't take the address of a procedure parameter directly
+	// (`model` above) — a local copy is addressable, matching how every
+	// other matrix uniform here is already a local variable.
+	model_matrix := model
+
+	sd.SetUniform(shader, "u_MVP", &mvp)
+	sd.SetUniform(shader, "u_Model", &model_matrix)
+	sd.SetUniform(shader, "u_NormalMatrix", &normal_matrix)
+	sd.SetUniform(shader, "u_BaseColor", material.BaseColor.r, material.BaseColor.g, material.BaseColor.b)
+	sd.SetUniform(shader, "u_SpecularStrength", material.SpecularStrength)
+	sd.SetUniform(shader, "u_Shininess", material.Shininess)
+	sd.SetUniform(shader, "u_EmissionColor", material.EmissionColor.r, material.EmissionColor.g, material.EmissionColor.b)
+	geo.Draw(mesh, shader)
 }

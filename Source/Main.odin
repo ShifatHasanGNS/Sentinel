@@ -85,6 +85,26 @@
 // recomputed from the live world matrix every frame) and `u_ViewPosition`
 // once per frame, alongside the existing `u_MVP`.
 //
+// Session 7 status (roadmap step 4, Library/Lights + Shaders/Scene.glsl):
+// Session 5's single hardcoded directional light is GONE, replaced by a
+// real multi-light array — Library/Lights.Light (directional/point/spot),
+// a TEMPORARY formula-placed rig (Library/Lights.Build_Temporary_Rig; real
+// hierarchical attachment is roadmap step 5), and a debug gizmo overlay (key
+// L) drawing a marker at every light. `u_Color`/per-node colour uniforms are
+// unchanged from Session 5 — only the shader's LIGHTING got real, not the
+// material system. Two new things this file now draws through
+// Scene.Draw_Node (factored out of this file's old per-node loop body, now
+// shared by real scene nodes, the ground plane below, and light gizmos):
+//   - A ground plane (`build_ground_mesh`) — NOT one of Scene.Build_Scene's
+//     9 counted objects (kept out of the Hierarchy entirely, on purpose, so
+//     the printed object count stays exactly 9), added because this
+//     session's task explicitly asks for a capture "showing a spotlight
+//     cone hitting the ground," and no ground existed before this session
+//     (Session 2's ground GRID was deleted at roadmap step 3 along with the
+//     rest of that session's temporary smoke-test scene).
+//   - Light gizmos (Library/Lights.Draw_Gizmos), toggled live by `L` or
+//     forced on for a --capture run via --gizmos.
+//
 // Source/Input.odin (added once Inspection Mode exists, roadmap step 10):
 // GLFW key/mouse callbacks, object selection, and the remaining interactive
 // controls this session doesn't need yet (CLAUDE.md §7's suggested key
@@ -115,6 +135,7 @@ import gl "vendor:OpenGL"
 
 import cam "../Library/Camera"
 import geo "../Library/Geometry"
+import lightspkg "../Library/Lights"
 import scenepkg "../Library/Scene"
 
 import dbg "../Library/Engine/Debugger"
@@ -168,9 +189,27 @@ CAMERA_START_EYE :: la.Vector3f32{0.0, 22.0, 34.0}
 // where free-fly movement has since taken the camera.
 SCENE_FOCUS :: la.Vector3f32{0, 0, 0}
 
+// Global ambient term (Shaders/Scene.glsl's u_AmbientColor/u_AmbientStrength
+// — see that file's comment on why ambient is one scene-wide term, not
+// summed per light). Same cool tint Session 5's single hardcoded light used
+// for its own ambient term, so this session's real light array doesn't
+// shift the scene's baseline "night" colour on its own.
+AMBIENT_COLOR :: la.Vector3f32{0.55, 0.6, 0.75}
+AMBIENT_STRENGTH :: 0.18
+
+// Ground plane (see this file's "Session 7 status" header note for why it
+// exists). Sized to comfortably cover the fence footprint
+// (Library/Scene/Objects.odin's FENCE_HALF_WIDTH/DEPTH = 14, i.e. a 28x28
+// area) with margin, at Y = 0 — the same ground level every one of the 9
+// objects is already positioned at (each *_POSITION constant in
+// Objects.odin has Y = 0).
+GROUND_SIZE :: 60.0
+GROUND_Y :: 0.0
+
 main :: proc() {
 	capture_frames, capture_path, do_capture := parse_capture_flag(os.args[1:])
 	start_projection := parse_projection_flag(os.args[1:])
+	gizmos_visible = parse_gizmos_flag(os.args[1:])
 
 	if !glfw.Init() {
 		fmt.eprintln("Failed to initialize GLFW")
@@ -229,6 +268,31 @@ main :: proc() {
 		if node.Parent == scenepkg.NO_PARENT do object_count += 1
 	}
 	fmt.printfln("Scene: %d objects, %d nodes total", object_count, node_count)
+
+	ground_mesh := build_ground_mesh()
+	defer geo.Destroy(&ground_mesh)
+	ground_material := scenepkg.Default_Material(la.Vector3f32{0.05, 0.05, 0.06})
+	// Fixed once, not recomputed per frame: unlike the 9 real objects and
+	// every light (both required to recompute every frame — CLAUDE.md §2
+	// item 10, §5.3 — since Inspection Mode can reposition either), the
+	// ground plane never moves for the lifetime of this program, so a
+	// static model matrix is not a "cached as if static" violation of that
+	// rule, the same way CAMERA_START_EYE being a compile-time constant
+	// isn't either.
+	ground_model := la.mul(la.matrix4_translate(la.Vector3f32{0, GROUND_Y, 0}), la.matrix4_rotate(-math.PI * 0.5, la.Vector3f32{1, 0, 0}))
+
+	light_rig := lightspkg.Build_Temporary_Rig()
+	defer delete(light_rig)
+	active_light_count := lightspkg.Active_Count(light_rig[:])
+	fmt.printfln(
+		"Lights: %d active, %d objects (lights > objects: %v)",
+		active_light_count,
+		object_count,
+		active_light_count > object_count,
+	)
+
+	gizmo_meshes := lightspkg.Build_Gizmo_Meshes()
+	defer lightspkg.Destroy_Gizmo_Meshes(&gizmo_meshes)
 
 	shader := sd.New(COMBINED_SHADER_PATH)
 	if shader.RendererID == 0 {
@@ -315,27 +379,26 @@ main :: proc() {
 		// `projection`, to a point on the right.
 		world_matrices := scenepkg.Compute_World_Matrices(&scene)
 		sd.SetUniform(&shader, "u_ViewPosition", camera.position.x, camera.position.y, camera.position.z)
+		sd.SetUniform(&shader, "u_AmbientColor", AMBIENT_COLOR.r, AMBIENT_COLOR.g, AMBIENT_COLOR.b)
+		sd.SetUniform(&shader, "u_AmbientStrength", f32(AMBIENT_STRENGTH))
+		// Light positions/directions/attenuation are re-uploaded fresh every
+		// frame from `light_rig`, never computed once and reused as though
+		// fixed (CLAUDE.md §2 item 10) — true even though this session's
+		// TEMPORARY rig doesn't animate yet, so the same call already does
+		// the right thing once roadmap step 5/9 makes lights move.
+		lightspkg.Upload(&shader, light_rig[:])
+
+		scenepkg.Draw_Node(&shader, view, projection, ground_model, &ground_mesh, ground_material)
+
 		for &node, i in scene.Nodes {
-			if len(node.Mesh.Indices) == 0 do continue // a pure pivot node with no mesh of its own
-
 			model := world_matrices[i]
-			// Normal_Matrix recomputed from the LIVE world matrix every
-			// frame, never cached (CLAUDE.md §2 item 10) — cheap at this
-			// object count and correct even once objects start moving
-			// (Inspection Mode, roadmap step 10).
-			normal_matrix := scenepkg.Normal_Matrix(model)
-			mvp := la.mul(projection, la.mul(view, model))
-
-			sd.SetUniform(&shader, "u_MVP", &mvp)
-			sd.SetUniform(&shader, "u_Model", &model)
-			sd.SetUniform(&shader, "u_NormalMatrix", &normal_matrix)
-			sd.SetUniform(&shader, "u_BaseColor", node.Material.BaseColor.r, node.Material.BaseColor.g, node.Material.BaseColor.b)
-			sd.SetUniform(&shader, "u_SpecularStrength", node.Material.SpecularStrength)
-			sd.SetUniform(&shader, "u_Shininess", node.Material.Shininess)
-			sd.SetUniform(&shader, "u_EmissionColor", node.Material.EmissionColor.r, node.Material.EmissionColor.g, node.Material.EmissionColor.b)
-			geo.Draw(&node.Mesh, &shader)
+			scenepkg.Draw_Node(&shader, view, projection, model, &node.Mesh, node.Material)
 		}
 		delete(world_matrices)
+
+		if gizmos_visible {
+			lightspkg.Draw_Gizmos(&shader, view, projection, light_rig[:], &gizmo_meshes)
+		}
 
 		frame_count += 1
 
@@ -367,6 +430,12 @@ framebuffer_size_callback :: proc "c" (window: glfw.WindowHandle, width, height:
 projection_toggle_requested: bool
 scroll_delta_y: f32
 
+// gizmos_visible toggles Library/Lights.Draw_Gizmos (key L). Starts from
+// parse_gizmos_flag's result (set once in main() before the loop begins),
+// then flips on each L press exactly like projection_toggle_requested
+// flips the projection above.
+gizmos_visible: bool
+
 key_callback :: proc "c" (window: glfw.WindowHandle, key, scancode, action, mods: i32) {
 	if key == glfw.KEY_ESCAPE && action == glfw.PRESS {
 		glfw.SetWindowShouldClose(window, true)
@@ -374,6 +443,23 @@ key_callback :: proc "c" (window: glfw.WindowHandle, key, scancode, action, mods
 	if key == glfw.KEY_P && action == glfw.PRESS {
 		projection_toggle_requested = true
 	}
+	if key == glfw.KEY_L && action == glfw.PRESS {
+		gizmos_visible = !gizmos_visible
+	}
+}
+
+// build_ground_mesh builds and uploads the ground plane's LOCAL-space mesh
+// once (see GROUND_SIZE/GROUND_Y and ground_model above for how it's
+// positioned). geo.Plane lies in the local XY plane facing +Z
+// (Library/Geometry/Geometry.odin's own comment); ground_model's -90°
+// rotation about X is what lays it flat facing +Y, done once at draw time
+// rather than baked into the mesh's own vertices, so this stays consistent
+// with every other mesh in this project (local-space geometry + a separate
+// world transform).
+build_ground_mesh :: proc() -> geo.Mesh {
+	mesh := geo.Plane(GROUND_SIZE, GROUND_SIZE)
+	geo.Upload(&mesh)
+	return mesh
 }
 
 scroll_callback :: proc "c" (window: glfw.WindowHandle, x_offset, y_offset: f64) {
@@ -446,4 +532,17 @@ parse_projection_flag :: proc(args: []string) -> cam.Projection_Mode {
 	}
 
 	return .Perspective
+}
+
+// parse_gizmos_flag looks for a bare "--gizmos" flag anywhere in argv, the
+// non-interactive way to force Library/Lights.Draw_Gizmos on for a
+// --capture run (the L key itself is skipped during --capture, same as
+// every other live input — see the do_capture guard in main()'s loop).
+// Defaults to off, matching gizmos_visible's zero value for a normal
+// interactive run before the first L press.
+parse_gizmos_flag :: proc(args: []string) -> bool {
+	for arg in args {
+		if arg == "--gizmos" do return true
+	}
+	return false
 }
