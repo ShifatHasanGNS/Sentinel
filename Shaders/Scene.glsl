@@ -69,8 +69,14 @@ void main() {
 //     intersection, shade the hit with the same lighting function above.
 out vec4 FragColor;
 
+// Session 3 (roadmap step 3): one flat, per-draw-call colour, uploaded
+// once per object from Source/Main.odin's draw loop (Scene.Node.Color).
+// Still "unlit" per CLAUDE.md's roadmap-step-3 scope — this is a colour
+// PARAMETER, not a lighting calculation; it exists so a capture of 9
+// overlapping objects is legible instead of one uniform hardcoded orange.
+// Replaced by the real material/lighting result at roadmap step 4.
+uniform vec3 u_Color;
+
 void main() {
-	// Warm, easy-to-spot colour against the dark clear colour — proves the
-	// fragment stage runs; no lighting yet (Session 7).
-	FragColor = vec4(1.0, 0.55, 0.0, 1.0);
+	FragColor = vec4(u_Color, 1.0);
 }

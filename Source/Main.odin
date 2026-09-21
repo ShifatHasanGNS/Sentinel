@@ -44,23 +44,34 @@
 // regardless of the real system cursor/keyboard state; --projection lets a
 // capture run choose its starting projection instead.
 //
-// Session 3 status (roadmap step 3, Library/Geometry): Session 1/2's
+// Session 3 status (roadmap step 3 part 1, Library/Geometry): Session 1/2's
 // temporary smoke-test generators (generate_cube, box_corners_and_
 // triangles, generate_grid, and their make_* upload helpers) are DELETED —
 // Library/Geometry.Mesh now owns generation AND GL upload, so this file no
-// longer builds vertex/index arrays or Engine buffers by hand at all. In
-// their place, build_gallery below is this session's OWN temporary scene
-// (also slated for deletion, once the real 9 objects exist): the three base
-// primitives shown standalone plus two shapes composed at runtime from Cube
-// instances via Geometry.Append_Mesh (a box-ring "cylinder" and a
-// tapering-stack "cone") — see build_gallery's own comment. Back-face
-// culling is turned on for the first time in this project
+// longer builds vertex/index arrays or Engine buffers by hand at all. Back-
+// face culling is turned on for the first time in this project
 // (gl.Enable(gl.CULL_FACE)) purely as a self-verification aid: a winding
 // bug in any generator shows up immediately as missing faces in a capture.
 // This is NOT yet roadmap step 8's toggleable culling feature — no debug
 // key exists to turn it off, and step 8 will likely add a manual
 // normal-based culling test to compare against this GL-native one; see
 // PROGRESS.md.
+//
+// Session 4 status (roadmap step 3 parts 2-4, Library/Scene): Session 3's
+// temporary gallery (build_gallery/build_ring/build_cone, generic shapes
+// with no SENTINEL identity) is DELETED and replaced by the real thing —
+// Library/Scene.Build_Scene() builds all 9 named SENTINEL objects as a
+// Scene.Hierarchy (Library/Scene/Transform.odin's parent-indexed node
+// system, Library/Scene/Objects.odin's actual object composition), and
+// this file draws every node in it each frame via one shared
+// Compute_World_Matrices pass. The gallery's build_ring/build_cone
+// technique (and the transform-order/segment-sizing lessons Session 3's
+// PROGRESS.md recorded) is reused directly inside Library/Scene/
+// Objects.odin's append_ring_y/append_ring_x helpers, not reinvented.
+// Shaders/Scene.glsl gained a `u_Color` uniform (still unlit — a colour
+// PARAMETER per draw call, not a lighting calculation) purely so 9
+// overlapping objects are visually distinguishable in a capture; real
+// materials arrive at roadmap step 4.
 //
 // Source/Input.odin (added once Inspection Mode exists, roadmap step 10):
 // GLFW key/mouse callbacks, object selection, and the remaining interactive
@@ -92,6 +103,7 @@ import gl "vendor:OpenGL"
 
 import cam "../Library/Camera"
 import geo "../Library/Geometry"
+import scenepkg "../Library/Scene"
 
 import dbg "../Library/Engine/Debugger"
 import sd "../Library/Engine/Shader"
@@ -131,56 +143,18 @@ CLEAR_COLOR :: [4]f32{0.02, 0.02, 0.05, 1.0}
 COMBINED_SHADER_PATH :: "Shaders/Scene.glsl"
 
 // Starting eye position and look target for this session's free-fly
-// Camera (Library/Camera.Camera_Looking_At) — chosen so the whole gallery
-// row below (GALLERY_OBJECT_COUNT objects, GALLERY_SPACING apart) is
-// comfortably in frame at startup. Lens parameters (FOV/near/far) now live
-// on the Camera itself (Library/Camera.Default_Camera), not here.
-CAMERA_START_EYE :: la.Vector3f32{0.0, 5.0, 16.0}
+// Camera (Library/Camera.Camera_Looking_At) — chosen so the whole base
+// (the perimeter fence's ~28x28 footprint, Library/Scene/Objects.odin's
+// FENCE_HALF_WIDTH/DEPTH) is comfortably in frame at startup. Lens
+// parameters (FOV/near/far) live on the Camera itself
+// (Library/Camera.Default_Camera), not here.
+CAMERA_START_EYE :: la.Vector3f32{0.0, 22.0, 34.0}
 
 // Also passed to Toggle_Projection each time (CLAUDE.md §7: the
 // orthographic volume is sized from the camera's distance to this point),
 // so the framing stays sensible across a projection toggle regardless of
 // where free-fly movement has since taken the camera.
 SCENE_FOCUS :: la.Vector3f32{0, 0, 0}
-
-// Gallery parameters (Session 3 self-verification scene — see
-// build_gallery's own comment). Object slot positions come from a formula
-// over the index/spacing below, never a literal position table (CLAUDE.md
-// §2 item 5).
-GALLERY_OBJECT_COUNT :: 5
-GALLERY_SPACING :: 4.0
-
-// Box-ring "cylinder" composition parameters (CLAUDE.md §2 item 6's own
-// example: "a low-poly cylinder is really N box... instances arranged in a
-// ring by a runtime loop computing a rotation matrix per segment").
-// Segment RADIAL thickness/height are free choices, but the TANGENTIAL
-// width is NOT — it's derived in build_ring from RING_RADIUS/
-// RING_SEGMENT_COUNT (the chord length between adjacent segment centres),
-// not a separate hand-picked constant. A first version picked an
-// independent tangential-width constant that didn't actually match this
-// count/radius, leaving visible gaps between segments in
-// Debug/Captures/session3_gallery.bmp — see build_ring's own comment.
-RING_SEGMENT_COUNT :: 10
-RING_RADIUS :: 0.8
-RING_SEGMENT_RADIAL_THICKNESS :: 0.5
-RING_SEGMENT_HEIGHT :: 1.2
-// >1 so neighbouring segments overlap slightly rather than just barely
-// touching edge-to-edge, where floating-point rounding could reopen a
-// hairline gap.
-SEGMENT_OVERLAP_FACTOR :: 1.3
-
-// Tapering-stack "cone" composition parameters: several ring LEVELS
-// stacked upward with shrinking radius, built via the exact same
-// runtime-transformed-Cube technique as the ring above, not a dedicated
-// cone() generator (CLAUDE.md §2 item 6). Segments are sized for the BASE
-// level (its widest, sparsest ring) and reused at every level — smaller
-// levels end up with MORE overlap, not gaps, which is the safe direction
-// to be wrong in.
-CONE_LEVEL_COUNT :: 6
-CONE_SEGMENTS_PER_LEVEL :: 8
-CONE_BASE_RADIUS :: 1.0
-CONE_LEVEL_HEIGHT :: 0.35
-CONE_SEGMENT_RADIAL_THICKNESS :: 0.35
 
 main :: proc() {
 	capture_frames, capture_path, do_capture := parse_capture_flag(os.args[1:])
@@ -235,10 +209,14 @@ main :: proc() {
 	gl.CullFace(gl.BACK); dbg.GL_Check()
 	gl.FrontFace(gl.CCW); dbg.GL_Check()
 
-	gallery := build_gallery()
-	defer for &mesh in gallery {
-		geo.Destroy(&mesh)
+	scene := scenepkg.Build_Scene()
+	defer scenepkg.Destroy(&scene)
+
+	object_count, node_count := 0, len(scene.Nodes)
+	for node in scene.Nodes {
+		if node.Parent == scenepkg.NO_PARENT do object_count += 1
 	}
+	fmt.printfln("Scene: %d objects, %d nodes total", object_count, node_count)
 
 	shader := sd.New(COMBINED_SHADER_PATH)
 	if shader.RendererID == 0 {
@@ -314,17 +292,25 @@ main :: proc() {
 		view := cam.View_Matrix(&camera)
 		projection := cam.Projection_Matrix(&camera, aspect)
 
-		// The gallery is static this session (no rotation) — it exists to
-		// visually verify winding/normals via culling, not to demo
-		// animation. Composition order matches the column-vector
+		// One world-matrix pass per frame, shared by every node's draw
+		// call below (Scene.Compute_World_Matrices' own comment — CLAUDE.md
+		// §5.3's "computed top-down once per frame, cache per frame"). The
+		// scene is static this session (no rotation) — roadmap step 3 is
+		// explicitly "static; unlit," CLAUDE.md §9; animation arrives with
+		// Patrol Mode (step 9). Composition order matches the column-vector
 		// convention recorded in Library/Camera/Camera.odin: apply `model`
-		// first, then `view`, then `projection`, to a point on the right.
-		for &mesh, i in gallery {
-			model := la.matrix4_translate(gallery_slot_position(i))
-			mvp := la.mul(projection, la.mul(view, model))
+		// (here, a node's world matrix) first, then `view`, then
+		// `projection`, to a point on the right.
+		world_matrices := scenepkg.Compute_World_Matrices(&scene)
+		for &node, i in scene.Nodes {
+			if len(node.Mesh.Indices) == 0 do continue // a pure pivot node with no mesh of its own
+
+			mvp := la.mul(projection, la.mul(view, world_matrices[i]))
 			sd.SetUniform(&shader, "u_MVP", &mvp)
-			geo.Draw(&mesh, &shader)
+			sd.SetUniform(&shader, "u_Color", node.Color.r, node.Color.g, node.Color.b)
+			geo.Draw(&node.Mesh, &shader)
 		}
+		delete(world_matrices)
 
 		frame_count += 1
 
@@ -435,115 +421,4 @@ parse_projection_flag :: proc(args: []string) -> cam.Projection_Mode {
 	}
 
 	return .Perspective
-}
-
-// build_gallery constructs this session's temporary self-verification
-// scene (slated for deletion once the real 9 objects exist, same as the
-// rotating cube/grid it replaces): the three base primitives (Cube,
-// Tetrahedron, Plane) shown standalone, plus two shapes composed at
-// runtime from many Cube instances via Geometry.Append_Mesh (a box-ring
-// "cylinder" and a tapering-stack "cone") — CLAUDE.md §2 item 6's "no
-// cylinder()/cone() generator" constraint made concrete: build_ring/
-// build_cone below are NOT new Geometry generators, just runtime loops
-// over Cube + Append_Mesh calls, living here in SENTINEL-specific code
-// where composite objects belong. Every returned Mesh is already
-// Upload()ed, ready to Draw immediately. Gallery slot positions come from
-// gallery_slot_position's formula over GALLERY_OBJECT_COUNT, never a
-// literal position table (CLAUDE.md §2 item 5).
-build_gallery :: proc() -> [GALLERY_OBJECT_COUNT]geo.Mesh {
-	gallery: [GALLERY_OBJECT_COUNT]geo.Mesh
-
-	gallery[0] = geo.Cube(1.4, 1.4, 1.4)
-	gallery[1] = geo.Tetrahedron(1.6)
-	gallery[2] = geo.Plane(1.6, 1.6)
-	gallery[3] = build_ring()
-	gallery[4] = build_cone()
-
-	for &mesh in gallery {
-		geo.Upload(&mesh)
-	}
-
-	return gallery
-}
-
-// gallery_slot_position spaces GALLERY_OBJECT_COUNT objects GALLERY_SPACING
-// apart along X, centred on the origin — a formula over `index`, not a
-// literal table (CLAUDE.md §2 item 5).
-gallery_slot_position :: proc(index: int) -> la.Vector3f32 {
-	center_index := f32(GALLERY_OBJECT_COUNT - 1) * 0.5
-	return la.Vector3f32{(f32(index) - center_index) * GALLERY_SPACING, 0, 0}
-}
-
-// build_ring composes a "cylinder" from RING_SEGMENT_COUNT small Cube
-// instances placed around a circle, each by its own runtime-computed
-// rotation+translation matrix (CLAUDE.md §2 item 6). `segment` is built
-// once and reused as the Append_Mesh SOURCE for every instance — it is
-// never itself uploaded/drawn, so it's destroyed right after the loop
-// that reads it, rather than returned.
-//
-// Composition order matters here: each instance's transform is
-// rotate_y(angle) * translate(RADIUS, 0, 0), i.e. offset the segment out
-// along local +X FIRST, then rotate that whole (segment + offset) rigid
-// body about Y — this sweeps each segment to its point on the circle
-// while ALSO carrying its own orientation around with it, so every
-// segment's local +X face ends up pointing radially outward, the same way
-// relative to the ring at every angle. The reversed order (rotate the
-// segment's own shape by `angle`, then translate by a separately-computed
-// (cos, sin) point on the circle) looks similar but is NOT the same
-// transform — it decouples the segment's orientation from its position on
-// the circle, so segments no longer face a consistent direction relative
-// to their neighbours. This was tried first and produced a visibly
-// gap-riddled ring in Debug/Captures/session3_gallery.bmp before being
-// caught and fixed here — see PROGRESS.md.
-//
-// tangential_width is the OTHER thing that turned out load-bearing: it's
-// the chord length between two adjacent segment centres at RING_RADIUS
-// (2 * R * sin(pi / count), standard regular-polygon chord formula),
-// scaled up slightly by SEGMENT_OVERLAP_FACTOR. A first version used a
-// fixed width unrelated to this count/radius and left visible gaps
-// between segments — computed here instead so changing RING_SEGMENT_COUNT
-// or RING_RADIUS later can't silently reintroduce that mismatch.
-build_ring :: proc() -> geo.Mesh {
-	tangential_width := 2 * RING_RADIUS * math.sin(math.PI / f32(RING_SEGMENT_COUNT)) * SEGMENT_OVERLAP_FACTOR
-	segment := geo.Cube(RING_SEGMENT_RADIAL_THICKNESS, RING_SEGMENT_HEIGHT, tangential_width)
-	defer geo.Destroy(&segment)
-
-	ring := geo.Empty_Mesh()
-	for i in 0 ..< RING_SEGMENT_COUNT {
-		angle := f32(i) * (2 * math.PI / f32(RING_SEGMENT_COUNT))
-		transform := la.mul(la.matrix4_rotate(angle, la.Vector3f32{0, 1, 0}), la.matrix4_translate(la.Vector3f32{RING_RADIUS, 0, 0}))
-		geo.Append_Mesh(&ring, segment, transform)
-	}
-
-	return ring
-}
-
-// build_cone stacks CONE_LEVEL_COUNT ring LEVELS (same rotate-after-
-// translate composition as build_ring, see its comment for why order
-// matters here), each level's radius shrinking linearly toward the top —
-// a tapering stack, not a dedicated cone() generator (CLAUDE.md §2 item
-// 6). The per-level Y offset rides along inside the SAME local translate
-// as the radius (rotating about Y never changes a point's Y coordinate,
-// so `level_y` survives the rotation unchanged) rather than needing a
-// second transform. tangential_width is sized from the BASE level (see
-// this file's constants block) using the same chord-length formula as
-// build_ring, for the same reason.
-build_cone :: proc() -> geo.Mesh {
-	tangential_width := 2 * CONE_BASE_RADIUS * math.sin(math.PI / f32(CONE_SEGMENTS_PER_LEVEL)) * SEGMENT_OVERLAP_FACTOR
-	segment := geo.Cube(CONE_SEGMENT_RADIAL_THICKNESS, CONE_LEVEL_HEIGHT, tangential_width)
-	defer geo.Destroy(&segment)
-
-	cone := geo.Empty_Mesh()
-	for level in 0 ..< CONE_LEVEL_COUNT {
-		level_radius := CONE_BASE_RADIUS * (1 - f32(level) / f32(CONE_LEVEL_COUNT))
-		level_y := f32(level) * CONE_LEVEL_HEIGHT
-
-		for i in 0 ..< CONE_SEGMENTS_PER_LEVEL {
-			angle := f32(i) * (2 * math.PI / f32(CONE_SEGMENTS_PER_LEVEL))
-			transform := la.mul(la.matrix4_rotate(angle, la.Vector3f32{0, 1, 0}), la.matrix4_translate(la.Vector3f32{level_radius, level_y, 0}))
-			geo.Append_Mesh(&cone, segment, transform)
-		}
-	}
-
-	return cone
 }
