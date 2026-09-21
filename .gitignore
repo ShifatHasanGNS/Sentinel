@@ -1,0 +1,43 @@
+# Odin build outputs
+/Sentinel
+*.bin
+*.exe
+*.dll
+*.dylib
+*.so
+*.o
+*.obj
+*.pdb
+/build/
+/bin/
+
+# Debug capture output (screenshots from --capture), keep the tooling, not the images
+/Debug/Captures/
+*.png
+*.ppm
+*.bmp
+
+# OS/editor cruft
+.DS_Store
+__MACOSX/
+*.swp
+.vscode/
+.idea/
+
+# Claude Code / AI-agent local state — machine-specific, not part of the
+# project's actual source. CLAUDE.md itself stays tracked; these are the
+# tool's own runtime/config/scratch files.
+.claude/
+CLAUDE.local.md
+CLAUDE.md
+.mcp.json
+.claude.json
+.cursor/
+.windsurf/
+.aider*
+.clinerules/
+*.agent.log
+PROGRESS.md
+Prompts.md
+Requirements.md
+Plan.md
