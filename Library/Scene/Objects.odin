@@ -182,7 +182,22 @@ append_translated :: proc(dst: ^geo.Mesh, segment: geo.Mesh, position: la.Vector
 // Mode (roadmap step 9) and carry 2 spot lights (roadmap step 5).
 // ---------------------------------------------------------------------------
 
-TOWER_LEG_SPAN :: 2.2 // half-distance between opposite legs
+// Half-distance between opposite legs, on BOTH X and Z (each leg sits at
+// (+-TOWER_LEG_SPAN, +-TOWER_LEG_SPAN)). Must stay less than
+// TOWER_PLATFORM_SIZE*0.5 (below) on this same per-axis basis — the
+// platform is an axis-aligned SQUARE footprint, [-half,half] on each axis
+// independently, not a circle, so what matters is TOWER_LEG_SPAN vs. the
+// platform's half-WIDTH, not some diagonal/radial distance. An earlier
+// version of this file set this to 2.2 against a platform half-size of
+// 1.5 — outside the platform's footprint on both axes, so none of the 4
+// legs were actually underneath it; the platform read as floating,
+// untouched by its own supports (confirmed by the user directly, and by
+// the numbers: 2.2 > 1.5). 1.2 keeps every leg comfortably inside the
+// platform's half-size (1.5), even counting the leg's own half-thickness
+// (TOWER_LEG_THICKNESS*0.5 = 0.11, so the leg's outer face reaches 1.31),
+// leaving a small natural overhang the way a real lookout tower's deck
+// overhangs its corner posts.
+TOWER_LEG_SPAN :: 1.2
 TOWER_HEIGHT :: 5.0
 TOWER_LEG_THICKNESS :: 0.22
 TOWER_PLATFORM_SIZE :: 3.0
