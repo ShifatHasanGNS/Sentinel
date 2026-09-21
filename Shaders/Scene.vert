@@ -20,7 +20,24 @@
 //     interpolation qualifier with a documented provoking-vertex
 //     convention — decide and note it here.
 //
-// #shader vertex
-// (Library/Engine/Shader's loader splits this file on "#shader vertex" /
-// "#shader fragment" markers per Requirements.md §7 / the provided
-// Engine.zip Shader package — see Library/Engine/Shader/Shader.odin.)
+// Session 0 status: this file is loaded on its own via
+// vendor:OpenGL's gl.load_shaders_file(vert_path, frag_path) — NOT through
+// Library/Engine/Shader.New, which instead expects ONE combined file holding
+// both "#shader vertex"/"#shader fragment" sections (see that package's
+// load_shaders_from). That mismatch between a two-file layout (this file +
+// Scene.frag) and Shader.New's one-file-two-markers contract is real and
+// still open — Session 1b must resolve it (e.g. give Shader.New a
+// two-file variant) before Engine.Shader can be used for this pair. Until
+// then, plain vendor:OpenGL calls are the correct, non-hacky way to compile
+// this smoke-test pipeline.
+
+#version 330 core
+
+// Session 1/2 will add model/view/projection uniforms here once
+// core:math/linalg is in use; for this smoke test the triangle is already
+// in clip space, so position passes straight through.
+layout (location = 0) in vec3 a_Position;
+
+void main() {
+	gl_Position = vec4(a_Position, 1.0);
+}

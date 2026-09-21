@@ -52,8 +52,9 @@ Sentinel/
 │   │   ├── Renderer/
 │   │   └── Debugger/
 │   ├── Geometry/           # theme-agnostic procedural mesh generators (box, cylinder, ...)
-│   └── Scene/              # SENTINEL-specific: hierarchy, objects, lights, camera
-│                           #   (package split still tentative, see Library/Scene/Transform.odin)
+│   ├── Scene/              # SENTINEL-specific: transform hierarchy + the 9 objects
+│   ├── Camera/             # SENTINEL-specific: free-fly + Patrol-Mode camera, projections
+│   └── Lights/             # SENTINEL-specific: light structs, runtime placement/animation
 ├── Source/                 # main package: window, main loop, mode switching, input
 ├── Shaders/                 # hand-written GLSL (Scene.vert / Scene.frag)
 └── Debug/                   # self-verification: --capture screenshot tooling
@@ -61,12 +62,17 @@ Sentinel/
 
 ## Build / run
 
-Not yet confirmed. Session 0 will record the exact working command here,
-expected to be close to:
+Confirmed on macOS (Apple Silicon) with the local Odin dev toolchain (see
+`PROGRESS.md` "Environment" for exact versions):
 
 ```sh
-odin run Source -out:Sentinel
+odin build Source -out:Sentinel && ./Sentinel
+# or, build-and-run in one step (note the `--` before program args):
+odin run Source -out:Sentinel -- --capture 5 Debug/Captures/session0.bmp
 ```
+
+`--capture <frames> <path>` renders that many frames, saves a screenshot,
+and exits — see `Debug/README.md`.
 
 ## Controls
 

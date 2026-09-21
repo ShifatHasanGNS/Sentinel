@@ -1,12 +1,12 @@
-// Package Scene — SENTINEL-specific: hierarchy, objects, lights, camera.
+// Package Scene — SENTINEL-specific: the transform/node hierarchy and the
+// 9 scene objects built from it (Transform.odin, Objects.odin).
 //
-// PACKAGE SPLIT IS TENTATIVE (open item, CLAUDE.md §11 item 7 / Plan.md
-// §11.3): whether Scene/hierarchy, Lights, and Camera should each be their
-// own package, or grouped as they are here, is not yet decided with the
-// user. This `Scene` package + these four files are a reasonable starting
-// grouping following Prompts.md's per-file breakdown (Transform.odin,
-// Objects.odin, Lights.odin, Camera.odin) — reorganize only once the user
-// has actually answered, don't do it silently.
+// Package split decided in Session 0 (CLAUDE.md §11 item 7 / Plan.md
+// §11.3): `Camera` and `Lights` are their own packages
+// (`Library/Camera`, `Library/Lights`), not grouped in here — `Scene`
+// keeps only the hierarchy and the objects built on it. `Lights` depends on
+// `Scene` (to read a parent node's world matrix each frame); `Camera` does
+// not depend on `Scene` at all.
 //
 // Transform.odin — the hand-rolled hierarchy system (CLAUDE.md §5.3, §9
 // roadmap step 3 part 2 / step 4 groundwork; Prompts.md Session 4). No

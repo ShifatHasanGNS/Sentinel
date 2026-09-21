@@ -1,5 +1,8 @@
-// Lights.odin — light structs, runtime placement, and animation (see
-// package doc in Transform.odin for the tentative-package-split note).
+// Package Lights — light structs, runtime placement, and animation. Split
+// out from `Library/Scene` into its own package per the user's Session 0
+// decision on CLAUDE.md §11 item 7 (was previously tentative — see
+// PROGRESS.md). Depends on `Library/Scene`'s transform/node hierarchy to
+// derive world-space position/direction from a parent node each frame.
 //
 // Roadmap steps 4–6 (CLAUDE.md §9; Prompts.md Sessions 7–9). Must satisfy
 // "active light count > object count" (Requirements.md §3, CLAUDE.md §3) —
@@ -12,8 +15,8 @@
 // lights like moonlight), colour, intensity, attenuation
 // (constant/linear/quadratic), spot inner/outer cone angles with smooth
 // falloff, and an enabled flag. Every frame, world position/direction is
-// DERIVED from the parent's current world matrix via the `Scene` transform
-// helpers — never stored as a world-space constant and never computed once
+// DERIVED from the parent's current world matrix via `Library/Scene`'s
+// transform helpers — never stored as a world-space constant and never computed once
 // then cached (CLAUDE.md §5.3, §9 roadmap step 5, §2 item 10 — instructor
 // hard constraint: illumination is real-time, same as geometry) — this is
 // what makes attached lights follow a moved or rotated parent (e.g. jeep
@@ -45,4 +48,4 @@
 // uniform array (e.g. 32) plus an active count. Keep both the object count
 // and the active light count printed at startup/each frame so the
 // "lights > objects" requirement is always visibly checkable.
-package Scene
+package Lights

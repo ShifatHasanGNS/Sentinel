@@ -29,4 +29,16 @@
 //     object transforms, analytic intersection, shade the hit with the same
 //     lighting function used above.
 //
-// #shader fragment
+// Session 0 status: loaded directly by vendor:OpenGL's
+// gl.load_shaders_file alongside Scene.vert — see that file's header for
+// why this bypasses Library/Engine/Shader for now.
+
+#version 330 core
+
+out vec4 FragColor;
+
+void main() {
+	// Warm, easy-to-spot colour against the dark clear colour — proves the
+	// fragment stage runs; no lighting yet (Session 7).
+	FragColor = vec4(1.0, 0.55, 0.0, 1.0);
+}

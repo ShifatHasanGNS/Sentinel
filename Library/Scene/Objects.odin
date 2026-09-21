@@ -1,5 +1,5 @@
 // Objects.odin — builds the 9 SENTINEL scene objects (see package doc in
-// Transform.odin for the tentative-package-split note).
+// Transform.odin for the decided Scene/Camera/Lights package split).
 //
 // Roadmap step 3 parts 3–4 / Prompts.md Sessions 5–6. All positions,
 // dimensions, and counts come from parameters/formulas fed into

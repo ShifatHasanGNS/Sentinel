@@ -1,5 +1,7 @@
-// Camera.odin — free-fly + Patrol-Mode path camera and projection toggle
-// (see package doc in Transform.odin for the tentative-package-split note).
+// Package Camera — free-fly + Patrol-Mode path camera and projection
+// toggle. Split out from `Library/Scene` into its own package per the
+// user's Session 0 decision on CLAUDE.md §11 item 7 (was previously
+// tentative — see PROGRESS.md).
 //
 // Roadmap step 2 (CLAUDE.md §9; Prompts.md Session 2), extended in Session
 // 12 (Patrol Mode) and Session 13 (Inspection Mode).
@@ -28,4 +30,4 @@
 // switching must not desync state: Patrol -> Inspection keeps the current
 // camera pose; Inspection -> Patrol resumes without a jarring jump (blend
 // back onto the path, or restart from the nearest path point).
-package Scene
+package Camera
