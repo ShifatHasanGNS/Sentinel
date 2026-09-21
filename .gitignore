@@ -11,8 +11,11 @@
 /build/
 /bin/
 
-# Debug capture output (screenshots from --capture), keep the tooling, not the images
-/Debug/Captures/
+# Debug/ — self-verification screenshot tooling (CLAUDE.md §1.2), how
+# Claude Code checks its own rendered output. Not part of the graded
+# deliverable, so it's excluded entirely (tooling and captures alike), same
+# reasoning as the "AI-agent local state" files below.
+/Debug/
 *.png
 *.ppm
 *.bmp
