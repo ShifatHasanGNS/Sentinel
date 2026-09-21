@@ -30,14 +30,20 @@
 // two-file variant) before Engine.Shader can be used for this pair. Until
 // then, plain vendor:OpenGL calls are the correct, non-hacky way to compile
 // this smoke-test pipeline.
+//
+// Session 1 status: the throwaway triangle (already in clip space) is
+// replaced by a rotating cube driven by one combined model-view-projection
+// matrix built from core:math/linalg on the CPU side (Source/Main.odin) and
+// uploaded here as u_MVP — see the conventions block in
+// Library/Camera/Camera.odin for why column-major/column-vector math needs
+// no transpose to reach this uniform correctly.
 
 #version 330 core
 
-// Session 1/2 will add model/view/projection uniforms here once
-// core:math/linalg is in use; for this smoke test the triangle is already
-// in clip space, so position passes straight through.
 layout (location = 0) in vec3 a_Position;
 
+uniform mat4 u_MVP;
+
 void main() {
-	gl_Position = vec4(a_Position, 1.0);
+	gl_Position = u_MVP * vec4(a_Position, 1.0);
 }
