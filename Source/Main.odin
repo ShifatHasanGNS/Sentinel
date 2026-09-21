@@ -70,8 +70,20 @@
 // Objects.odin's append_ring_y/append_ring_x helpers, not reinvented.
 // Shaders/Scene.glsl gained a `u_Color` uniform (still unlit — a colour
 // PARAMETER per draw call, not a lighting calculation) purely so 9
-// overlapping objects are visually distinguishable in a capture; real
-// materials arrive at roadmap step 4.
+// overlapping objects are visually distinguishable in a capture.
+//
+// Session 5 status (Prompts.md, first 5 objects + material/shading):
+// `u_Color` above is GONE, replaced by a real (if deliberately temporary)
+// material/shading pass. `Scene.Node.Color` became `Scene.Node.Material`
+// (base colour + specular strength/shininess + emission colour, per that
+// session's explicit ask), and `Shaders/Scene.glsl` gained a single
+// hardcoded directional light (ambient + diffuse + Blinn-Phong specular +
+// emission) so shapes read with real shading instead of flat silhouettes —
+// still NOT roadmap step 4's real multi-light array, deliberately isolated
+// in its own GLSL function so replacing it later is mechanical. This file
+// now uploads `u_Model`/`u_NormalMatrix` per node (Scene.Normal_Matrix,
+// recomputed from the live world matrix every frame) and `u_ViewPosition`
+// once per frame, alongside the existing `u_MVP`.
 //
 // Source/Input.odin (added once Inspection Mode exists, roadmap step 10):
 // GLFW key/mouse callbacks, object selection, and the remaining interactive
@@ -302,12 +314,25 @@ main :: proc() {
 		// (here, a node's world matrix) first, then `view`, then
 		// `projection`, to a point on the right.
 		world_matrices := scenepkg.Compute_World_Matrices(&scene)
+		sd.SetUniform(&shader, "u_ViewPosition", camera.position.x, camera.position.y, camera.position.z)
 		for &node, i in scene.Nodes {
 			if len(node.Mesh.Indices) == 0 do continue // a pure pivot node with no mesh of its own
 
-			mvp := la.mul(projection, la.mul(view, world_matrices[i]))
+			model := world_matrices[i]
+			// Normal_Matrix recomputed from the LIVE world matrix every
+			// frame, never cached (CLAUDE.md §2 item 10) — cheap at this
+			// object count and correct even once objects start moving
+			// (Inspection Mode, roadmap step 10).
+			normal_matrix := scenepkg.Normal_Matrix(model)
+			mvp := la.mul(projection, la.mul(view, model))
+
 			sd.SetUniform(&shader, "u_MVP", &mvp)
-			sd.SetUniform(&shader, "u_Color", node.Color.r, node.Color.g, node.Color.b)
+			sd.SetUniform(&shader, "u_Model", &model)
+			sd.SetUniform(&shader, "u_NormalMatrix", &normal_matrix)
+			sd.SetUniform(&shader, "u_BaseColor", node.Material.BaseColor.r, node.Material.BaseColor.g, node.Material.BaseColor.b)
+			sd.SetUniform(&shader, "u_SpecularStrength", node.Material.SpecularStrength)
+			sd.SetUniform(&shader, "u_Shininess", node.Material.Shininess)
+			sd.SetUniform(&shader, "u_EmissionColor", node.Material.EmissionColor.r, node.Material.EmissionColor.g, node.Material.EmissionColor.b)
 			geo.Draw(&node.Mesh, &shader)
 		}
 		delete(world_matrices)

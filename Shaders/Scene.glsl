@@ -20,40 +20,58 @@
 // switches it into a per-stage body), then prepends that same line to BOTH
 // compiled stages. A #version placed after "#shader vertex" would instead
 // be read as a second, illegal #version inside the vertex body.
+//
+// Session 5 (Prompts.md): added a_Normal + a temporary, hardcoded-in-shader
+// single directional light (ambient + Lambert diffuse + Blinn-Phong
+// specular + emission) so shapes read with real depth instead of flat
+// silhouettes, per that session's "simple directional shading" ask. This
+// is NOT roadmap step 4's real system (CLAUDE.md §6.1): that one uploads a
+// fixed-max ARRAY of point/spot/directional/area lights as a uniform
+// block/array with a live count, computed fresh from Scene node world
+// transforms every frame (CLAUDE.md §2 item 10), with the lighting
+// function shared between this stage (Phong) and the vertex stage
+// (Gouraud) per the flat/Gouraud/Phong toggle (roadmap step 7). Kept
+// deliberately small and self-contained here so step 4 can replace the
+// whole light block below without touching anything else in this file.
 
 #version 330 core
 
 #shader vertex
 
-// Vertex stage. Planned responsibilities, added incrementally:
-//   - Session 1 (done): apply one combined model-view-projection matrix
-//     built from core:math/linalg on the CPU side (Source/Main.odin).
-//   - Session 7 (lighting): must expose the SAME lighting-calculation
-//     function used by the fragment stage below (CLAUDE.md §6.1), so
-//     Gouraud shading can call it here while Phong calls it from the
-//     fragment stage — the flat/Gouraud/Phong toggle (roadmap step 7)
-//     switches which stage evaluates it, not the math itself.
-//   - Session 10: flat shading needs either per-face normals or the `flat`
-//     interpolation qualifier with a documented provoking-vertex
-//     convention — decide and note it here.
+// Vertex stage.
 layout (location = 0) in vec3 a_Position;
+layout (location = 1) in vec3 a_Normal;
 
 uniform mat4 u_MVP;
+uniform mat4 u_Model;
+uniform mat3 u_NormalMatrix;
+
+out vec3 v_WorldPosition;
+out vec3 v_WorldNormal;
 
 void main() {
 	gl_Position = u_MVP * vec4(a_Position, 1.0);
+	v_WorldPosition = vec3(u_Model * vec4(a_Position, 1.0));
+	// u_NormalMatrix is the inverse-transpose of u_Model's upper-left 3x3
+	// (Scene.Normal_Matrix, computed CPU-side every frame from the node's
+	// live world matrix — CLAUDE.md §5.3), so normals stay correct even
+	// under a non-uniform scale (e.g. the watchtower roof's squashed
+	// tetrahedron, Library/Scene/Objects.odin's build_watchtower).
+	v_WorldNormal = normalize(u_NormalMatrix * a_Normal);
 }
 
 #shader fragment
 
 // Fragment stage. Planned responsibilities, added incrementally (CLAUDE.md
 // §6, §9; Plan.md §5, §9; Prompts.md Sessions 7-11):
-//   - Session 7: full local illumination model — ambient + diffuse
-//     (Lambert) + specular (Blinn-Phong half-vector) + emission, summed
-//     over a fixed-max uniform array of lights (point/spot/directional
-//     first), with per-type attenuation/cone handling. The lighting
-//     calculation must live in ONE function callable from either this
-//     stage (Phong shading) or the vertex stage above (Gouraud shading).
+//   - Session 7 (roadmap step 4): replace the single hardcoded light below
+//     with the full local illumination model over a fixed-max uniform
+//     array of lights (point/spot/directional first), with per-type
+//     attenuation/cone handling. The lighting calculation must live in ONE
+//     function callable from either this stage (Phong shading) or the
+//     vertex stage above (Gouraud shading) — the single-light function
+//     below is already written that way on purpose, to make that move
+//     mechanical rather than a rewrite.
 //   - Session 9: an AREA light type — per-fragment N-sample averaging over
 //     a window quad passed in as a runtime-computed uniform (no
 //     precomputed sample tables/textures, no LTC lookup texture).
@@ -67,16 +85,50 @@ void main() {
 //     jeep windshield) — reflection ray against uniform proxy shapes
 //     rebuilt each frame from live object transforms, analytic
 //     intersection, shade the hit with the same lighting function above.
+in vec3 v_WorldPosition;
+in vec3 v_WorldNormal;
+
 out vec4 FragColor;
 
-// Session 3 (roadmap step 3): one flat, per-draw-call colour, uploaded
-// once per object from Source/Main.odin's draw loop (Scene.Node.Color).
-// Still "unlit" per CLAUDE.md's roadmap-step-3 scope — this is a colour
-// PARAMETER, not a lighting calculation; it exists so a capture of 9
-// overlapping objects is legible instead of one uniform hardcoded orange.
-// Replaced by the real material/lighting result at roadmap step 4.
-uniform vec3 u_Color;
+// Per-object material (Scene.Material, uploaded once per draw call from
+// Source/Main.odin's draw loop) — base colour, specular strength/
+// shininess, and an emission colour for parts that should read as "lit"
+// even under this placeholder single-light model (window/windshield/
+// periscope glass, the floodlight housing, the radar beacon).
+uniform vec3 u_BaseColor;
+uniform float u_SpecularStrength;
+uniform float u_Shininess;
+uniform vec3 u_EmissionColor;
+
+uniform vec3 u_ViewPosition;
+
+// shade_with_placeholder_light computes ambient + Lambert diffuse +
+// Blinn-Phong specular for ONE fixed, hardcoded directional light (a cool
+// "moonlight" stand-in for CLAUDE.md §5.2's real moonlight, which arrives
+// with the rest of the real light rig at roadmap step 5) plus the
+// material's own emission. Deliberately a single self-contained function
+// (not inlined into main) so promoting it to loop over a real light array
+// at roadmap step 4 is a mechanical change in ONE place.
+vec3 shade_with_placeholder_light(vec3 normal, vec3 world_position, vec3 base_color, float specular_strength, float shininess, vec3 emission_color) {
+	vec3 light_direction = normalize(vec3(-0.4, -1.0, -0.3));
+	vec3 light_color = vec3(0.55, 0.6, 0.75);
+	float ambient_strength = 0.25;
+
+	vec3 ambient = ambient_strength * light_color;
+
+	float diffuse_factor = max(dot(normal, -light_direction), 0.0);
+	vec3 diffuse = diffuse_factor * light_color;
+
+	vec3 view_direction = normalize(u_ViewPosition - world_position);
+	vec3 half_vector = normalize(-light_direction + view_direction);
+	float specular_factor = pow(max(dot(normal, half_vector), 0.0), shininess);
+	vec3 specular = specular_strength * specular_factor * light_color;
+
+	return (ambient + diffuse + specular) * base_color + emission_color;
+}
 
 void main() {
-	FragColor = vec4(u_Color, 1.0);
+	vec3 normal = normalize(v_WorldNormal);
+	vec3 result = shade_with_placeholder_light(normal, v_WorldPosition, u_BaseColor, u_SpecularStrength, u_Shininess, u_EmissionColor);
+	FragColor = vec4(result, 1.0);
 }

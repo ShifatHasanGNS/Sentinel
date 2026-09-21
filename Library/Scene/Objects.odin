@@ -17,13 +17,15 @@
 // session reads directly (the tank's periscope and the jeep's windshield
 // for roadmap step 11's ray-traced reflection, CLAUDE.md §6.2; the
 // barracks windows for roadmap step 6's area-light sampling, CLAUDE.md
-// §6.3). Fixed attachment points for a simple point/spot light that never
-// moves independently of its parent (jeep headlights, tank hull
-// headlights, the gun emplacement's work light) do NOT get their own node
-// here — Session 8 (roadmap step 5) can give such a light a constant
-// local-space offset from the existing parent node directly; inventing an
-// empty marker node for every future light now would be scope creep this
-// session's actual job (geometry) doesn't need.
+// §6.3). The jeep's two headlights ALSO get their own child nodes — not
+// because they'll articulate, but because Prompts.md's Session 5 spec asks
+// for them by name as "child nodes" explicitly, unlike the tank's hull
+// headlights and the gun emplacement's work light (their own Session 6
+// spec says only "on the hull"/"beside it," no child-node requirement),
+// which stay baked into their parent's composite mesh — Session 8 can give
+// those a constant local-space offset from the existing parent node
+// directly; inventing an empty marker node for every future light would be
+// scope creep this session's actual job (geometry) doesn't need.
 //
 // LAYOUT: each object's root position is a small NAMED CONSTANT (one per
 // object), not a runtime formula — deliberately. CLAUDE.md §2 item 5's
@@ -41,12 +43,18 @@
 // object or any REPEATED element's placement (fence posts, crate stack,
 // sandbag rows, tower legs, wheels) — those all come from runtime loops.
 //
-// COLOUR: each root/child node gets a flat, hand-picked, unlit Color
-// (roadmap step 3 is explicitly "static; unlit," CLAUDE.md §9) purely so a
-// capture of 9 overlapping objects is actually legible — real materials
-// arrive at roadmap step 4. Not a hardcoded "data table" in the CLAUDE.md
-// §2 item 5 sense; it's one parameter per node, same category as a mesh's
-// dimensions.
+// MATERIAL: each node gets a `Scene.Material` (base colour, specular
+// strength, shininess, emission colour — Prompts.md's Session 5 spec asks
+// for exactly these four), shaded in `Shaders/Scene.glsl` against ONE
+// hardcoded placeholder directional light (see that file's own header for
+// why this is deliberately NOT roadmap step 4's real multi-light system).
+// Most nodes use `Default_Material` (a plain, non-emissive colour); a few
+// — window/windshield/periscope glass, the floodlight housing, the radar
+// beacon — get a nonzero EmissionColor so they read as "lit" even under
+// this placeholder shading, previewing their eventual role as light
+// sources/light-adjacent surfaces. Not a hardcoded "data table" in the
+// CLAUDE.md §2 item 5 sense; it's a handful of parameters per node, same
+// category as a mesh's dimensions.
 //
 // Verification: Source/Main.odin prints the built object/node count at
 // startup (>= 6 required, this plan targets 9 top-level objects) and
@@ -77,22 +85,35 @@ JEEP_POSITION :: la.Vector3f32{4, 0, 9}
 TANK_POSITION :: la.Vector3f32{-3, 0, 10}
 
 // ---------------------------------------------------------------------------
-// Colour palette (see header for why flat colour is in scope this session).
+// Colour + material palette. Base colours stay separate named constants
+// (tunable independently of the material properties built from them just
+// below) — same pattern as any other small parameter feeding generator
+// code in this project.
 // ---------------------------------------------------------------------------
 
 COLOR_TOWER :: la.Vector3f32{0.55, 0.58, 0.62}
 COLOR_FLOODLIGHT :: la.Vector3f32{0.85, 0.85, 0.75}
 COLOR_FENCE :: la.Vector3f32{0.42, 0.38, 0.28}
+COLOR_GATE :: la.Vector3f32{0.35, 0.32, 0.24}
 COLOR_JEEP :: la.Vector3f32{0.33, 0.40, 0.24}
 COLOR_GLASS :: la.Vector3f32{0.55, 0.75, 0.80}
 COLOR_SANDBAG :: la.Vector3f32{0.62, 0.55, 0.38}
 COLOR_RADAR_MAST :: la.Vector3f32{0.5, 0.5, 0.5}
 COLOR_RADAR_DISH :: la.Vector3f32{0.75, 0.75, 0.7}
+COLOR_BEACON :: la.Vector3f32{0.85, 0.2, 0.15}
 COLOR_BARRACKS :: la.Vector3f32{0.45, 0.32, 0.22}
-COLOR_ROOF :: la.Vector3f32{0.3, 0.22, 0.18}
 COLOR_CRATE :: la.Vector3f32{0.55, 0.45, 0.18}
 COLOR_TANK :: la.Vector3f32{0.28, 0.32, 0.22}
 COLOR_GUN :: la.Vector3f32{0.2, 0.2, 0.2}
+
+// Emissive presets for the parts that should read as "lit" even under
+// Shaders/Scene.glsl's placeholder single-light shading — a preview of
+// their eventual role once real lights exist (roadmap step 5), not real
+// light emission itself (CLAUDE.md §9 roadmap step 3 is still "unlit" in
+// the sense that nothing here casts light on anything else).
+MATERIAL_GLASS :: Material{BaseColor = COLOR_GLASS, SpecularStrength = 0.85, Shininess = 64, EmissionColor = {0.12, 0.28, 0.32}}
+MATERIAL_FLOODLIGHT :: Material{BaseColor = COLOR_FLOODLIGHT, SpecularStrength = 0.5, Shininess = 24, EmissionColor = {0.45, 0.45, 0.38}}
+MATERIAL_BEACON :: Material{BaseColor = COLOR_BEACON, SpecularStrength = 0.4, Shininess = 20, EmissionColor = {0.7, 0.12, 0.08}}
 
 // ---------------------------------------------------------------------------
 // Build_Scene is the single entry point Source/Main.odin calls: builds all
@@ -204,13 +225,30 @@ build_watchtower :: proc(h: ^Hierarchy) {
 	geo.Append_Mesh(&root, roof, roof_transform)
 
 	geo.Upload(&root)
-	tower := Add_Node(h, "Watchtower", NO_PARENT, position_transform(WATCHTOWER_POSITION), root, COLOR_TOWER)
+	tower := Add_Node(h, "Watchtower", NO_PARENT, position_transform(WATCHTOWER_POSITION), root, Default_Material(COLOR_TOWER))
 
-	head := geo.Cube(0.9, 0.5, 0.5)
+	// Floodlight head: a mounting bracket plus TWO lamp housings (not one) —
+	// Prompts.md's Session 5 spec asks for "two lamp housings" by name,
+	// matching Plan.md's 2 watchtower floodlight spot lights (roadmap step
+	// 5). Built as its own small composite, same technique as every object
+	// root above, just attached as a child node instead of NO_PARENT so it
+	// can rotate independently later (Patrol Mode, roadmap step 9).
+	head := geo.Empty_Mesh()
+	mount := geo.Cube(0.9, 0.15, 0.35)
+	defer geo.Destroy(&mount)
+	append_translated(&head, mount, la.Vector3f32{0, 0, 0})
+
+	lamp := geo.Cube(0.3, 0.3, 0.3)
+	defer geo.Destroy(&lamp)
+	for side in 0 ..< 2 {
+		sign_x: f32 = -1 if side == 0 else 1
+		append_translated(&head, lamp, la.Vector3f32{sign_x * 0.3, 0.2, 0})
+	}
+
 	geo.Upload(&head)
 	head_local := Identity_Transform()
 	head_local.Position = {0, TOWER_HEIGHT + TOWER_PLATFORM_THICKNESS*0.5 + TOWER_ROOF_HEIGHT + 0.3, 0}
-	Add_Node(h, "Watchtower Floodlight Head", tower, head_local, head, COLOR_FLOODLIGHT)
+	Add_Node(h, "Watchtower Floodlight Head", tower, head_local, head, MATERIAL_FLOODLIGHT)
 }
 
 // ---------------------------------------------------------------------------
@@ -238,7 +276,7 @@ build_perimeter_fence :: proc(h: ^Hierarchy) {
 	previous_point, previous_valid := la.Vector3f32{}, false
 
 	for i in 0 ..= post_count {
-		point := point_on_fence_perimeter(f32(i) / f32(post_count))
+		point := Fence_Post_Position(f32(i) / f32(post_count))
 		in_gate_gap := point.z > FENCE_HALF_DEPTH-0.01 && abs(point.x) < FENCE_GATE_HALF_WIDTH
 
 		if in_gate_gap {
@@ -250,20 +288,38 @@ build_perimeter_fence :: proc(h: ^Hierarchy) {
 		append_translated(&root, is_gate_flank ? gate_post : post, point+la.Vector3f32{0, FENCE_POST_HEIGHT * 0.5, 0})
 
 		if previous_valid {
-			append_fence_panel(&root, previous_point, point)
+			append_fence_panel(&root, previous_point, point, FENCE_PANEL_HEIGHT)
 		}
 		previous_point, previous_valid = point, true
 	}
 
 	geo.Upload(&root)
-	Add_Node(h, "Perimeter Fence", NO_PARENT, Identity_Transform(), root, COLOR_FENCE)
+	fence := Add_Node(h, "Perimeter Fence", NO_PARENT, Identity_Transform(), root, Default_Material(COLOR_FENCE))
+
+	// Gate panel: the gap left above is otherwise just an opening. Its own
+	// child node (not appended into the fence's composite root, unlike a
+	// regular wall panel) so it gets a visually distinct material and is
+	// independently addressable later (e.g. Inspection Mode swinging it
+	// open) — spans the same two points the loop above placed gate_posts
+	// at, via the same fence_panel_mesh the regular wall panels use, just
+	// slightly shorter so it reads as a gate leaf rather than more fence.
+	gate_left := la.Vector3f32{-FENCE_GATE_HALF_WIDTH, 0, FENCE_HALF_DEPTH}
+	gate_right := la.Vector3f32{FENCE_GATE_HALF_WIDTH, 0, FENCE_HALF_DEPTH}
+	gate_panel := fence_panel_mesh(gate_left, gate_right, FENCE_PANEL_HEIGHT*0.8)
+	geo.Upload(&gate_panel)
+	Add_Node(h, "Perimeter Gate", fence, Identity_Transform(), gate_panel, Default_Material(COLOR_GATE))
 }
 
-// point_on_fence_perimeter walks the rectangle's boundary as t goes 0..1,
+// Fence_Post_Position walks the rectangle's boundary as t goes 0..1,
 // starting at the +Z gate side's centre-right and going clockwise (viewed
-// from above) — a formula over t, not a stored path.
-@(private = "file")
-point_on_fence_perimeter :: proc(t: f32) -> la.Vector3f32 {
+// from above) — a formula over t, not a stored path. EXPORTED (unlike
+// every other per-file helper in this file) specifically so a later
+// session can place fence lamps by calling this SAME formula again rather
+// than needing this file to have stored/exposed a list of post positions
+// itself — matches this project's "recompute from a formula, don't cache
+// scene data" convention (CLAUDE.md §2 item 5) better than exporting a
+// position array would.
+Fence_Post_Position :: proc(t: f32) -> la.Vector3f32 {
 	side_length: f32 = 2 * FENCE_HALF_WIDTH
 	perimeter := 4 * side_length
 	distance := t * perimeter
@@ -280,22 +336,38 @@ point_on_fence_perimeter :: proc(t: f32) -> la.Vector3f32 {
 	}
 }
 
+// fence_panel_mesh builds one wall panel spanning FROM a TO b at the given
+// height, as its own standalone mesh already positioned/oriented (not
+// appended into anything) — shared by append_fence_panel (regular wall
+// panels, appended into the fence's composite root) and the gate panel
+// (its own child node) below.
 @(private = "file")
-append_fence_panel :: proc(dst: ^geo.Mesh, a, b: la.Vector3f32) {
+fence_panel_mesh :: proc(a, b: la.Vector3f32, height: f32) -> geo.Mesh {
 	midpoint := (a + b) * 0.5
 	span := la.length(b - a)
-	if span < 0.01 do return // adjacent posts across the gate gap: no panel
 
 	direction := la.normalize(b - a)
 	angle := math.atan2(-direction.x, -direction.z) // same yaw formula Library/Camera.Camera_Looking_At uses
 
-	panel := geo.Cube(0.04, FENCE_PANEL_HEIGHT, span*0.96)
+	panel := geo.Cube(0.04, height, span*0.96)
 	defer geo.Destroy(&panel)
+
+	mesh := geo.Empty_Mesh()
 	transform := la.mul(
-		la.matrix4_translate(midpoint+la.Vector3f32{0, FENCE_PANEL_HEIGHT * 0.5, 0}),
+		la.matrix4_translate(midpoint+la.Vector3f32{0, height * 0.5, 0}),
 		la.matrix4_rotate(angle, la.Vector3f32{0, 1, 0}),
 	)
-	geo.Append_Mesh(dst, panel, transform)
+	geo.Append_Mesh(&mesh, panel, transform)
+	return mesh
+}
+
+@(private = "file")
+append_fence_panel :: proc(dst: ^geo.Mesh, a, b: la.Vector3f32, height: f32) {
+	if la.length(b - a) < 0.01 do return // adjacent posts across the gate gap: no panel
+
+	panel_mesh := fence_panel_mesh(a, b, height)
+	defer geo.Destroy(&panel_mesh)
+	geo.Append_Mesh(dst, panel_mesh, la.MATRIX4F32_IDENTITY)
 }
 
 // ---------------------------------------------------------------------------
@@ -323,11 +395,12 @@ build_jeep :: proc(h: ^Hierarchy) {
 	defer geo.Destroy(&hood)
 	append_translated(&root, hood, la.Vector3f32{0, JEEP_WHEEL_RADIUS + JEEP_BODY_SIZE.y*0.5 + 0.15, 1.5})
 
-	headlight := geo.Cube(0.18, 0.18, 0.1)
-	defer geo.Destroy(&headlight)
-	for side in 0 ..< 2 {
-		sign_x: f32 = -1 if side == 0 else 1
-		append_translated(&root, headlight, la.Vector3f32{sign_x * JEEP_BODY_SIZE.x * 0.4, JEEP_WHEEL_RADIUS + JEEP_BODY_SIZE.y*0.5, 1.95})
+	// Headlights are NOT baked into root: Prompts.md's Session 5 spec asks
+	// for them as child nodes explicitly (unlike the tank's hull headlights
+	// in Session 6's spec, which stay baked in — see this file's header).
+	headlight_local := [2]la.Vector3f32 {
+		{-JEEP_BODY_SIZE.x * 0.4, JEEP_WHEEL_RADIUS + JEEP_BODY_SIZE.y*0.5, 1.95},
+		{JEEP_BODY_SIZE.x * 0.4, JEEP_WHEEL_RADIUS + JEEP_BODY_SIZE.y*0.5, 1.95},
 	}
 
 	wheel_tangential_width := 2 * JEEP_WHEEL_RADIUS * math.sin(math.PI/f32(JEEP_WHEEL_SEGMENTS)) * 1.3
@@ -346,19 +419,27 @@ build_jeep :: proc(h: ^Hierarchy) {
 	}
 
 	geo.Upload(&root)
-	jeep := Add_Node(h, "Jeep", NO_PARENT, position_transform(JEEP_POSITION), root, COLOR_JEEP)
+	jeep := Add_Node(h, "Jeep", NO_PARENT, position_transform(JEEP_POSITION), root, Default_Material(COLOR_JEEP))
 
 	windshield := geo.Plane(JEEP_BODY_SIZE.x*0.85, 0.7)
 	geo.Upload(&windshield)
 	windshield_local := Identity_Transform()
 	windshield_local.Position = {0, JEEP_WHEEL_RADIUS + JEEP_BODY_SIZE.y + 0.35 + 0.35, -1.2}
 	windshield_local.Rotation.x = math.to_radians(f32(-20)) // tilted back, per pitch's "positive looks up" convention this leans it back
-	Add_Node(h, "Jeep Windshield", jeep, windshield_local, windshield, COLOR_GLASS)
+	Add_Node(h, "Jeep Windshield", jeep, windshield_local, windshield, MATERIAL_GLASS)
+
+	headlight_name := [2]string{"Jeep Headlight Left", "Jeep Headlight Right"}
+	for side in 0 ..< 2 {
+		headlight := geo.Cube(0.18, 0.18, 0.1)
+		geo.Upload(&headlight)
+		Add_Node(h, headlight_name[side], jeep, position_transform(headlight_local[side]), headlight, MATERIAL_FLOODLIGHT)
+	}
 }
 
 // ---------------------------------------------------------------------------
-// 4. Sandbag bunker — a U-shaped wall (3 sides) of short staggered boxes,
-// 2 rows high, open on the +Z side.
+// 4. Sandbag bunker — a U-shaped wall (3 sides) of short low-segment
+// "cylinder" sandbags (Prompts.md Session 5's own wording), stacked and
+// staggered, 2 rows high, open on the +Z side.
 // ---------------------------------------------------------------------------
 
 BUNKER_HALF_WIDTH :: 2.2
@@ -366,11 +447,22 @@ BUNKER_HALF_DEPTH :: 1.6
 BUNKER_ROW_HEIGHT :: 0.3
 BUNKER_ROWS :: 2
 BUNKER_BAG_LENGTH :: 0.6
+BUNKER_BAG_RADIUS :: 0.17
+BUNKER_BAG_SEGMENTS :: 6
 
 build_bunker :: proc(h: ^Hierarchy) {
 	root := geo.Empty_Mesh()
 
-	bag := geo.Cube(BUNKER_BAG_LENGTH, BUNKER_ROW_HEIGHT, BUNKER_BAG_LENGTH*0.9)
+	// Each "sandbag" is its own tiny box-ring cylinder (CLAUDE.md §2 item
+	// 6's own technique, same append_ring_y every other round shape in
+	// this file uses) — round enough in plan view that, unlike the old
+	// plain-box version, it needs no per-wall rotation: the same bag mesh
+	// drops in identically on the left/right/back walls below.
+	bag_piece_width := 2 * BUNKER_BAG_RADIUS * math.sin(math.PI/f32(BUNKER_BAG_SEGMENTS)) * 1.3
+	bag_piece := geo.Cube(0.12, BUNKER_ROW_HEIGHT, bag_piece_width)
+	defer geo.Destroy(&bag_piece)
+	bag := geo.Empty_Mesh()
+	append_ring_y(&bag, bag_piece, BUNKER_BAG_SEGMENTS, BUNKER_BAG_RADIUS, 0)
 	defer geo.Destroy(&bag)
 
 	// 3 straight runs (left, back, right) walked by a formula, staggered
@@ -406,12 +498,13 @@ build_bunker :: proc(h: ^Hierarchy) {
 	}
 
 	geo.Upload(&root)
-	Add_Node(h, "Sandbag Bunker", NO_PARENT, position_transform(BUNKER_POSITION), root, COLOR_SANDBAG)
+	Add_Node(h, "Sandbag Bunker", NO_PARENT, position_transform(BUNKER_POSITION), root, Default_Material(COLOR_SANDBAG))
 }
 
 // ---------------------------------------------------------------------------
-// 5. Radar dish / antenna mast — mast + beacon composite, plus a child
-// dish node that will rotate continuously in Patrol Mode (roadmap step 9).
+// 5. Radar dish / antenna mast — mast root, plus child dish (rotates
+// continuously in Patrol Mode, roadmap step 9) and beacon (blinks via a
+// runtime sine function, same roadmap step, Plan.md §3) nodes.
 // ---------------------------------------------------------------------------
 
 RADAR_MAST_HEIGHT :: 3.2
@@ -425,12 +518,8 @@ build_radar :: proc(h: ^Hierarchy) {
 	defer geo.Destroy(&mast)
 	append_translated(&root, mast, la.Vector3f32{0, RADAR_MAST_HEIGHT * 0.5, 0})
 
-	beacon := geo.Tetrahedron(0.35)
-	defer geo.Destroy(&beacon)
-	append_translated(&root, beacon, la.Vector3f32{0, RADAR_MAST_HEIGHT + 0.2, 0})
-
 	geo.Upload(&root)
-	radar := Add_Node(h, "Radar Mast", NO_PARENT, position_transform(RADAR_POSITION), root, COLOR_RADAR_MAST)
+	radar := Add_Node(h, "Radar Mast", NO_PARENT, position_transform(RADAR_POSITION), root, Default_Material(COLOR_RADAR_MAST))
 
 	dish_tangential_width := 2 * RADAR_DISH_RADIUS * math.sin(math.PI/f32(RADAR_DISH_SEGMENTS)) * 1.3
 	dish_segment := geo.Cube(0.5, 0.08, dish_tangential_width)
@@ -442,7 +531,18 @@ build_radar :: proc(h: ^Hierarchy) {
 	dish_local := Identity_Transform()
 	dish_local.Position = {0, RADAR_MAST_HEIGHT * 0.75, 0}
 	dish_local.Rotation.x = math.to_radians(f32(35)) // tilted skyward
-	Add_Node(h, "Radar Dish", radar, dish_local, dish, COLOR_RADAR_DISH)
+	Add_Node(h, "Radar Dish", radar, dish_local, dish, Default_Material(COLOR_RADAR_DISH))
+
+	// Beacon is its own child node (not baked into root, unlike the old
+	// version) — Plan.md §3 has it blinking via a runtime sine function in
+	// Patrol Mode (roadmap step 9), which needs it independently
+	// addressable, and MATERIAL_BEACON's emission previews that "lit
+	// warning light" look under this session's placeholder shading.
+	beacon := geo.Tetrahedron(0.35)
+	geo.Upload(&beacon)
+	beacon_local := Identity_Transform()
+	beacon_local.Position = {0, RADAR_MAST_HEIGHT + 0.2, 0}
+	Add_Node(h, "Radar Beacon", radar, beacon_local, beacon, MATERIAL_BEACON)
 }
 
 // ---------------------------------------------------------------------------
@@ -480,7 +580,7 @@ build_barracks :: proc(h: ^Hierarchy) {
 	}
 
 	geo.Upload(&root)
-	barracks := Add_Node(h, "Barracks Hut", NO_PARENT, position_transform(BARRACKS_POSITION), root, COLOR_BARRACKS)
+	barracks := Add_Node(h, "Barracks Hut", NO_PARENT, position_transform(BARRACKS_POSITION), root, Default_Material(COLOR_BARRACKS))
 
 	// A separate geo.Plane + Upload PER window, not one shared mesh reused
 	// across 3 Add_Node calls: every Node owns its own Mesh (Scene.Destroy
@@ -497,7 +597,7 @@ build_barracks :: proc(h: ^Hierarchy) {
 		t := (f32(i) + 0.5) / f32(BARRACKS_WINDOW_COUNT)
 		window_local := Identity_Transform()
 		window_local.Position = {(t - 0.5) * (BARRACKS_SIZE.x - 0.8), BARRACKS_SIZE.y * 0.6, BARRACKS_SIZE.z * 0.5+0.01}
-		Add_Node(h, fmt_window_name(i), barracks, window_local, window, COLOR_GLASS)
+		Add_Node(h, fmt_window_name(i), barracks, window_local, window, MATERIAL_GLASS)
 	}
 }
 
@@ -544,7 +644,7 @@ build_crate_stack :: proc(h: ^Hierarchy) {
 	}
 
 	geo.Upload(&root)
-	Add_Node(h, "Cargo Crate Stack", NO_PARENT, position_transform(CRATE_STACK_POSITION), root, COLOR_CRATE)
+	Add_Node(h, "Cargo Crate Stack", NO_PARENT, position_transform(CRATE_STACK_POSITION), root, Default_Material(COLOR_CRATE))
 }
 
 // ---------------------------------------------------------------------------
@@ -593,26 +693,26 @@ build_tank :: proc(h: ^Hierarchy) {
 	}
 
 	geo.Upload(&root)
-	hull_node := Add_Node(h, "Tank Hull", NO_PARENT, position_transform(TANK_POSITION), root, COLOR_TANK)
+	hull_node := Add_Node(h, "Tank Hull", NO_PARENT, position_transform(TANK_POSITION), root, Default_Material(COLOR_TANK))
 
 	turret := geo.Cube(TANK_TURRET_SIZE.x, TANK_TURRET_SIZE.y, TANK_TURRET_SIZE.z)
 	geo.Upload(&turret)
 	turret_local := Identity_Transform()
 	turret_local.Position = {0, TANK_TREAD_HEIGHT + TANK_HULL_SIZE.y + TANK_TURRET_SIZE.y*0.5, -0.3}
-	turret_node := Add_Node(h, "Tank Turret", hull_node, turret_local, turret, COLOR_TANK)
+	turret_node := Add_Node(h, "Tank Turret", hull_node, turret_local, turret, Default_Material(COLOR_TANK))
 
 	barrel := geo.Cube(0.18, 0.18, TANK_BARREL_LENGTH)
 	geo.Upload(&barrel)
 	barrel_local := Identity_Transform()
 	barrel_local.Position = {0, 0, TANK_TURRET_SIZE.z*0.5 + TANK_BARREL_LENGTH*0.5}
-	Add_Node(h, "Tank Barrel", turret_node, barrel_local, barrel, COLOR_GUN)
+	Add_Node(h, "Tank Barrel", turret_node, barrel_local, barrel, Default_Material(COLOR_GUN))
 
 	periscope := geo.Plane(0.3, 0.2)
 	geo.Upload(&periscope)
 	periscope_local := Identity_Transform()
 	periscope_local.Position = {0.5, TANK_TURRET_SIZE.y * 0.5+0.02, 0}
 	periscope_local.Rotation.x = math.to_radians(f32(-90)) // faces up
-	Add_Node(h, "Tank Periscope", turret_node, periscope_local, periscope, COLOR_GLASS)
+	Add_Node(h, "Tank Periscope", turret_node, periscope_local, periscope, MATERIAL_GLASS)
 }
 
 // ---------------------------------------------------------------------------
@@ -661,7 +761,7 @@ build_gun_emplacement :: proc(h: ^Hierarchy) {
 	append_translated(&root, gun_barrel, la.Vector3f32{0, GUN_TRIPOD_HEIGHT, 1.1})
 
 	geo.Upload(&root)
-	Add_Node(h, "Gun Emplacement", NO_PARENT, position_transform(GUN_EMPLACEMENT_POSITION), root, COLOR_SANDBAG)
+	Add_Node(h, "Gun Emplacement", NO_PARENT, position_transform(GUN_EMPLACEMENT_POSITION), root, Default_Material(COLOR_SANDBAG))
 }
 
 // position_transform is Identity_Transform with only Position set — a

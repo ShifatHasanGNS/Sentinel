@@ -67,18 +67,40 @@ Local_Matrix :: proc(t: Transform) -> la.Matrix4f32 {
 	return la.mul(translate, la.mul(rotate, scale))
 }
 
+// Material is a per-node rendering parameter set: a base colour, a
+// specular strength/shininess pair, and an emission colour (for the few
+// parts — window glass, a floodlight housing, the radar beacon — that
+// should read as "lit" even under Session 5's placeholder single-light
+// shading). This is NOT roadmap step 4's real multi-light material system
+// (CLAUDE.md §6.1's ambient/diffuse/specular/emission over an array of
+// point/spot/directional/area lights) — it's a deliberately small stand-in
+// so shapes read with some depth/highlight now, sized to be trivially
+// replaced rather than extended when step 4 arrives. See Shaders/Scene.glsl
+// for the one hardcoded directional light it's shaded against.
+Material :: struct {
+	BaseColor:        la.Vector3f32,
+	SpecularStrength: f32,
+	Shininess:        f32,
+	EmissionColor:    la.Vector3f32,
+}
+
+// Default_Material is a non-emissive, moderately glossy material — the
+// common case for plain structural parts (a hull, a wall, a leg).
+Default_Material :: proc(base_color: la.Vector3f32) -> Material {
+	return Material{BaseColor = base_color, SpecularStrength = 0.25, Shininess = 16, EmissionColor = {0, 0, 0}}
+}
+
 // Node is one entry in a Hierarchy: a name (stable, so Find_Node and later
-// sessions' Light-parenting/Inspection-Mode-selection can address it),
-// a parent index, a local Transform, and what it draws — a Mesh (may be
-// empty/undrawn, see Draw_Nodes' own check) plus a flat unlit Color
-// (roadmap step 3 is explicitly "static; unlit," CLAUDE.md §9 — real
-// material/lighting arrives at roadmap step 4).
+// sessions' Light-parenting/Inspection-Mode-selection can address it), a
+// parent index, a local Transform, and what it draws — a Mesh (may be
+// empty/undrawn, see Source/Main.odin's draw loop for that check) plus a
+// Material.
 Node :: struct {
-	Name:   string,
-	Parent: int,
-	Local:  Transform,
-	Mesh:   geo.Mesh,
-	Color:  la.Vector3f32,
+	Name:     string,
+	Parent:   int,
+	Local:    Transform,
+	Mesh:     geo.Mesh,
+	Material: Material,
 }
 
 Hierarchy :: struct {
@@ -96,9 +118,9 @@ Destroy :: proc(h: ^Hierarchy) {
 // that index as `parent` for later children — this return value is what
 // makes the "parent always added before its children" invariant natural
 // to maintain rather than something a caller has to track separately.
-Add_Node :: proc(h: ^Hierarchy, name: string, parent: int, local: Transform, mesh: geo.Mesh, color: la.Vector3f32) -> int {
+Add_Node :: proc(h: ^Hierarchy, name: string, parent: int, local: Transform, mesh: geo.Mesh, material: Material) -> int {
 	assert(parent == NO_PARENT || (parent >= 0 && parent < len(h.Nodes)), "Add_Node: parent index out of range")
-	append(&h.Nodes, Node{Name = name, Parent = parent, Local = local, Mesh = mesh, Color = color})
+	append(&h.Nodes, Node{Name = name, Parent = parent, Local = local, Mesh = mesh, Material = material})
 	return len(h.Nodes) - 1
 }
 

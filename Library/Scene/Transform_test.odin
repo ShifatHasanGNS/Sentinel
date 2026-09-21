@@ -23,7 +23,7 @@ test_root_node_world_matrix_is_its_local_matrix :: proc(t: ^testing.T) {
 
 	local := Identity_Transform()
 	local.Position = {3, 4, 5}
-	Add_Node(&h, "root", NO_PARENT, local, geo_empty_mesh(), la.Vector3f32{1, 1, 1})
+	Add_Node(&h, "root", NO_PARENT, local, geo_empty_mesh(), Default_Material(la.Vector3f32{1, 1, 1}))
 
 	world := Compute_World_Matrices(&h)
 	defer delete(world)
@@ -36,14 +36,14 @@ test_three_level_chain_tip_position_before_rotation :: proc(t: ^testing.T) {
 	h := Hierarchy{}
 	defer Destroy(&h)
 
-	base := Add_Node(&h, "base", NO_PARENT, Identity_Transform(), geo_empty_mesh(), la.Vector3f32{1, 1, 1})
+	base := Add_Node(&h, "base", NO_PARENT, Identity_Transform(), geo_empty_mesh(), Default_Material(la.Vector3f32{1, 1, 1}))
 
 	arm_local := Identity_Transform()
-	arm := Add_Node(&h, "arm", base, arm_local, geo_empty_mesh(), la.Vector3f32{1, 1, 1})
+	arm := Add_Node(&h, "arm", base, arm_local, geo_empty_mesh(), Default_Material(la.Vector3f32{1, 1, 1}))
 
 	tip_local := Identity_Transform()
 	tip_local.Position = {2, 0, 0}
-	tip := Add_Node(&h, "tip", arm, tip_local, geo_empty_mesh(), la.Vector3f32{1, 1, 1})
+	tip := Add_Node(&h, "tip", arm, tip_local, geo_empty_mesh(), Default_Material(la.Vector3f32{1, 1, 1}))
 
 	world := Compute_World_Matrices(&h)
 	defer delete(world)
@@ -60,15 +60,15 @@ test_rotating_arm_moves_tip_through_the_chain :: proc(t: ^testing.T) {
 	h := Hierarchy{}
 	defer Destroy(&h)
 
-	base := Add_Node(&h, "base", NO_PARENT, Identity_Transform(), geo_empty_mesh(), la.Vector3f32{1, 1, 1})
+	base := Add_Node(&h, "base", NO_PARENT, Identity_Transform(), geo_empty_mesh(), Default_Material(la.Vector3f32{1, 1, 1}))
 
 	arm_local := Identity_Transform()
 	arm_local.Rotation.y = math.to_radians(f32(90))
-	arm := Add_Node(&h, "arm", base, arm_local, geo_empty_mesh(), la.Vector3f32{1, 1, 1})
+	arm := Add_Node(&h, "arm", base, arm_local, geo_empty_mesh(), Default_Material(la.Vector3f32{1, 1, 1}))
 
 	tip_local := Identity_Transform()
 	tip_local.Position = {2, 0, 0}
-	tip := Add_Node(&h, "tip", arm, tip_local, geo_empty_mesh(), la.Vector3f32{1, 1, 1})
+	tip := Add_Node(&h, "tip", arm, tip_local, geo_empty_mesh(), Default_Material(la.Vector3f32{1, 1, 1}))
 
 	world := Compute_World_Matrices(&h)
 	defer delete(world)
@@ -85,15 +85,15 @@ test_moving_base_moves_everything_downstream :: proc(t: ^testing.T) {
 	defer Destroy(&h)
 
 	base_local := Identity_Transform()
-	base := Add_Node(&h, "base", NO_PARENT, base_local, geo_empty_mesh(), la.Vector3f32{1, 1, 1})
+	base := Add_Node(&h, "base", NO_PARENT, base_local, geo_empty_mesh(), Default_Material(la.Vector3f32{1, 1, 1}))
 
 	arm_local := Identity_Transform()
 	arm_local.Rotation.y = math.to_radians(f32(90))
-	arm := Add_Node(&h, "arm", base, arm_local, geo_empty_mesh(), la.Vector3f32{1, 1, 1})
+	arm := Add_Node(&h, "arm", base, arm_local, geo_empty_mesh(), Default_Material(la.Vector3f32{1, 1, 1}))
 
 	tip_local := Identity_Transform()
 	tip_local.Position = {2, 0, 0}
-	tip := Add_Node(&h, "tip", arm, tip_local, geo_empty_mesh(), la.Vector3f32{1, 1, 1})
+	tip := Add_Node(&h, "tip", arm, tip_local, geo_empty_mesh(), Default_Material(la.Vector3f32{1, 1, 1}))
 
 	h.Nodes[base].Local.Position = {5, 0, 0}
 
@@ -111,7 +111,7 @@ test_world_direction_ignores_translation :: proc(t: ^testing.T) {
 	local := Identity_Transform()
 	local.Position = {100, 200, 300} // large translation; must not leak into the direction
 	local.Rotation.y = math.to_radians(f32(90))
-	Add_Node(&h, "node", NO_PARENT, local, geo_empty_mesh(), la.Vector3f32{1, 1, 1})
+	Add_Node(&h, "node", NO_PARENT, local, geo_empty_mesh(), Default_Material(la.Vector3f32{1, 1, 1}))
 
 	world := Compute_World_Matrices(&h)
 	defer delete(world)
@@ -126,8 +126,8 @@ test_find_node_by_name :: proc(t: ^testing.T) {
 	h := Hierarchy{}
 	defer Destroy(&h)
 
-	Add_Node(&h, "alpha", NO_PARENT, Identity_Transform(), geo_empty_mesh(), la.Vector3f32{1, 1, 1})
-	beta := Add_Node(&h, "beta", NO_PARENT, Identity_Transform(), geo_empty_mesh(), la.Vector3f32{1, 1, 1})
+	Add_Node(&h, "alpha", NO_PARENT, Identity_Transform(), geo_empty_mesh(), Default_Material(la.Vector3f32{1, 1, 1}))
+	beta := Add_Node(&h, "beta", NO_PARENT, Identity_Transform(), geo_empty_mesh(), Default_Material(la.Vector3f32{1, 1, 1}))
 
 	testing.expect(t, Find_Node(&h, "beta") == beta)
 	testing.expect(t, Find_Node(&h, "does not exist") == NO_PARENT)
