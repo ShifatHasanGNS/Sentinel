@@ -39,18 +39,28 @@
 // Shift to sprint, P to toggle perspective/orthographic, scroll wheel to
 // zoom the orthographic volume) — see the key/cursor/scroll handling in
 // main() below and Library/Camera/Camera.odin for why the GLFW-facing glue
-// lives here rather than in the Camera package. A second temporary mesh,
-// generate_grid, was added alongside generate_cube so both projections have
-// something to visually compare (parallel ground-grid lines stay parallel
-// in orthographic, converge in perspective) — see that proc's own comment.
-// Interactive input is skipped entirely during a --capture run so captures
-// stay reproducible regardless of the real system cursor/keyboard state;
-// --projection lets a capture run choose its starting projection instead.
+// lives here rather than in the Camera package. Interactive input is
+// skipped entirely during a --capture run so captures stay reproducible
+// regardless of the real system cursor/keyboard state; --projection lets a
+// capture run choose its starting projection instead.
 //
-// TODO(roadmap step 3): generate_cube/generate_grid/box_corners_and_
-// triangles and their make_* callers are a one-off pipeline smoke test
-// (CLAUDE.md §2 item 5) — delete them and their calls once Library/Geometry
-// produces real meshes.
+// Session 3 status (roadmap step 3, Library/Geometry): Session 1/2's
+// temporary smoke-test generators (generate_cube, box_corners_and_
+// triangles, generate_grid, and their make_* upload helpers) are DELETED —
+// Library/Geometry.Mesh now owns generation AND GL upload, so this file no
+// longer builds vertex/index arrays or Engine buffers by hand at all. In
+// their place, build_gallery below is this session's OWN temporary scene
+// (also slated for deletion, once the real 9 objects exist): the three base
+// primitives shown standalone plus two shapes composed at runtime from Cube
+// instances via Geometry.Append_Mesh (a box-ring "cylinder" and a
+// tapering-stack "cone") — see build_gallery's own comment. Back-face
+// culling is turned on for the first time in this project
+// (gl.Enable(gl.CULL_FACE)) purely as a self-verification aid: a winding
+// bug in any generator shows up immediately as missing faces in a capture.
+// This is NOT yet roadmap step 8's toggleable culling feature — no debug
+// key exists to turn it off, and step 8 will likely add a manual
+// normal-based culling test to compare against this GL-native one; see
+// PROGRESS.md.
 //
 // Source/Input.odin (added once Inspection Mode exists, roadmap step 10):
 // GLFW key/mouse callbacks, object selection, and the remaining interactive
@@ -81,14 +91,10 @@ import "vendor:glfw"
 import gl "vendor:OpenGL"
 
 import cam "../Library/Camera"
+import geo "../Library/Geometry"
 
 import dbg "../Library/Engine/Debugger"
-import ib "../Library/Engine/IndexBuffer"
-import rd "../Library/Engine/Renderer"
 import sd "../Library/Engine/Shader"
-import va "../Library/Engine/VertexArray"
-import vb "../Library/Engine/VertexBuffer"
-import vbl "../Library/Engine/VertexBufferLayout"
 import capture "../Debug"
 
 // ---------------------------------------------------------------------------
@@ -125,11 +131,11 @@ CLEAR_COLOR :: [4]f32{0.02, 0.02, 0.05, 1.0}
 COMBINED_SHADER_PATH :: "Shaders/Scene.glsl"
 
 // Starting eye position and look target for this session's free-fly
-// Camera (Library/Camera.Camera_Looking_At) — chosen so both the ground
-// grid and the rotating cube are comfortably in frame at startup. Lens
-// parameters (FOV/near/far) now live on the Camera itself
-// (Library/Camera.Default_Camera), not here.
-CAMERA_START_EYE :: la.Vector3f32{6.0, 2.5, 8.0}
+// Camera (Library/Camera.Camera_Looking_At) — chosen so the whole gallery
+// row below (GALLERY_OBJECT_COUNT objects, GALLERY_SPACING apart) is
+// comfortably in frame at startup. Lens parameters (FOV/near/far) now live
+// on the Camera itself (Library/Camera.Default_Camera), not here.
+CAMERA_START_EYE :: la.Vector3f32{0.0, 5.0, 16.0}
 
 // Also passed to Toggle_Projection each time (CLAUDE.md §7: the
 // orthographic volume is sized from the camera's distance to this point),
@@ -137,38 +143,44 @@ CAMERA_START_EYE :: la.Vector3f32{6.0, 2.5, 8.0}
 // where free-fly movement has since taken the camera.
 SCENE_FOCUS :: la.Vector3f32{0, 0, 0}
 
-CUBE_HALF_EXTENT :: 0.75
+// Gallery parameters (Session 3 self-verification scene — see
+// build_gallery's own comment). Object slot positions come from a formula
+// over the index/spacing below, never a literal position table (CLAUDE.md
+// §2 item 5).
+GALLERY_OBJECT_COUNT :: 5
+GALLERY_SPACING :: 4.0
 
-// Degrees of rotation added per frame (converted to radians at use per the
-// angle-unit convention in Library/Camera/Camera.odin — angle STATE stays
-// in degrees only here, at this one human-facing edge). Frame-count-driven,
-// not wall-clock time, so "--capture N ..." at two different N always
-// reproduces the exact same rotation — useful for this session's visual
-// check. Free-fly camera movement (added this session) DOES use a real
-// delta-time clock (`dt_seconds` in main()'s loop below); only the cube's
-// spin stays frame-counted, since that's what keeps --capture reproducible.
-CUBE_SPIN_DEGREES_PER_FRAME :: 1.0
+// Box-ring "cylinder" composition parameters (CLAUDE.md §2 item 6's own
+// example: "a low-poly cylinder is really N box... instances arranged in a
+// ring by a runtime loop computing a rotation matrix per segment").
+// Segment RADIAL thickness/height are free choices, but the TANGENTIAL
+// width is NOT — it's derived in build_ring from RING_RADIUS/
+// RING_SEGMENT_COUNT (the chord length between adjacent segment centres),
+// not a separate hand-picked constant. A first version picked an
+// independent tangential-width constant that didn't actually match this
+// count/radius, leaving visible gaps between segments in
+// Debug/Captures/session3_gallery.bmp — see build_ring's own comment.
+RING_SEGMENT_COUNT :: 10
+RING_RADIUS :: 0.8
+RING_SEGMENT_RADIAL_THICKNESS :: 0.5
+RING_SEGMENT_HEIGHT :: 1.2
+// >1 so neighbouring segments overlap slightly rather than just barely
+// touching edge-to-edge, where floating-point rounding could reopen a
+// hairline gap.
+SEGMENT_OVERLAP_FACTOR :: 1.3
 
-// Deliberately NOT a coordinate axis: a cube has 90-degree rotational
-// symmetry about any axis through opposite face centres (e.g. +Y), so
-// spinning purely around +Y would make frame N and frame N+90 visually
-// identical — a false negative for "did it actually rotate?" that bit this
-// session's first capture. A tilted axis has no such small-integer
-// symmetry, so any two different frame counts genuinely look different.
-CUBE_SPIN_AXIS :: la.Vector3f32{0.4, 1, 0.3}
-
-// Ground-grid parameters (Session 2 test scene, see generate_grid's own
-// comment for why it's built as thin triangle "bars" instead of GL_LINES).
-// GRID_HALF_EXTENT of 5 with GRID_LINE_COUNT of 11 gives an 11x11 grid of
-// lines, i.e. 10x10 grid CELLS spanning -5..+5 on both X and Z, per the
-// task's "10x10 ground grid." GRID_Y_OFFSET sits it comfortably below the
-// rotating cube's largest possible bounding extent
-// (CUBE_HALF_EXTENT * sqrt(3), for a corner-on rotation) so the cube never
-// visually clips through the grid at any spin angle.
-GRID_HALF_EXTENT :: 5.0
-GRID_LINE_COUNT :: 11
-GRID_BAR_HALF_WIDTH :: 0.025
-GRID_Y_OFFSET :: -1.5
+// Tapering-stack "cone" composition parameters: several ring LEVELS
+// stacked upward with shrinking radius, built via the exact same
+// runtime-transformed-Cube technique as the ring above, not a dedicated
+// cone() generator (CLAUDE.md §2 item 6). Segments are sized for the BASE
+// level (its widest, sparsest ring) and reused at every level — smaller
+// levels end up with MORE overlap, not gaps, which is the safe direction
+// to be wrong in.
+CONE_LEVEL_COUNT :: 6
+CONE_SEGMENTS_PER_LEVEL :: 8
+CONE_BASE_RADIUS :: 1.0
+CONE_LEVEL_HEIGHT :: 0.35
+CONE_SEGMENT_RADIAL_THICKNESS :: 0.35
 
 main :: proc() {
 	capture_frames, capture_path, do_capture := parse_capture_flag(os.args[1:])
@@ -214,13 +226,19 @@ main :: proc() {
 
 	gl.Enable(gl.DEPTH_TEST); dbg.GL_Check()
 
-	cube_vertex_buffer, cube_index_buffer, cube_vertex_array, cube_layout := make_rotating_cube(CUBE_HALF_EXTENT)
-	defer vb.Delete(&cube_vertex_buffer)
-	defer vbl.Delete(&cube_layout)
+	// Self-verification aid for this session (see the file header's
+	// "Session 3 status" for why this isn't yet roadmap step 8's
+	// toggleable culling feature): CCW-wound front faces, back faces
+	// culled — a winding bug in any Geometry generator shows up as a
+	// missing face in a capture rather than silently going unnoticed.
+	gl.Enable(gl.CULL_FACE); dbg.GL_Check()
+	gl.CullFace(gl.BACK); dbg.GL_Check()
+	gl.FrontFace(gl.CCW); dbg.GL_Check()
 
-	grid_vertex_buffer, grid_index_buffer, grid_vertex_array, grid_layout := make_grid(GRID_HALF_EXTENT, GRID_LINE_COUNT, GRID_BAR_HALF_WIDTH)
-	defer vb.Delete(&grid_vertex_buffer)
-	defer vbl.Delete(&grid_layout)
+	gallery := build_gallery()
+	defer for &mesh in gallery {
+		geo.Destroy(&mesh)
+	}
 
 	shader := sd.New(COMBINED_SHADER_PATH)
 	if shader.RendererID == 0 {
@@ -230,23 +248,7 @@ main :: proc() {
 		os.exit(1)
 	}
 	fmt.printfln("Shader program linked: id=%d", shader.RendererID)
-
-	// Both renderers share one Shader (there is only one, trivial, shared
-	// material so far). Renderer.Delete deletes ALL THREE of its fields,
-	// including the Shader — sharing one Shader pointer across two
-	// Renderers and calling Delete on both would double-delete it (a real
-	// bug: Shader.Delete frees shader.FilePath's backing memory, so a
-	// second call is a double-free, not just a harmless redundant GL call).
-	// cube_renderer owns the shared shader's cleanup; the grid's own
-	// VertexArray/IndexBuffer are deleted directly instead of through
-	// rd.Delete, exactly like cube_vertex_buffer/cube_layout above are
-	// already deleted directly rather than through the Renderer.
-	cube_renderer := rd.New(&cube_vertex_array, &cube_index_buffer, &shader)
-	defer rd.Delete(&cube_renderer)
-
-	grid_renderer := rd.New(&grid_vertex_array, &grid_index_buffer, &shader)
-	defer va.Delete(&grid_vertex_array)
-	defer ib.Delete(&grid_index_buffer)
+	defer sd.Delete(&shader)
 
 	camera := cam.Camera_Looking_At(CAMERA_START_EYE, SCENE_FOCUS)
 	if start_projection == .Orthographic {
@@ -312,20 +314,17 @@ main :: proc() {
 		view := cam.View_Matrix(&camera)
 		projection := cam.Projection_Matrix(&camera, aspect)
 
-		spin_angle := math.to_radians(f32(frame_count) * f32(CUBE_SPIN_DEGREES_PER_FRAME))
-		cube_model := la.matrix4_rotate(spin_angle, CUBE_SPIN_AXIS)
-		grid_model := la.matrix4_translate(la.Vector3f32{0, GRID_Y_OFFSET, 0})
-
-		// Composition order matches the column-vector convention recorded in
-		// Library/Camera/Camera.odin: apply `model` first, then `view`, then
-		// `projection`, to a point on the right.
-		grid_mvp := la.mul(projection, la.mul(view, grid_model))
-		sd.SetUniform(&shader, "u_MVP", &grid_mvp)
-		rd.Draw(&grid_renderer)
-
-		cube_mvp := la.mul(projection, la.mul(view, cube_model))
-		sd.SetUniform(&shader, "u_MVP", &cube_mvp)
-		rd.Draw(&cube_renderer)
+		// The gallery is static this session (no rotation) — it exists to
+		// visually verify winding/normals via culling, not to demo
+		// animation. Composition order matches the column-vector
+		// convention recorded in Library/Camera/Camera.odin: apply `model`
+		// first, then `view`, then `projection`, to a point on the right.
+		for &mesh, i in gallery {
+			model := la.matrix4_translate(gallery_slot_position(i))
+			mvp := la.mul(projection, la.mul(view, model))
+			sd.SetUniform(&shader, "u_MVP", &mvp)
+			geo.Draw(&mesh, &shader)
+		}
 
 		frame_count += 1
 
@@ -438,183 +437,113 @@ parse_projection_flag :: proc(args: []string) -> cam.Projection_Mode {
 	return .Perspective
 }
 
-// box_corners_and_triangles computes one box's 8 corner positions (centred
-// at `center`, independent half-extents per axis so it can describe both a
-// cube and a long thin "bar") and its 12 CCW-front-facing triangles (2 per
-// face x 6 faces), entirely from a loop over sign/axis combinations — never
-// a literal table of numbers (CLAUDE.md §2 item 5). Factored out of what
-// was Session 1's generate_cube so both make_rotating_cube's cube and this
-// session's generate_grid (a mesh made of many thin boxes) share ONE
-// already-verified winding computation instead of two copies that could
-// drift apart — a winding bug here would silently break both back-face
-// culling and lighting later (CLAUDE.md §2.1's culling item), so keeping it
-// in one place matters more than keeping this proc small. This is a
-// *miniature* of the same technique Library/Geometry.cube() will formalize
-// properly in roadmap step 3 (which will also duplicate vertices per face
-// for correct flat-shading normals); this throwaway version skips that
-// because there is no lighting yet to need per-face normals.
-//
-// Corners are indexed 0-7 by a 3-bit code (bit 0 = +X, bit 1 = +Y, bit 2 =
-// +Z) — a direct loop over sign combinations, not copied-in coordinates.
-// Each face's 4 corners are found the same way: fix the bit for this face's
-// axis, then walk the other two axes' bits in a fixed traversal order.
-// That order is reversed for the two faces of a given axis (`pos_order` vs
-// `neg_order`) so every face winds CCW when viewed from outside — verified
-// by checking, for every generated triangle, that (v1-v0) x (v2-v0) points
-// away from the box's centre (see PROGRESS.md for that check).
-box_corners_and_triangles :: proc(center: la.Vector3f32, half_extents: la.Vector3f32) -> (positions: [8]la.Vector3f32, indices: [36]u32) {
-	for i in 0 ..< 8 {
-		sign_x: f32 = -1 if i & 1 == 0 else 1
-		sign_y: f32 = -1 if i & 2 == 0 else 1
-		sign_z: f32 = -1 if i & 4 == 0 else 1
-		positions[i] = center + la.Vector3f32{sign_x, sign_y, sign_z} * half_extents
+// build_gallery constructs this session's temporary self-verification
+// scene (slated for deletion once the real 9 objects exist, same as the
+// rotating cube/grid it replaces): the three base primitives (Cube,
+// Tetrahedron, Plane) shown standalone, plus two shapes composed at
+// runtime from many Cube instances via Geometry.Append_Mesh (a box-ring
+// "cylinder" and a tapering-stack "cone") — CLAUDE.md §2 item 6's "no
+// cylinder()/cone() generator" constraint made concrete: build_ring/
+// build_cone below are NOT new Geometry generators, just runtime loops
+// over Cube + Append_Mesh calls, living here in SENTINEL-specific code
+// where composite objects belong. Every returned Mesh is already
+// Upload()ed, ready to Draw immediately. Gallery slot positions come from
+// gallery_slot_position's formula over GALLERY_OBJECT_COUNT, never a
+// literal position table (CLAUDE.md §2 item 5).
+build_gallery :: proc() -> [GALLERY_OBJECT_COUNT]geo.Mesh {
+	gallery: [GALLERY_OBJECT_COUNT]geo.Mesh
+
+	gallery[0] = geo.Cube(1.4, 1.4, 1.4)
+	gallery[1] = geo.Tetrahedron(1.6)
+	gallery[2] = geo.Plane(1.6, 1.6)
+	gallery[3] = build_ring()
+	gallery[4] = build_cone()
+
+	for &mesh in gallery {
+		geo.Upload(&mesh)
 	}
 
-	pos_order := [4][2]uint{{0, 0}, {1, 0}, {1, 1}, {0, 1}}
-	neg_order := [4][2]uint{{0, 1}, {1, 1}, {1, 0}, {0, 0}}
+	return gallery
+}
 
-	index_i := 0
-	for axis in 0 ..< 3 {
-		u := uint((axis + 1) % 3)
-		v := uint((axis + 2) % 3)
+// gallery_slot_position spaces GALLERY_OBJECT_COUNT objects GALLERY_SPACING
+// apart along X, centred on the origin — a formula over `index`, not a
+// literal table (CLAUDE.md §2 item 5).
+gallery_slot_position :: proc(index: int) -> la.Vector3f32 {
+	center_index := f32(GALLERY_OBJECT_COUNT - 1) * 0.5
+	return la.Vector3f32{(f32(index) - center_index) * GALLERY_SPACING, 0, 0}
+}
 
-		for sign_bit in 0 ..< 2 {
-			order := pos_order if sign_bit == 1 else neg_order
+// build_ring composes a "cylinder" from RING_SEGMENT_COUNT small Cube
+// instances placed around a circle, each by its own runtime-computed
+// rotation+translation matrix (CLAUDE.md §2 item 6). `segment` is built
+// once and reused as the Append_Mesh SOURCE for every instance — it is
+// never itself uploaded/drawn, so it's destroyed right after the loop
+// that reads it, rather than returned.
+//
+// Composition order matters here: each instance's transform is
+// rotate_y(angle) * translate(RADIUS, 0, 0), i.e. offset the segment out
+// along local +X FIRST, then rotate that whole (segment + offset) rigid
+// body about Y — this sweeps each segment to its point on the circle
+// while ALSO carrying its own orientation around with it, so every
+// segment's local +X face ends up pointing radially outward, the same way
+// relative to the ring at every angle. The reversed order (rotate the
+// segment's own shape by `angle`, then translate by a separately-computed
+// (cos, sin) point on the circle) looks similar but is NOT the same
+// transform — it decouples the segment's orientation from its position on
+// the circle, so segments no longer face a consistent direction relative
+// to their neighbours. This was tried first and produced a visibly
+// gap-riddled ring in Debug/Captures/session3_gallery.bmp before being
+// caught and fixed here — see PROGRESS.md.
+//
+// tangential_width is the OTHER thing that turned out load-bearing: it's
+// the chord length between two adjacent segment centres at RING_RADIUS
+// (2 * R * sin(pi / count), standard regular-polygon chord formula),
+// scaled up slightly by SEGMENT_OVERLAP_FACTOR. A first version used a
+// fixed width unrelated to this count/radius and left visible gaps
+// between segments — computed here instead so changing RING_SEGMENT_COUNT
+// or RING_RADIUS later can't silently reintroduce that mismatch.
+build_ring :: proc() -> geo.Mesh {
+	tangential_width := 2 * RING_RADIUS * math.sin(math.PI / f32(RING_SEGMENT_COUNT)) * SEGMENT_OVERLAP_FACTOR
+	segment := geo.Cube(RING_SEGMENT_RADIAL_THICKNESS, RING_SEGMENT_HEIGHT, tangential_width)
+	defer geo.Destroy(&segment)
 
-			corner: [4]u32
-			for k in 0 ..< 4 {
-				corner_index: uint = 0
-				corner_index |= uint(sign_bit) << uint(axis)
-				corner_index |= order[k][0] << u
-				corner_index |= order[k][1] << v
-				corner[k] = u32(corner_index)
-			}
+	ring := geo.Empty_Mesh()
+	for i in 0 ..< RING_SEGMENT_COUNT {
+		angle := f32(i) * (2 * math.PI / f32(RING_SEGMENT_COUNT))
+		transform := la.mul(la.matrix4_rotate(angle, la.Vector3f32{0, 1, 0}), la.matrix4_translate(la.Vector3f32{RING_RADIUS, 0, 0}))
+		geo.Append_Mesh(&ring, segment, transform)
+	}
 
-			indices[index_i + 0] = corner[0]
-			indices[index_i + 1] = corner[1]
-			indices[index_i + 2] = corner[2]
-			indices[index_i + 3] = corner[0]
-			indices[index_i + 4] = corner[2]
-			indices[index_i + 5] = corner[3]
-			index_i += 6
+	return ring
+}
+
+// build_cone stacks CONE_LEVEL_COUNT ring LEVELS (same rotate-after-
+// translate composition as build_ring, see its comment for why order
+// matters here), each level's radius shrinking linearly toward the top —
+// a tapering stack, not a dedicated cone() generator (CLAUDE.md §2 item
+// 6). The per-level Y offset rides along inside the SAME local translate
+// as the radius (rotating about Y never changes a point's Y coordinate,
+// so `level_y` survives the rotation unchanged) rather than needing a
+// second transform. tangential_width is sized from the BASE level (see
+// this file's constants block) using the same chord-length formula as
+// build_ring, for the same reason.
+build_cone :: proc() -> geo.Mesh {
+	tangential_width := 2 * CONE_BASE_RADIUS * math.sin(math.PI / f32(CONE_SEGMENTS_PER_LEVEL)) * SEGMENT_OVERLAP_FACTOR
+	segment := geo.Cube(CONE_SEGMENT_RADIAL_THICKNESS, CONE_LEVEL_HEIGHT, tangential_width)
+	defer geo.Destroy(&segment)
+
+	cone := geo.Empty_Mesh()
+	for level in 0 ..< CONE_LEVEL_COUNT {
+		level_radius := CONE_BASE_RADIUS * (1 - f32(level) / f32(CONE_LEVEL_COUNT))
+		level_y := f32(level) * CONE_LEVEL_HEIGHT
+
+		for i in 0 ..< CONE_SEGMENTS_PER_LEVEL {
+			angle := f32(i) * (2 * math.PI / f32(CONE_SEGMENTS_PER_LEVEL))
+			transform := la.mul(la.matrix4_rotate(angle, la.Vector3f32{0, 1, 0}), la.matrix4_translate(la.Vector3f32{level_radius, level_y, 0}))
+			geo.Append_Mesh(&cone, segment, transform)
 		}
 	}
 
-	return
-}
-
-// generate_cube is box_corners_and_triangles specialised to a cube centred
-// at the origin — kept as its own proc since make_rotating_cube's callers
-// only ever want that one shape.
-generate_cube :: proc(half_extent: f32) -> (positions: [8]la.Vector3f32, indices: [36]u32) {
-	return box_corners_and_triangles(la.Vector3f32{0, 0, 0}, la.Vector3f32{half_extent, half_extent, half_extent})
-}
-
-// make_rotating_cube uploads generate_cube's output into Library/Engine
-// buffer/array objects, ready for Library/Engine/Renderer.Draw. The
-// returned VertexBuffer and VertexBufferLayout aren't referenced by
-// anything else (VertexArray only stores a GL id, not a pointer back to the
-// buffer/layout that described it), so the caller owns their cleanup
-// separately from the Renderer built on top of the other two. Temporary
-// pipeline smoke test — see the file header TODO to delete it once
-// Library/Geometry exists.
-make_rotating_cube :: proc(
-	half_extent: f32,
-) -> (
-	vertex_buffer: vb.VertexBuffer,
-	index_buffer: ib.IndexBuffer,
-	vertex_array: va.VertexArray,
-	layout: vbl.VertexBufferLayout,
-) {
-	positions, indices := generate_cube(half_extent)
-
-	vertex_buffer = vb.New(positions[:])
-	index_buffer = ib.New(indices[:])
-
-	layout = vbl.New()
-	vbl.Push(&layout, f32, 3, false) // a_Position: vec3
-
-	vertex_array = va.New()
-	va.AddBuffer(&vertex_array, &vertex_buffer, &layout)
-
-	return
-}
-
-// generate_grid builds a square ground grid as ONE combined triangle mesh:
-// each grid line is a thin box ("bar") appended via
-// box_corners_and_triangles, so the whole grid draws through the same
-// GL_TRIANGLES + IndexBuffer path Library/Engine/Renderer.Draw already
-// supports. A real 1px-wide GL_LINES grid would need Draw to accept a
-// different GL primitive type, which is exactly the kind of Renderer
-// extension CLAUDE.md §13.2/PROGRESS.md defer to "whichever session
-// actually needs it" — this sidesteps that entirely by staying
-// triangles-only, at the cost of the bars having a small width instead of
-// being 1px lines (GRID_BAR_HALF_WIDTH controls that width).
-//
-// half_extent is the distance from the grid's centre to its outer edge;
-// line_count is how many bars run in EACH direction (so line_count - 1 grid
-// cells per axis, matching the task's "10x10 ground grid" via
-// GRID_LINE_COUNT = 11). Nothing here is a literal position table: every
-// bar's centre comes from an even-spacing formula over line_count,
-// evaluated fresh on every call — never a stored/cached list of positions
-// (CLAUDE.md §2 item 5).
-generate_grid :: proc(half_extent: f32, line_count: int, bar_half_width: f32) -> (positions: [dynamic]la.Vector3f32, indices: [dynamic]u32) {
-	assert(line_count >= 2, "generate_grid: line_count must be at least 2 (one cell)")
-
-	spacing := (2 * half_extent) / f32(line_count - 1)
-
-	for i in 0 ..< line_count {
-		offset := -half_extent + f32(i) * spacing
-
-		// A bar running along Z at fixed X = offset, and one running along
-		// X at fixed Z = offset — together these two are one "+" of the
-		// grid at this offset; the full loop draws all of them.
-		append_box(&positions, &indices, la.Vector3f32{offset, 0, 0}, la.Vector3f32{bar_half_width, bar_half_width, half_extent})
-		append_box(&positions, &indices, la.Vector3f32{0, 0, offset}, la.Vector3f32{half_extent, bar_half_width, bar_half_width})
-	}
-
-	return
-}
-
-// append_box appends one box_corners_and_triangles box's vertices/indices
-// onto growing mesh arrays, offsetting the new indices by the arrays'
-// current vertex count so multiple boxes combine into one valid indexed
-// mesh instead of each box separately indexing from 0.
-append_box :: proc(positions: ^[dynamic]la.Vector3f32, indices: ^[dynamic]u32, center: la.Vector3f32, half_extents: la.Vector3f32) {
-	base_index := u32(len(positions))
-
-	box_positions, box_indices := box_corners_and_triangles(center, half_extents)
-	append(positions, ..box_positions[:])
-	for box_index in box_indices {
-		append(indices, base_index + box_index)
-	}
-}
-
-// make_grid mirrors make_rotating_cube: uploads generate_grid's output into
-// Library/Engine buffer/array objects. Temporary pipeline smoke test — see
-// the file header TODO to delete it once Library/Geometry exists.
-make_grid :: proc(
-	half_extent: f32,
-	line_count: int,
-	bar_half_width: f32,
-) -> (
-	vertex_buffer: vb.VertexBuffer,
-	index_buffer: ib.IndexBuffer,
-	vertex_array: va.VertexArray,
-	layout: vbl.VertexBufferLayout,
-) {
-	positions, indices := generate_grid(half_extent, line_count, bar_half_width)
-	defer delete(positions)
-	defer delete(indices)
-
-	vertex_buffer = vb.New(positions[:])
-	index_buffer = ib.New(indices[:])
-
-	layout = vbl.New()
-	vbl.Push(&layout, f32, 3, false) // a_Position: vec3
-
-	vertex_array = va.New()
-	va.AddBuffer(&vertex_array, &vertex_buffer, &layout)
-
-	return
+	return cone
 }

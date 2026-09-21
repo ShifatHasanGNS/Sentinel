@@ -51,7 +51,7 @@ Sentinel/
 │   │   ├── VertexBufferLayout/
 │   │   ├── Renderer/
 │   │   └── Debugger/
-│   ├── Geometry/           # theme-agnostic procedural mesh generators (box, cylinder, ...)
+│   ├── Geometry/           # theme-agnostic: cube/tetrahedron/plane generators + Append_Mesh
 │   ├── Scene/              # SENTINEL-specific: transform hierarchy + the 9 objects
 │   ├── Camera/             # SENTINEL-specific: free-fly + Patrol-Mode camera, projections
 │   └── Lights/             # SENTINEL-specific: light structs, runtime placement/animation
