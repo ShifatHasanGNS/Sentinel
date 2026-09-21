@@ -76,8 +76,33 @@ and exits — see `Debug/README.md`.
 
 ## Controls
 
-To be filled in starting Session 2 (camera) and finalized in Session 13
-(Inspection Mode) and Session 16 (final docs pass).
+Free-fly camera controls, added this session (roadmap step 2). Object
+selection/translate/rotate and the remaining Inspection Mode toggles
+(shading mode, culling, depth-test, wireframe) arrive in roadmap step 10 and
+will be added to this table then, not replace it.
+
+| Key / input      | Action                                                    |
+| ---------------- | ---------------------------------------------------------- |
+| `W` / `S`        | Move forward / backward (along the camera's full look direction, including pitch) |
+| `A` / `D`        | Strafe left / right                                        |
+| `Q` / `E`        | Move down / up (world space, independent of look direction) |
+| Mouse             | Look (cursor is captured — move the mouse to turn/pitch)    |
+| `Shift` (either)  | Sprint (multiplies move speed)                              |
+| `P`               | Toggle perspective / orthographic projection                |
+| Scroll wheel      | Zoom the orthographic volume (only while in orthographic projection) |
+| `Esc`             | Quit                                                         |
+
+CLI flags for `--capture` runs (see `Debug/README.md`):
+
+| Flag                         | Effect                                                                 |
+| ----------------------------- | ----------------------------------------------------------------------- |
+| `--capture <frames> <path>`   | Render `frames` frames, save a screenshot to `path`, then exit          |
+| `--projection <perspective\|orthographic>` | Starting projection mode (default `perspective`) |
+
+Interactive input (mouse look, WASD/QE movement, `P`, scroll) is
+intentionally disabled during a `--capture` run so captured frames stay
+reproducible regardless of the real system cursor/keyboard state —
+`--projection` is the supported way to change what a capture run looks at.
 
 ## Syllabus coverage
 
