@@ -118,6 +118,15 @@
 // parent. NOT roadmap step 9's real Patrol Mode — deliberately isolated so
 // that step can replace it outright.
 //
+// Session 9 status (roadmap step 6, Shaders/Scene.glsl +
+// Library/Lights.Build_Rig): the 3 barracks windows are now AREA lights
+// (LIGHT_TYPE_AREA), sampled N times per fragment inside the shader itself
+// (area_light_contribution) — this file's own job is just uploading two
+// new runtime controls (u_AreaLightSampleCount, u_AreaLightJitter) each
+// frame from the DEFAULT_AREA_LIGHT_SAMPLE_COUNT/area_light_jitter package
+// vars below, driven by `+`/`-`/`J` (or --area-samples/--area-jitter for a
+// --capture run) so an N=1-vs-N=8 comparison is a live keypress away.
+//
 // Source/Input.odin (added once Inspection Mode exists, roadmap step 10):
 // GLFW key/mouse callbacks, object selection, and the remaining interactive
 // controls this session doesn't need yet (CLAUDE.md §7's suggested key
@@ -238,10 +247,19 @@ DEMO_FLOODLIGHT_SWEEP_AMPLITUDE :: math.PI * 50.0 / 180.0 // +-50 degrees
 DEMO_JEEP_DRIFT_RATE :: 0.4 // rad/s, argument to sin() below
 DEMO_JEEP_DRIFT_AMPLITUDE :: 2.5 // world units along Z
 
+// Roadmap step 6 (CLAUDE.md §6.3) starting sample count for the barracks
+// windows' area-light averaging (Shaders/Scene.glsl's
+// area_light_contribution) — N=4 is mid-range between the N=1 (hard,
+// point-like) and N=8 (soft) comparison this session's task specifically
+// asks to be able to show live via the +/- keys below.
+DEFAULT_AREA_LIGHT_SAMPLE_COUNT :: 4
+
 main :: proc() {
 	capture_frames, capture_path, do_capture := parse_capture_flag(os.args[1:])
 	start_projection := parse_projection_flag(os.args[1:])
 	gizmos_visible = parse_gizmos_flag(os.args[1:])
+	area_light_sample_count = parse_area_samples_flag(os.args[1:])
+	area_light_jitter = parse_area_jitter_flag(os.args[1:])
 
 	if !glfw.Init() {
 		fmt.eprintln("Failed to initialize GLFW")
@@ -322,6 +340,7 @@ main :: proc() {
 		object_count,
 		active_light_count > object_count,
 	)
+	fmt.printfln("Area light samples: %d (+/- to change, J to toggle jitter, currently %v)", area_light_sample_count, area_light_jitter)
 
 	// Session 8 demo-animation node indices, looked up ONCE (which array
 	// index a name maps to never changes after Build_Scene) — see the
@@ -448,6 +467,10 @@ main :: proc() {
 		// Inspection Mode movement) actually visible on attached lights.
 		lightspkg.Update_From_Scene(light_rig[:], world_matrices[:])
 		lightspkg.Upload(&shader, light_rig[:])
+		sd.SetUniform(&shader, "u_AreaLightSampleCount", i32(area_light_sample_count))
+		jitter_value: i32 = 0
+		if area_light_jitter do jitter_value = 1
+		sd.SetUniform(&shader, "u_AreaLightJitter", jitter_value)
 
 		scenepkg.Draw_Node(&shader, view, projection, ground_model, &ground_mesh, ground_material)
 
@@ -497,6 +520,14 @@ scroll_delta_y: f32
 // flips the projection above.
 gizmos_visible: bool
 
+// area_light_sample_count/area_light_jitter (roadmap step 6, CLAUDE.md
+// §6.3) drive Shaders/Scene.glsl's u_AreaLightSampleCount/u_AreaLightJitter
+// — +/- and J below, or --area-samples/--area-jitter for a --capture run.
+// Both start from their parse_*_flag result in main(), same pattern as
+// gizmos_visible above.
+area_light_sample_count: int
+area_light_jitter: bool
+
 key_callback :: proc "c" (window: glfw.WindowHandle, key, scancode, action, mods: i32) {
 	if key == glfw.KEY_ESCAPE && action == glfw.PRESS {
 		glfw.SetWindowShouldClose(window, true)
@@ -506,6 +537,19 @@ key_callback :: proc "c" (window: glfw.WindowHandle, key, scancode, action, mods
 	}
 	if key == glfw.KEY_L && action == glfw.PRESS {
 		gizmos_visible = !gizmos_visible
+	}
+	// EQUAL/KP_ADD share the same "+/-" pairing on most keyboards ('+' is
+	// shift-EQUAL, not its own key on a US layout); both are wired so the
+	// comparison this session's task asks for (N=1 vs N=8) is one keypress
+	// away regardless of numpad availability.
+	if (key == glfw.KEY_EQUAL || key == glfw.KEY_KP_ADD) && action == glfw.PRESS {
+		area_light_sample_count = min(area_light_sample_count + 1, lightspkg.MAX_AREA_LIGHT_SAMPLES)
+	}
+	if (key == glfw.KEY_MINUS || key == glfw.KEY_KP_SUBTRACT) && action == glfw.PRESS {
+		area_light_sample_count = max(area_light_sample_count - 1, 1)
+	}
+	if key == glfw.KEY_J && action == glfw.PRESS {
+		area_light_jitter = !area_light_jitter
 	}
 }
 
@@ -604,6 +648,46 @@ parse_projection_flag :: proc(args: []string) -> cam.Projection_Mode {
 parse_gizmos_flag :: proc(args: []string) -> bool {
 	for arg in args {
 		if arg == "--gizmos" do return true
+	}
+	return false
+}
+
+// parse_area_samples_flag looks for "--area-samples <N>" anywhere in argv
+// — the non-interactive way to pick a starting area-light sample count for
+// a --capture run (the +/- keys are skipped during --capture, same as
+// every other live input), specifically so an N=1-vs-N=8 comparison
+// capture pair doesn't depend on live key-hold timing. Defaults to
+// DEFAULT_AREA_LIGHT_SAMPLE_COUNT; clamps (not errors) an out-of-range
+// value to [1, MAX_AREA_LIGHT_SAMPLES] — same range the live +/- keys are
+// already clamped to, so a --capture run can't silently ask for something
+// the shader's fixed-size MAX_AREA_SAMPLES array couldn't hold anyway.
+parse_area_samples_flag :: proc(args: []string) -> int {
+	for i := 0; i < len(args); i += 1 {
+		if args[i] != "--area-samples" do continue
+
+		if i + 1 >= len(args) {
+			fmt.eprintln("--area-samples requires one argument: <N>")
+			os.exit(1)
+		}
+
+		parsed, ok := strconv.parse_int(args[i + 1])
+		if !ok {
+			fmt.eprintfln("--area-samples: expected an integer, got '%s'", args[i + 1])
+			os.exit(1)
+		}
+
+		return clamp(parsed, 1, lightspkg.MAX_AREA_LIGHT_SAMPLES)
+	}
+
+	return DEFAULT_AREA_LIGHT_SAMPLE_COUNT
+}
+
+// parse_area_jitter_flag looks for a bare "--area-jitter" flag anywhere in
+// argv, the non-interactive way to force jitter on for a --capture run —
+// same reasoning as parse_gizmos_flag above.
+parse_area_jitter_flag :: proc(args: []string) -> bool {
+	for arg in args {
+		if arg == "--area-jitter" do return true
 	}
 	return false
 }

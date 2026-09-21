@@ -115,6 +115,15 @@ MATERIAL_GLASS :: Material{BaseColor = COLOR_GLASS, SpecularStrength = 0.85, Shi
 MATERIAL_FLOODLIGHT :: Material{BaseColor = COLOR_FLOODLIGHT, SpecularStrength = 0.5, Shininess = 24, EmissionColor = {0.45, 0.45, 0.38}}
 MATERIAL_BEACON :: Material{BaseColor = COLOR_BEACON, SpecularStrength = 0.4, Shininess = 20, EmissionColor = {0.7, 0.12, 0.08}}
 
+// A separate material from MATERIAL_GLASS (not a reuse) — the jeep
+// windshield/tank periscope are meant to read as cool, clear GLASS (and
+// are ray-trace candidates, CLAUDE.md §6.2), while a barracks window is
+// meant to read as a warm, lit INTERIOR glowing out into the night
+// (roadmap step 6, CLAUDE.md §6.3) — different colour language for a
+// different purpose, even though both are just an emissive Plane.
+COLOR_WINDOW_GLOW :: la.Vector3f32{0.95, 0.75, 0.45}
+MATERIAL_BARRACKS_WINDOW :: Material{BaseColor = COLOR_WINDOW_GLOW, SpecularStrength = 0.2, Shininess = 12, EmissionColor = {0.55, 0.4, 0.18}}
+
 // ---------------------------------------------------------------------------
 // Build_Scene is the single entry point Source/Main.odin calls: builds all
 // 9 objects into one shared Hierarchy and returns it, ready for
@@ -658,7 +667,10 @@ build_barracks :: proc(h: ^Hierarchy) {
 	// transform": centre = Scene.World_Position(world_matrix), normal =
 	// Scene.World_Direction(world_matrix, {0,0,1}) (a Plane's local normal
 	// is always +Z, Library/Geometry/Geometry.odin), width/height are
-	// these two constants. No new helper proc needed — Transform.odin's
+	// these two constants. Roadmap step 6 (Session 9) is exactly this
+	// exposure actually being used: Library/Lights.Build_Rig reads
+	// BARRACKS_WINDOW_WIDTH/HEIGHT directly to size each window's AREA
+	// light quad. No new helper proc needed — Transform.odin's
 	// existing World_Position/World_Direction already are that exposure
 	// mechanism, given the node's own world matrix (computed fresh every
 	// frame by Scene.Compute_World_Matrices, never cached).
@@ -691,7 +703,11 @@ build_barracks :: proc(h: ^Hierarchy) {
 		// already visible.
 		window_local.Position = {(t - 0.5) * (BARRACKS_SIZE.x - 0.8), BARRACKS_SIZE.y * 0.6, -BARRACKS_SIZE.z*0.5 - 0.02}
 		window_local.Rotation.y = math.PI
-		Add_Node(h, fmt_window_name(i), barracks, window_local, window, MATERIAL_GLASS)
+		// MATERIAL_BARRACKS_WINDOW, not MATERIAL_GLASS (roadmap step 6,
+		// Session 9) — a warm glow distinct from the cool jeep/tank glass,
+		// since this window is now also an actual AREA light source
+		// (Library/Lights.Build_Rig), not just an emissive-looking surface.
+		Add_Node(h, fmt_window_name(i), barracks, window_local, window, MATERIAL_BARRACKS_WINDOW)
 	}
 }
 

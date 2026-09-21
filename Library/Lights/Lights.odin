@@ -20,17 +20,24 @@
 // actual Scene node CLAUDE.md §5.3 names: Watchtower Floodlight Head, Jeep
 // Headlight Left/Right, Radar Beacon, Tank Hull, Tank Turret, Gun
 // Emplacement, Perimeter Fence (via Scene.Fence_Post_Position for the
-// lamps). Barracks window area lights are NOT built here — CLAUDE.md §6.3
-// needs the sampled-area-light technique roadmap step 6 (Session 9) adds;
-// their slots are simply left unused in the meantime (MAX_LIGHTS = 32 has
-// comfortable headroom past this session's 18).
+// lamps).
+//
+// Roadmap step 6 (Prompts.md Session 9, CLAUDE.md §6.3) adds the AREA
+// light type: 3 barracks windows, each an emissive QUAD (centre/normal
+// from the window node's own live world transform, exactly the exposure
+// Session 6 built into Objects.odin's build_barracks for this purpose) —
+// LocalAreaU/LocalAreaV are the two new attachment fields this needs
+// beyond Spot/Point's LocalOffset/LocalDirection. The actual N-sample
+// averaging happens in Shaders/Scene.glsl's area_light_contribution, not
+// here — this package only ever computes WHERE the quad is and how big,
+// never how it's sampled.
 //
 // Light rig target (Requirements.md §3, CLAUDE.md §5.2, Plan.md §3): 18-21
 // lights across point/spot/area/directional, comfortably exceeding the 9
-// objects. Build_Rig reaches exactly 18 (1 moonlight + 8 fence lamps + 2
-// floodlights + 2 jeep headlights + 2 tank headlights + 1 tank searchlight
-// + 1 radar beacon + 1 gun work light) — the low end of that range now,
-// with roadmap step 6's 2-3 barracks area lights reaching the rest.
+// objects. Build_Rig now reaches exactly 21 (1 moonlight + 8 fence lamps +
+// 2 floodlights + 2 jeep headlights + 2 tank headlights + 1 tank
+// searchlight + 1 radar beacon + 1 gun work light + 3 barracks area
+// lights) — the top of that range, with 11 slots of MAX_LIGHTS = 32 spare.
 package Lights
 
 import "core:fmt"
@@ -46,6 +53,11 @@ import sd "../Engine/Shader"
 // file's own comment on why these two "32"s can't be a single shared
 // constant across the Odin/GLSL language boundary.
 MAX_LIGHTS :: 32
+
+// MAX_AREA_LIGHT_SAMPLES must match Shaders/Scene.glsl's #define
+// MAX_AREA_SAMPLES — same cross-language sync situation as MAX_LIGHTS.
+// Source/Main.odin clamps its +/- sample-count control to this range.
+MAX_AREA_LIGHT_SAMPLES :: 8
 
 Light_Type :: enum i32 {
 	Directional = 0,
@@ -67,10 +79,14 @@ Light_Type :: enum i32 {
 Light :: struct {
 	Type:                 Light_Type,
 	ParentNode:            int,           // Scene.NO_PARENT for a world-fixed light (moonlight)
-	LocalOffset:           la.Vector3f32, // local-space position offset from ParentNode's origin; Point/Spot only
-	LocalDirection:        la.Vector3f32, // local-space aim, before the parent's own rotation; Spot/Directional only
-	Position:             la.Vector3f32, // world-space; meaningful for Point/Spot — RECOMPUTED, see above
-	Direction:            la.Vector3f32, // world-space, normalized; meaningful for Directional/Spot — RECOMPUTED, see above
+	LocalOffset:           la.Vector3f32, // local-space position offset from ParentNode's origin; Point/Spot/Area only
+	LocalDirection:        la.Vector3f32, // local-space aim/normal, before the parent's own rotation; Spot/Directional/Area only
+	LocalAreaU:            la.Vector3f32, // local-space U half-extent (Area only); world magnitude scales with the parent's own transform
+	LocalAreaV:            la.Vector3f32, // local-space V half-extent (Area only)
+	Position:             la.Vector3f32, // world-space; meaningful for Point/Spot/Area — RECOMPUTED, see above
+	Direction:            la.Vector3f32, // world-space, normalized; meaningful for Directional/Spot/Area (the quad's own outward normal) — RECOMPUTED, see above
+	AreaU:                 la.Vector3f32, // world-space U half-extent vector (Area only) — RECOMPUTED, see above
+	AreaV:                 la.Vector3f32, // world-space V half-extent vector (Area only) — RECOMPUTED, see above
 	Color:                la.Vector3f32,
 	Intensity:            f32,
 	ConstantAttenuation:  f32,
@@ -138,6 +154,33 @@ Make_Spot :: proc(parent: int, local_offset, local_direction, color: la.Vector3f
 	}
 }
 
+// Make_Area builds an emissive-QUAD light (roadmap step 6, CLAUDE.md §6.3
+// — a barracks window). `local_normal` is the quad's own outward-facing
+// normal (a Plane's local normal is always +Z, so this is usually
+// {0,0,1} rotated however the parent node already orients it);
+// `local_area_u`/`local_area_v` are the quad's local-space U/V HALF-EXTENT
+// vectors (e.g. {half_width,0,0} and {0,half_height,0}), not unit
+// directions — Update_From_Scene's World_Direction transform preserves
+// magnitude as well as rotation, so passing the already-scaled vector here
+// is what makes the world-space quad the correct physical size without a
+// separate scale factor.
+Make_Area :: proc(parent: int, local_normal, local_area_u, local_area_v, color: la.Vector3f32, intensity, range: f32) -> Light {
+	constant, linear, quadratic := Point_Attenuation_For_Range(range)
+	return Light{
+		Type = .Area,
+		ParentNode = parent,
+		LocalDirection = la.normalize(local_normal),
+		LocalAreaU = local_area_u,
+		LocalAreaV = local_area_v,
+		Color = color,
+		Intensity = intensity,
+		ConstantAttenuation = constant,
+		LinearAttenuation = linear,
+		QuadraticAttenuation = quadratic,
+		Enabled = true,
+	}
+}
+
 // Update_From_Scene recomputes every light's world-space Position/
 // Direction from its ParentNode's CURRENT world matrix (`world_matrices`,
 // this frame's Scene.Compute_World_Matrices result) — never cached,
@@ -158,12 +201,20 @@ Update_From_Scene :: proc(lights: []Light, world_matrices: []la.Matrix4f32) {
 		}
 
 		light.Position = scenepkg.World_Point(world_matrix, light.LocalOffset)
-		if light.Type == .Spot || light.Type == .Directional {
-			// Only Spot/Directional read Direction (Shaders/Scene.glsl's
-			// light_contribution); skipping it for Point avoids
-			// normalizing a possibly-zero LocalDirection (Make_Point never
-			// sets one) into a NaN.
+		if light.Type == .Spot || light.Type == .Directional || light.Type == .Area {
+			// Only these three read Direction (Shaders/Scene.glsl's
+			// light_contribution/area_light_contribution); skipping it for
+			// Point avoids normalizing a possibly-zero LocalDirection
+			// (Make_Point never sets one) into a NaN.
 			light.Direction = la.normalize(scenepkg.World_Direction(world_matrix, light.LocalDirection))
+		}
+		if light.Type == .Area {
+			// World_Direction on a non-unit input (a half-extent, not a
+			// unit vector) preserves both the rotation AND the magnitude —
+			// see Make_Area's own comment for why that's exactly what's
+			// needed here, unlike the unit-vector case above.
+			light.AreaU = scenepkg.World_Direction(world_matrix, light.LocalAreaU)
+			light.AreaV = scenepkg.World_Direction(world_matrix, light.LocalAreaV)
 		}
 	}
 }
@@ -201,6 +252,13 @@ WORK_LIGHT_INTENSITY :: 2.0
 
 MOONLIGHT_INTENSITY :: 0.6
 
+// Warm, moderate — a lived-in lit window, the strongest colour contrast in
+// an otherwise cool/harsh floodlit scene (CLAUDE.md §5.2's own framing for
+// this light). Range is short: a window lights the ground/objects right
+// outside it, not the whole base.
+AREA_LIGHT_RANGE :: 6.0
+AREA_LIGHT_INTENSITY :: 3.0
+
 // find_node_or_panic looks up a required Scene node by name and panics
 // with a specific message if it's missing, rather than letting a bad index
 // (Scene.NO_PARENT, -1) silently propagate into Update_From_Scene and
@@ -237,7 +295,7 @@ find_node_or_panic :: proc(scene: ^scenepkg.Hierarchy, name: string) -> int {
 // for those offsets, rather than re-typing the numbers, keeps this rig
 // automatically in sync if that geometry ever changes.
 Build_Rig :: proc(scene: ^scenepkg.Hierarchy) -> [dynamic]Light {
-	lights := make([dynamic]Light, 0, 18)
+	lights := make([dynamic]Light, 0, 21)
 
 	// Moonlight: cool, dim directional fill (CLAUDE.md §5.2), world-fixed
 	// (no natural parent object) — same direction/colour Session 5's
@@ -323,6 +381,31 @@ Build_Rig :: proc(scene: ^scenepkg.Hierarchy) -> [dynamic]Light {
 	gun_emplacement := find_node_or_panic(scene, "Gun Emplacement")
 	append(&lights, Make_Point(gun_emplacement, la.Vector3f32{scenepkg.GUN_RING_RADIUS + 0.5, scenepkg.GUN_WORK_LIGHT_POST_HEIGHT, 0}, la.Vector3f32{1.0, 0.9, 0.7}, WORK_LIGHT_INTENSITY, WORK_LIGHT_RANGE))
 
+	// Barracks window area lights (roadmap step 6, CLAUDE.md §6.3): one
+	// per window node, child of that window itself (not "Barracks Hut") —
+	// the window node's OWN world transform already is exactly the quad
+	// CLAUDE.md §6.3 asks for (centre/normal/U/V, Session 6's own exposure
+	// comment on Objects.odin's build_barracks), so there's no offset to
+	// add on top of it: local normal/U/V are read straight off, at (0,0,0)
+	// offset. local_area_u/v are HALF-extents ({half_width,0,0},
+	// {0,half_height,0}) in the window's own local X/Y — a Plane's local
+	// axes, Library/Geometry/Geometry.odin.
+	area_half_width: f32 = scenepkg.BARRACKS_WINDOW_WIDTH * 0.5
+	area_half_height: f32 = scenepkg.BARRACKS_WINDOW_HEIGHT * 0.5
+	window_names := [3]string{"Barracks Window 1", "Barracks Window 2", "Barracks Window 3"}
+	for name in window_names {
+		window := find_node_or_panic(scene, name)
+		append(&lights, Make_Area(
+			window,
+			la.Vector3f32{0, 0, 1},
+			la.Vector3f32{area_half_width, 0, 0},
+			la.Vector3f32{0, area_half_height, 0},
+			la.Vector3f32{1.0, 0.85, 0.55},
+			AREA_LIGHT_INTENSITY,
+			AREA_LIGHT_RANGE,
+		))
+	}
+
 	return lights
 }
 
@@ -346,7 +429,7 @@ Active_Count :: proc(lights: []Light) -> int {
 
 @(private = "file")
 Light_Uniform_Names :: struct {
-	Type, Position, Direction, Color, Intensity,
+	Type, Position, Direction, AreaU, AreaV, Color, Intensity,
 	ConstantAttenuation, LinearAttenuation, QuadraticAttenuation,
 	InnerConeCos, OuterConeCos, Enabled: string,
 }
@@ -380,6 +463,8 @@ build_uniform_names :: proc() {
 			Type                 = strings.clone(fmt.tprintf("%s.type", prefix)),
 			Position             = strings.clone(fmt.tprintf("%s.position", prefix)),
 			Direction            = strings.clone(fmt.tprintf("%s.direction", prefix)),
+			AreaU                = strings.clone(fmt.tprintf("%s.areaU", prefix)),
+			AreaV                = strings.clone(fmt.tprintf("%s.areaV", prefix)),
 			Color                = strings.clone(fmt.tprintf("%s.color", prefix)),
 			Intensity            = strings.clone(fmt.tprintf("%s.intensity", prefix)),
 			ConstantAttenuation  = strings.clone(fmt.tprintf("%s.constantAttenuation", prefix)),
@@ -415,6 +500,8 @@ Upload :: proc(shader: ^sd.Shader, lights: []Light) {
 		sd.SetUniform(shader, names.Type, i32(light.Type))
 		sd.SetUniform(shader, names.Position, light.Position.x, light.Position.y, light.Position.z)
 		sd.SetUniform(shader, names.Direction, light.Direction.x, light.Direction.y, light.Direction.z)
+		sd.SetUniform(shader, names.AreaU, light.AreaU.x, light.AreaU.y, light.AreaU.z)
+		sd.SetUniform(shader, names.AreaV, light.AreaV.x, light.AreaV.y, light.AreaV.z)
 		sd.SetUniform(shader, names.Color, light.Color.x, light.Color.y, light.Color.z)
 		sd.SetUniform(shader, names.Intensity, light.Intensity)
 		sd.SetUniform(shader, names.ConstantAttenuation, light.ConstantAttenuation)
@@ -532,7 +619,7 @@ Draw_Gizmos :: proc(shader: ^sd.Shader, view, projection: la.Matrix4f32, lights:
 		marker_model := la.matrix4_translate(marker_position)
 		scenepkg.Draw_Node(shader, view, projection, marker_model, &gizmos.Marker, material)
 
-		if light.Type == .Spot || light.Type == .Directional {
+		if light.Type == .Spot || light.Type == .Directional || light.Type == .Area {
 			direction := la.normalize(light.Direction)
 
 			// Stretch the line to the ground for a downward-aimed light (the

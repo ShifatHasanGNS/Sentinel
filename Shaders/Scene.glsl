@@ -65,12 +65,7 @@ void main() {
 #shader fragment
 
 // Fragment stage. Remaining planned responsibilities (CLAUDE.md §6, §9;
-// Plan.md §5, §9; Prompts.md Sessions 9-14):
-//   - Session 9: an AREA light type — per-fragment N-sample averaging over
-//     a window quad passed in as a runtime-computed uniform (no
-//     precomputed sample tables/textures, no LTC lookup texture). LIGHT_TYPE_AREA
-//     below is reserved for this; Library/Lights.Light_Type already has the
-//     matching case, unused by compute_lighting until then.
+// Plan.md §5, §9; Prompts.md Sessions 10-14):
 //   - Session 10: flat/Gouraud/Phong mode uniform switching which stage's
 //     lighting result is used.
 //   - Session 11: manual back-face culling test (dot(normal, view dir)) as
@@ -131,8 +126,10 @@ uniform float u_AmbientStrength;
 // matching field names/types/order for readability.
 struct Light {
 	int type;
-	vec3 position;             // world-space; meaningful for point/spot
-	vec3 direction;            // world-space, normalized; meaningful for directional/spot
+	vec3 position;             // world-space; meaningful for point/spot/area
+	vec3 direction;            // world-space, normalized; meaningful for directional/spot/area (area: the quad's own outward normal)
+	vec3 areaU;                // world-space U half-extent vector; area only
+	vec3 areaV;                // world-space V half-extent vector; area only
 	vec3 color;
 	float intensity;
 	float constantAttenuation;
@@ -144,6 +141,15 @@ struct Light {
 };
 
 uniform Light u_Lights[MAX_LIGHTS];
+
+// Roadmap step 6 (CLAUDE.md §6.3) runtime controls — Source/Main.odin's
+// +/- keys (sample count) and J key (jitter toggle), or --area-samples/
+// --area-jitter for a --capture run. MAX_AREA_SAMPLES must match
+// Library/Lights.MAX_AREA_LIGHT_SAMPLES — same "kept in sync by hand"
+// situation as MAX_LIGHTS above.
+#define MAX_AREA_SAMPLES 8
+uniform int u_AreaLightSampleCount;
+uniform bool u_AreaLightJitter;
 // How many of u_Lights[0..u_ActiveLightCount) to actually examine this
 // frame (Library/Lights.Upload sets this to how many light SLOTS it
 // uploaded, not strictly a count of `enabled == true` ones — see that
@@ -206,6 +212,103 @@ vec3 light_contribution(Light light, vec3 normal, vec3 world_position, vec3 view
 	return attenuation * light.intensity * (diffuse + specular);
 }
 
+// hash21 is a cheap, fully deterministic pseudo-random function computed
+// from its input ALONE — no noise texture, no lookup table (CLAUDE.md §2
+// item 5's "no precomputed data" applies to a jitter pattern exactly as
+// much as it does to geometry). The classic "sine-fract" shader hash:
+// irrational-ish magic constants inside a high-frequency sin() so nearby
+// inputs decorrelate quickly, then fract() throws away everything but the
+// noisy low bits.
+float hash21(vec2 p) {
+	return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453);
+}
+
+// area_light_contribution approximates a Lambertian emissive QUAD light
+// (Library/Lights.Make_Area — a barracks window) by averaging N
+// point-light-style samples spread across it. This is a SIMPLIFIED,
+// SINGLE-BOUNCE MONTE CARLO integrator: real Monte Carlo area-light
+// sampling (and, by extension, path tracing's own direct-light step)
+// estimates the light arriving at a point by drawing random samples over
+// the emitter and averaging their contribution, weighted by how the
+// emitter's own surface faces each sample direction — exactly what the
+// loop below does. It stays "simplified" in three ways worth being
+// explicit about: (1) single-bounce only — light -> this fragment
+// directly, never light -> some other surface -> this fragment, which is
+// what "path" tracing actually chases across multiple bounces; (2) no
+// per-sample VISIBILITY/shadow test — every sample is assumed unoccluded,
+// since this project has no shadow map or general ray-cast visibility
+// pass (CLAUDE.md §6.2 adds real ray casting, but scoped to one
+// reflective surface, not shadow testing for every fragment); (3) N is
+// small and fixed per frame (1-8, not thousands), traded for real-time
+// speed over noise-free convergence — a genuine offline Monte Carlo
+// renderer would use far more samples and average across many frames.
+vec3 area_light_contribution(Light light, vec3 normal, vec3 world_position, vec3 view_direction, vec3 base_color, float specular_strength, float shininess) {
+	int sample_count = clamp(u_AreaLightSampleCount, 1, MAX_AREA_SAMPLES);
+
+	// A square-ish stratified grid sized to fit sample_count cells (e.g.
+	// N=8 -> a 3x3 grid, using the first 8 of its 9 cells): one sample per
+	// cell spreads samples across the WHOLE quad instead of clumping,
+	// without requiring sample_count to be a perfect square. Computed from
+	// sample_count every call, not a stored table.
+	int grid_size = int(ceil(sqrt(float(sample_count))));
+
+	vec3 total = vec3(0.0);
+	for (int i = 0; i < sample_count; i++) {
+		int cell_x = i % grid_size;
+		int cell_y = i / grid_size;
+
+		float u = (float(cell_x) + 0.5) / float(grid_size);
+		float v = (float(cell_y) + 0.5) / float(grid_size);
+
+		if (u_AreaLightJitter) {
+			// Per-PIXEL jitter — keyed off gl_FragCoord, the actual screen
+			// pixel, not world position, so neighbouring pixels get
+			// DIFFERENT jitter even on the same flat surface — trades the
+			// stratified grid's regular banding for noise instead, the
+			// classic Monte Carlo tradeoff and exactly why a real path
+			// tracer jitters its own sample pattern per pixel.
+			vec2 seed = gl_FragCoord.xy + vec2(float(i) * 13.7, float(i) * 91.3);
+			u += (hash21(seed) - 0.5) / float(grid_size);
+			v += (hash21(seed + 17.0) - 0.5) / float(grid_size);
+		}
+
+		// Map [0,1] cell coordinates to the quad's own [-1,1] local
+		// coordinates, then to a world-space point via its U/V axes.
+		float su = u * 2.0 - 1.0;
+		float sv = v * 2.0 - 1.0;
+		vec3 sample_position = light.position + light.areaU * su + light.areaV * sv;
+
+		vec3 to_sample = sample_position - world_position;
+		float distance = length(to_sample);
+		vec3 sample_direction = to_sample / max(distance, 0.0001);
+
+		// The emitter's OWN cosine falloff: a flat emissive surface (a lit
+		// window) radiates strongest straight out along its own normal and
+		// tapers to nothing at a glancing angle — unlike a point light,
+		// which radiates equally in every direction. This is the
+		// "weighting by the emitter's cosine at the sample" this session's
+		// task asks for.
+		float emitter_cosine = max(dot(-sample_direction, light.direction), 0.0);
+		if (emitter_cosine <= 0.0) continue; // fragment is behind/edge-on to the window; this sample contributes nothing
+
+		float attenuation = 1.0 / (light.constantAttenuation + light.linearAttenuation * distance + light.quadraticAttenuation * distance * distance);
+
+		float diffuse_factor = max(dot(normal, sample_direction), 0.0);
+		vec3 half_vector = normalize(sample_direction + view_direction);
+		float specular_factor = pow(max(dot(normal, half_vector), 0.0), shininess);
+
+		vec3 diffuse = diffuse_factor * base_color * light.color;
+		vec3 specular = specular_strength * specular_factor * light.color;
+
+		total += attenuation * emitter_cosine * (diffuse + specular);
+	}
+
+	// Average over N samples — Monte Carlo's 1/N weighting, this session's
+	// task asks for explicitly — then scale by the light's own intensity,
+	// same as every other light type.
+	return light.intensity * total / float(sample_count);
+}
+
 // compute_lighting is the ONE function CLAUDE.md §6.1 requires — "callable
 // from either the vertex or fragment stage" (Gouraud vs. Phong, roadmap
 // step 7) — summing every active light's contribution plus the scene's
@@ -218,7 +321,11 @@ vec3 compute_lighting(vec3 normal, vec3 world_position, vec3 base_color, float s
 	int light_count = min(u_ActiveLightCount, MAX_LIGHTS);
 	for (int i = 0; i < light_count; i++) {
 		if (!u_Lights[i].enabled) continue;
-		lit += light_contribution(u_Lights[i], normal, world_position, view_direction, base_color, specular_strength, shininess);
+		if (u_Lights[i].type == LIGHT_TYPE_AREA) {
+			lit += area_light_contribution(u_Lights[i], normal, world_position, view_direction, base_color, specular_strength, shininess);
+		} else {
+			lit += light_contribution(u_Lights[i], normal, world_position, view_direction, base_color, specular_strength, shininess);
+		}
 	}
 
 	return ambient + lit + emission_color;
