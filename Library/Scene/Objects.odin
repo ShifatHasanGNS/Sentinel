@@ -553,6 +553,8 @@ build_radar :: proc(h: ^Hierarchy) {
 BARRACKS_SIZE :: la.Vector3f32{4.5, 1.6, 2.4}
 BARRACKS_ROOF_RISE :: 1.0
 BARRACKS_WINDOW_COUNT :: 3
+BARRACKS_WINDOW_WIDTH :: 0.6
+BARRACKS_WINDOW_HEIGHT :: 0.5
 
 build_barracks :: proc(h: ^Hierarchy) {
 	root := geo.Empty_Mesh()
@@ -590,13 +592,28 @@ build_barracks :: proc(h: ^Hierarchy) {
 	// frees already-freed memory. Caught via a real crash
 	// ("pointer being freed was not allocated") during Scene.Destroy, not
 	// spotted by inspection — see PROGRESS.md.
+	// Window dimensions are named constants (BARRACKS_WINDOW_WIDTH/HEIGHT,
+	// not inline literals) specifically so a later session can read them
+	// back directly instead of re-deriving them from the Plane() call —
+	// Prompts.md's Session 6 spec asks to "expose each window's quad
+	// geometry (centre, width, height, normal) via the node's world
+	// transform": centre = Scene.World_Position(world_matrix), normal =
+	// Scene.World_Direction(world_matrix, {0,0,1}) (a Plane's local normal
+	// is always +Z, Library/Geometry/Geometry.odin), width/height are
+	// these two constants. No new helper proc needed — Transform.odin's
+	// existing World_Position/World_Direction already are that exposure
+	// mechanism, given the node's own world matrix (computed fresh every
+	// frame by Scene.Compute_World_Matrices, never cached).
 	for i in 0 ..< BARRACKS_WINDOW_COUNT {
-		window := geo.Plane(0.6, 0.5)
+		window := geo.Plane(BARRACKS_WINDOW_WIDTH, BARRACKS_WINDOW_HEIGHT)
 		geo.Upload(&window)
 
 		t := (f32(i) + 0.5) / f32(BARRACKS_WINDOW_COUNT)
 		window_local := Identity_Transform()
-		window_local.Position = {(t - 0.5) * (BARRACKS_SIZE.x - 0.8), BARRACKS_SIZE.y * 0.6, BARRACKS_SIZE.z * 0.5+0.01}
+		// Recessed slightly INTO the wall (not flush/proud), matching the
+		// spec's "recessed or inset quads" — a small negative Z offset
+		// from the wall surface.
+		window_local.Position = {(t - 0.5) * (BARRACKS_SIZE.x - 0.8), BARRACKS_SIZE.y * 0.6, BARRACKS_SIZE.z*0.5 - 0.03}
 		Add_Node(h, fmt_window_name(i), barracks, window_local, window, MATERIAL_GLASS)
 	}
 }
@@ -648,7 +665,8 @@ build_crate_stack :: proc(h: ^Hierarchy) {
 }
 
 // ---------------------------------------------------------------------------
-// 8. Battle tank — hull (root) -> turret (child) -> barrel + periscope
+// 8. Battle tank — hull (root, with 2 baked-in headlight housings) ->
+// turret (child, with a baked-in searchlight housing) -> barrel + periscope
 // (children of turret). CLAUDE.md §5.3's clearest hierarchy showcase: the
 // turret must rotate independently of the hull.
 // ---------------------------------------------------------------------------
@@ -656,6 +674,8 @@ build_crate_stack :: proc(h: ^Hierarchy) {
 TANK_HULL_SIZE :: la.Vector3f32{2.2, 0.7, 4.2}
 TANK_TREAD_HEIGHT :: 0.5
 TANK_ROAD_WHEEL_COUNT :: 5
+TANK_ROAD_WHEEL_RADIUS :: 0.22
+TANK_ROAD_WHEEL_SEGMENTS :: 5
 TANK_TURRET_SIZE :: la.Vector3f32{1.5, 0.55, 1.8}
 TANK_BARREL_LENGTH :: 2.4
 
@@ -674,6 +694,18 @@ build_tank :: proc(h: ^Hierarchy) {
 	)
 	geo.Append_Mesh(&root, glacis, glacis_transform)
 
+	// Two headlight housings on the hull (Prompts.md Session 6 spec) — like
+	// the tank's turret headlights, baked into the composite rather than
+	// given child nodes: THIS spec says only "on the hull," unlike the
+	// jeep's Session 5 spec which explicitly asked for child nodes (see
+	// this file's header for that distinction).
+	headlight := geo.Cube(0.16, 0.16, 0.1)
+	defer geo.Destroy(&headlight)
+	for side in 0 ..< 2 {
+		sign: f32 = -1 if side == 0 else 1
+		append_translated(&root, headlight, la.Vector3f32{sign * TANK_HULL_SIZE.x * 0.35, TANK_TREAD_HEIGHT + TANK_HULL_SIZE.y*0.75, TANK_HULL_SIZE.z*0.5 - 0.15})
+	}
+
 	tread := geo.Cube(0.35, TANK_TREAD_HEIGHT, TANK_HULL_SIZE.z+0.2)
 	defer geo.Destroy(&tread)
 	for side in 0 ..< 2 {
@@ -681,21 +713,42 @@ build_tank :: proc(h: ^Hierarchy) {
 		append_translated(&root, tread, la.Vector3f32{sign * (TANK_HULL_SIZE.x*0.5 + 0.1), TANK_TREAD_HEIGHT * 0.5, 0})
 	}
 
-	road_wheel := geo.Cube(0.4, TANK_TREAD_HEIGHT*0.8, 0.4)
+	// Road wheels are small box-ring "cylinders" (same append_ring_x
+	// technique as the jeep's actual wheels), not flat boxes — matches
+	// this project's low-poly-cylinder-over-plain-box convention
+	// established fixing the sandbag bunker in Session 5.
+	wheel_tangential_width := 2 * TANK_ROAD_WHEEL_RADIUS * math.sin(math.PI/f32(TANK_ROAD_WHEEL_SEGMENTS)) * 1.3
+	wheel_segment := geo.Cube(0.12, wheel_tangential_width, wheel_tangential_width)
+	defer geo.Destroy(&wheel_segment)
+	road_wheel := geo.Empty_Mesh()
+	append_ring_x(&road_wheel, wheel_segment, TANK_ROAD_WHEEL_SEGMENTS, TANK_ROAD_WHEEL_RADIUS, 0)
 	defer geo.Destroy(&road_wheel)
+
 	for side in 0 ..< 2 {
 		sign: f32 = -1 if side == 0 else 1
 		for i in 0 ..< TANK_ROAD_WHEEL_COUNT {
 			t := (f32(i)+0.5) / f32(TANK_ROAD_WHEEL_COUNT)
 			z := (t-0.5) * (TANK_HULL_SIZE.z - 0.3)
-			append_translated(&root, road_wheel, la.Vector3f32{sign * (TANK_HULL_SIZE.x*0.5 + 0.1), TANK_TREAD_HEIGHT * 0.5, z})
+			geo.Append_Mesh(&root, road_wheel, la.matrix4_translate(la.Vector3f32{sign * (TANK_HULL_SIZE.x*0.5 + 0.1), TANK_TREAD_HEIGHT * 0.5, z}))
 		}
 	}
 
 	geo.Upload(&root)
 	hull_node := Add_Node(h, "Tank Hull", NO_PARENT, position_transform(TANK_POSITION), root, Default_Material(COLOR_TANK))
 
-	turret := geo.Cube(TANK_TURRET_SIZE.x, TANK_TURRET_SIZE.y, TANK_TURRET_SIZE.z)
+	// Turret mesh includes a searchlight housing (Prompts.md Session 6
+	// spec: "a searchlight housing on the turret") baked in alongside the
+	// turret box itself — same "on the X," not "child of X" reading as the
+	// hull headlights above.
+	turret := geo.Empty_Mesh()
+	turret_box := geo.Cube(TANK_TURRET_SIZE.x, TANK_TURRET_SIZE.y, TANK_TURRET_SIZE.z)
+	defer geo.Destroy(&turret_box)
+	append_translated(&turret, turret_box, la.Vector3f32{0, 0, 0})
+
+	searchlight := geo.Cube(0.22, 0.22, 0.22)
+	defer geo.Destroy(&searchlight)
+	append_translated(&turret, searchlight, la.Vector3f32{-0.5, TANK_TURRET_SIZE.y*0.5+0.1, 0})
+
 	geo.Upload(&turret)
 	turret_local := Identity_Transform()
 	turret_local.Position = {0, TANK_TREAD_HEIGHT + TANK_HULL_SIZE.y + TANK_TURRET_SIZE.y*0.5, -0.3}
@@ -716,15 +769,16 @@ build_tank :: proc(h: ^Hierarchy) {
 }
 
 // ---------------------------------------------------------------------------
-// 9. Static gun emplacement — sandbag ring + tripod + gun. Deliberately
-// static: no children, no independent articulation (contrasts with the
-// tank, CLAUDE.md §5.1 item 9).
+// 9. Static gun emplacement — sandbag ring + tripod + gun + a work-light
+// post. Deliberately static: no children, no independent articulation
+// (contrasts with the tank, CLAUDE.md §5.1 item 9).
 // ---------------------------------------------------------------------------
 
 GUN_RING_RADIUS :: 1.4
 GUN_RING_SEGMENTS :: 10
 GUN_TRIPOD_LEG_COUNT :: 3
 GUN_TRIPOD_HEIGHT :: 0.8
+GUN_WORK_LIGHT_POST_HEIGHT :: 1.1
 
 build_gun_emplacement :: proc(h: ^Hierarchy) {
 	root := geo.Empty_Mesh()
@@ -759,6 +813,15 @@ build_gun_emplacement :: proc(h: ^Hierarchy) {
 	gun_barrel := geo.Cube(0.1, 0.1, 1.1)
 	defer geo.Destroy(&gun_barrel)
 	append_translated(&root, gun_barrel, la.Vector3f32{0, GUN_TRIPOD_HEIGHT, 1.1})
+
+	// Work-light post (Prompts.md Session 6 spec: "a small work-light post
+	// beside it") — just the post; the light itself is a future point light
+	// (roadmap step 5) with a constant local offset from this object's own
+	// root, same treatment as the tank's hull headlights above, since
+	// nothing here asks for it to be a separate child node.
+	light_post := geo.Cube(0.08, GUN_WORK_LIGHT_POST_HEIGHT, 0.08)
+	defer geo.Destroy(&light_post)
+	append_translated(&root, light_post, la.Vector3f32{GUN_RING_RADIUS + 0.5, GUN_WORK_LIGHT_POST_HEIGHT * 0.5, 0})
 
 	geo.Upload(&root)
 	Add_Node(h, "Gun Emplacement", NO_PARENT, position_transform(GUN_EMPLACEMENT_POSITION), root, Default_Material(COLOR_SANDBAG))
