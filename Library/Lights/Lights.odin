@@ -9,7 +9,7 @@
 // this plan targets 18–21 lights against 9 objects (CLAUDE.md §5.2).
 //
 // Planned Light struct (mirrored by a matching GLSL uniform-array layout in
-// Shaders/Scene.frag): type (directional | point | spot | area), a
+// Shaders/Scene.glsl's fragment stage): type (directional | point | spot | area), a
 // local-space offset + local direction (core:math/linalg Vector3f32 —
 // allowed, CLAUDE.md §2 item 3), a parent node id (or none, for world-fixed
 // lights like moonlight), colour, intensity, attenuation
@@ -44,7 +44,7 @@
 //   Moonlight                   — 1 directional, cool/dim fill and baseline.
 //
 // Fragment-side lighting itself (ambient + diffuse + specular + emission,
-// Blinn-Phong) lives in Shaders/Scene.frag, uploaded here as a fixed-max
+// Blinn-Phong) lives in Shaders/Scene.glsl's fragment stage, uploaded here as a fixed-max
 // uniform array (e.g. 32) plus an active count. Keep both the object count
 // and the active light count printed at startup/each frame so the
 // "lights > objects" requirement is always visibly checkable.

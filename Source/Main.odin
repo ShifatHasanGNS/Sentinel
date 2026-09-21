@@ -7,26 +7,34 @@
 // Session 0 status (CLAUDE.md/Plan.md roadmap "prep"): opened a GLFW +
 // OpenGL 3.3 core-profile window and drew ONE throwaway triangle to prove
 // the pipeline end-to-end, plus the --capture self-verification flag. This
-// deliberately does NOT go through Library/Engine/Shader yet — that
+// deliberately did NOT go through Library/Engine/Shader yet — that
 // package's Shader.New expects one combined file with "#shader vertex"/
-// "#shader fragment" markers, while Shaders/Scene.vert and Scene.frag are
+// "#shader fragment" markers, while Shaders/Scene.vert and Scene.frag were
 // two separate files; vendor:OpenGL's own gl.load_shaders_file(vert, frag)
-// already matches the two-file layout with built-in compile/link error
-// reporting, so it is used here instead. Session 1b (Engine integration)
-// must decide how Library/Engine/Shader reconciles with this two-file
-// convention before real scene rendering routes through it.
+// matched that two-file layout in the meantime, with built-in compile/link
+// error reporting.
 //
-// Session 1 status (roadmap step 1): the throwaway triangle is replaced by
-// a rotating cube — still a temporary pipeline smoke test, now proving the
+// Session 1 status (roadmap step 1): the throwaway triangle was replaced by
+// a rotating cube — still a temporary pipeline smoke test, proving the
 // core:math/linalg conventions fixed in Library/Camera/Camera.odin (model
 // matrix from matrix4_rotate, a fixed matrix4_look_at view, a
 // matrix4_perspective projection) rather than just the draw call. See
 // make_rotating_cube's own doc comment for why it generates 8 vertices/12
 // triangles procedurally instead of a literal table.
 //
-// TODO(roadmap step 3): make_rotating_cube is a one-off pipeline smoke test
-// (CLAUDE.md §2 item 5) — delete it and its call once Library/Geometry
-// produces real meshes.
+// Session 1b status (roadmap step 1b, Engine integration): this file now
+// draws through Library/Engine (Shader/VertexBuffer/IndexBuffer/
+// VertexArray/VertexBufferLayout/Renderer) instead of ad-hoc gl.* calls —
+// only glfw/window setup, GL state toggles (depth test, viewport, clear),
+// and the capture flag still call vendor:OpenGL directly, since Engine has
+// no window/context-management scope of its own. As part of this, the two
+// shader files merged into Shaders/Scene.glsl to match Shader.New's
+// required "#shader vertex"/"#shader fragment" combined-file format — see
+// that file's own header for why.
+//
+// TODO(roadmap step 3): make_rotating_cube/generate_cube are a one-off
+// pipeline smoke test (CLAUDE.md §2 item 5) — delete them and their call
+// once Library/Geometry produces real meshes.
 //
 // Source/Input.odin (added once Inspection Mode exists, roadmap step 10):
 // GLFW key/mouse callbacks, object selection, all interactive controls
@@ -35,9 +43,12 @@
 // rotate keys). Document the final key map in README.md, not just here.
 //
 // Source/Renderer.odin (grows alongside `Library/Engine/Renderer`, see that
-// package's TODO): GL setup, per-frame uniform upload, the single shared
-// draw loop used by BOTH Patrol and Inspection modes (CLAUDE.md §2 item 9 —
-// never fork rendering logic per mode).
+// package's own known-limitation note): per-frame uniform upload for real
+// scene objects, the single shared draw loop used by BOTH Patrol and
+// Inspection modes (CLAUDE.md §2 item 9 — never fork rendering logic per
+// mode). `Library/Engine/Renderer.Draw`'s one-VAO/IndexBuffer/Shader-triple
+// design is left as-is until then — see PROGRESS.md for where it'll need
+// to grow.
 package main
 
 import "core:fmt"
@@ -50,6 +61,12 @@ import "vendor:glfw"
 import gl "vendor:OpenGL"
 
 import dbg "../Library/Engine/Debugger"
+import ib "../Library/Engine/IndexBuffer"
+import rd "../Library/Engine/Renderer"
+import sd "../Library/Engine/Shader"
+import va "../Library/Engine/VertexArray"
+import vb "../Library/Engine/VertexBuffer"
+import vbl "../Library/Engine/VertexBufferLayout"
 import capture "../Debug"
 
 // ---------------------------------------------------------------------------
@@ -83,8 +100,7 @@ DEFAULT_WINDOW_HEIGHT :: 720
 // session's lighting will be judged against.
 CLEAR_COLOR :: [4]f32{0.02, 0.02, 0.05, 1.0}
 
-VERTEX_SHADER_PATH :: "Shaders/Scene.vert"
-FRAGMENT_SHADER_PATH :: "Shaders/Scene.frag"
+COMBINED_SHADER_PATH :: "Shaders/Scene.glsl"
 
 // Fixed camera for this session's smoke test — a real free-fly Camera comes
 // in roadmap step 2 (Library/Camera). Eye position chosen so all three
@@ -159,21 +175,21 @@ main :: proc() {
 
 	gl.Enable(gl.DEPTH_TEST); dbg.GL_Check()
 
-	cube_vao, cube_vbo, cube_ebo, cube_index_count := make_rotating_cube(CUBE_HALF_EXTENT)
-	defer gl.DeleteVertexArrays(1, &cube_vao)
-	defer gl.DeleteBuffers(1, &cube_vbo)
-	defer gl.DeleteBuffers(1, &cube_ebo)
+	cube_vertex_buffer, cube_index_buffer, cube_vertex_array, cube_layout := make_rotating_cube(CUBE_HALF_EXTENT)
+	defer vb.Delete(&cube_vertex_buffer)
+	defer vbl.Delete(&cube_layout)
 
-	shader_program, shader_ok := gl.load_shaders_file(VERTEX_SHADER_PATH, FRAGMENT_SHADER_PATH)
-	if !shader_ok {
-		// gl.load_shaders_file already printed the GLSL compile/link log.
-		fmt.eprintln("Failed to build the shader program; see the compile/link log above")
+	shader := sd.New(COMBINED_SHADER_PATH)
+	if shader.RendererID == 0 {
+		// sd.New already logged why (bad path, or a compile/link panic would
+		// have already aborted the process before returning at all).
+		fmt.eprintln("Failed to build the shader program; see the log above")
 		os.exit(1)
 	}
-	defer gl.DeleteProgram(shader_program)
-	fmt.printfln("Shader program linked: id=%d", shader_program)
+	fmt.printfln("Shader program linked: id=%d", shader.RendererID)
 
-	mvp_uniform_location := gl.GetUniformLocation(shader_program, "u_MVP"); dbg.GL_Check()
+	cube_renderer := rd.New(&cube_vertex_array, &cube_index_buffer, &shader)
+	defer rd.Delete(&cube_renderer)
 
 	// Fixed for this smoke test (Library/Camera's real free-fly camera and
 	// resize-aware projection arrive in roadmap step 2).
@@ -201,10 +217,8 @@ main :: proc() {
 		// `projection`, to a point on the right.
 		mvp := la.mul(projection, la.mul(view, model))
 
-		gl.UseProgram(shader_program); dbg.GL_Check()
-		gl.UniformMatrix4fv(mvp_uniform_location, 1, false, la.to_ptr(&mvp)); dbg.GL_Check()
-		gl.BindVertexArray(cube_vao); dbg.GL_Check()
-		gl.DrawElements(gl.TRIANGLES, cube_index_count, gl.UNSIGNED_INT, nil); dbg.GL_Check()
+		sd.SetUniform(&shader, "u_MVP", &mvp)
+		rd.Draw(&cube_renderer)
 
 		frame_count += 1
 
@@ -313,27 +327,32 @@ generate_cube :: proc(half_extent: f32) -> (positions: [8]la.Vector3f32, indices
 	return
 }
 
-// make_rotating_cube uploads generate_cube's output and returns the handles
-// needed to draw it, plus the index count for glDrawElements. Temporary
+// make_rotating_cube uploads generate_cube's output into Library/Engine
+// buffer/array objects, ready for Library/Engine/Renderer.Draw. The
+// returned VertexBuffer and VertexBufferLayout aren't referenced by
+// anything else (VertexArray only stores a GL id, not a pointer back to the
+// buffer/layout that described it), so the caller owns their cleanup
+// separately from the Renderer built on top of the other two. Temporary
 // pipeline smoke test — see the file header TODO to delete it once
 // Library/Geometry exists.
-make_rotating_cube :: proc(half_extent: f32) -> (vao, vbo, ebo: u32, index_count: i32) {
+make_rotating_cube :: proc(
+	half_extent: f32,
+) -> (
+	vertex_buffer: vb.VertexBuffer,
+	index_buffer: ib.IndexBuffer,
+	vertex_array: va.VertexArray,
+	layout: vbl.VertexBufferLayout,
+) {
 	positions, indices := generate_cube(half_extent)
 
-	gl.GenVertexArrays(1, &vao); dbg.GL_Check()
-	gl.BindVertexArray(vao); dbg.GL_Check()
+	vertex_buffer = vb.New(positions[:])
+	index_buffer = ib.New(indices[:])
 
-	gl.GenBuffers(1, &vbo); dbg.GL_Check()
-	gl.BindBuffer(gl.ARRAY_BUFFER, vbo); dbg.GL_Check()
-	gl.BufferData(gl.ARRAY_BUFFER, size_of(positions), &positions, gl.STATIC_DRAW); dbg.GL_Check()
+	layout = vbl.New()
+	vbl.Push(&layout, f32, 3, false) // a_Position: vec3
 
-	gl.VertexAttribPointer(0, 3, gl.FLOAT, false, size_of(la.Vector3f32), 0); dbg.GL_Check()
-	gl.EnableVertexAttribArray(0); dbg.GL_Check()
+	vertex_array = va.New()
+	va.AddBuffer(&vertex_array, &vertex_buffer, &layout)
 
-	gl.GenBuffers(1, &ebo); dbg.GL_Check()
-	gl.BindBuffer(gl.ELEMENT_ARRAY_BUFFER, ebo); dbg.GL_Check()
-	gl.BufferData(gl.ELEMENT_ARRAY_BUFFER, size_of(indices), &indices, gl.STATIC_DRAW); dbg.GL_Check()
-
-	gl.BindVertexArray(0); dbg.GL_Check()
-	return vao, vbo, ebo, i32(len(indices))
+	return
 }
