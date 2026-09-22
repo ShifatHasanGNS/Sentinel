@@ -747,17 +747,18 @@ full in §1 above — this section covers everything else.)
 
 ### 6.2 Input handling (`key_callback`)
 
+**[PROGRESS-DEMO] state on this branch:** the table below is the
+CURRENT, live key set — 12 keys present on `main` (`1`/`2`/`3`, `G`,
+`C`, `Z`, `X`, `B`, `M`, `V`, `Y`, `T`, `/`) are removed here since each
+one either controlled a syllabus topic this milestone scopes as
+"planned, not yet done" or was already a silent no-op under
+`u_ObjectsOnlyMode`. See §6.6.
+
 | Key           | Effect                                                    |
 | ------------- | --------------------------------------------------------- |
 | Esc           | Close window                                              |
 | P             | Toggle perspective/orthographic                           |
-| 1/2/3         | Shading mode Flat/Gouraud/Phong                           |
-| G             | Toggle ground grid resolution                             |
-| C             | Cycle cull mode Off→Manual→GL                             |
-| Z             | Toggle depth test                                         |
-| X             | Toggle depth visualization                                |
 | F             | Toggle wireframe                                          |
-| B             | Toggle back-face debug tint                               |
 | Tab           | Request mode switch                                       |
 | Space         | Pause/resume animation clock                              |
 | , / .         | Slow/speed animation clock                                |
@@ -767,7 +768,6 @@ full in §1 above — this section covers everything else.)
 | ' / ;         | Increase/decrease edit step scale                         |
 | 0 / Shift+0   | Reset selected / reset all                                |
 | H             | Print controls                                            |
-| M/V/Y/T/`/`   | Toggle tonemapping/vignette/fog/ground-detail/sky         |
 
 `mouse_button_callback` sets `pick_requested` on left-click;
 `scroll_callback` accumulates `scroll_delta_y`.
@@ -815,7 +815,13 @@ gizmos (`L` key, `--gizmos`), area-light sample count/jitter (`+`/`-`/
 animations, ray-traced reflection (`R` key, `--reflection`, proxy
 build/upload), and the `--test-inspection` headless turret/searchlight
 test. `parse_test_inspection_flag` is left defined but uncalled (dead
-code, kept rather than deleted to keep this pass comment-only). Every
+code, kept rather than deleted to keep this pass comment-only). A later
+pass on this branch also removed the 12 now-dead/out-of-scope
+interactive keys themselves (§6.2) and the matching `build_window_title`
+segments (Cull/Depth/BFDbg/DepthVis/Tone/Vig/Fog/Grnd/Sky/shading-mode-
+name — kept Mode/Paused/Speed/Wire/FPS/Sel, the ones still genuinely
+live), since a key that retitles the window with zero visible effect is
+itself an input-system inconsistency, not just an inert one. Every
 removal is marked inline with a `[PROGRESS-DEMO]` comment.
 
 ### 6.7 How it connects to the rest of the project
