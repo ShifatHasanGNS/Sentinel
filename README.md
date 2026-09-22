@@ -205,14 +205,21 @@ selection/editing keys.
 | `F`               | Toggle wireframe (`glPolygonMode`)                            |
 | `B`               | Toggle a magenta tint on back-facing fragments (debug aid — see below) |
 | `R`               | Toggle ray-traced reflection on the 5 glass surfaces (see below) |
+| `M`               | Toggle tonemapping + gamma correction (see Polish pass below) |
+| `V`               | Toggle vignette                                              |
+| `Y`               | Toggle night fog/haze                                        |
+| `T`               | Toggle ground procedural detail (dirt/gravel)                |
+| `/`               | Toggle sky gradient + procedural stars                       |
 | `Esc`             | Quit                                                         |
 
 Mode, selected-object name (Inspection only), shading mode, animation pause
-state/speed, and all 5 roadmap-step-8 toggles are shown together in the
-window title, e.g. `SENTINEL - Inspection - Phong | Speed:1.00x Cull:GL
-Depth:On Wire:Off BFDbg:Off DepthVis:Off Sel:Tank Turret` — this project has
-no on-screen text-rendering pipeline, so the title bar (plus `H`'s printed
-list) is the readout.
+state/speed, every roadmap-step-8 toggle, reflection, all 5 polish
+toggles, and a live FPS readout are all shown together in the window
+title, e.g. `SENTINEL - Inspection - Phong | Speed:1.00x Cull:GL Depth:On
+Wire:Off BFDbg:Off DepthVis:Off Refl:On Tone:On Vig:On Fog:On Grnd:On
+Sky:On FPS:60 Sel:Tank Turret` — this project has no on-screen text-
+rendering pipeline, so the title bar (plus `H`'s printed list) is the
+readout.
 
 CLI flags for `--capture` runs (see `Debug/README.md`):
 
@@ -234,10 +241,18 @@ CLI flags for `--capture` runs (see `Debug/README.md`):
 | `--backface-debug`            | Start with the magenta back-face tint on                               |
 | `--depth-visualization`       | Start with the grayscale depth view on                                 |
 | `--reflection <on\|off>`      | Starting ray-traced reflection state (default `on`)                    |
+| `--tonemapping <on\|off>`     | Starting tonemapping + gamma state (default `on`)                       |
+| `--vignette <on\|off>`        | Starting vignette state (default `on`)                                 |
+| `--fog <on\|off>`             | Starting night fog/haze state (default `on`)                           |
+| `--ground-detail <on\|off>`   | Starting ground procedural detail state (default `on`)                 |
+| `--sky <on\|off>`             | Starting sky gradient + stars state (default `on`)                     |
+| `--benchmark <frames>`        | Disables vsync, measures `frames` frames (first 10 excluded as warm-up), prints avg/min/max frame time + FPS, then exits — see Polish pass below |
+| `--msaa <N>`                  | Requests an N-sample multisampled framebuffer (e.g. `--msaa 4`) — START-ONLY, no live key; see Polish pass below for why |
 
 Interactive input (`Tab`, `Space`, `,`/`.`, mouse look, WASD/QE movement,
-`P`, scroll, `L`, `+`/`-`, `N`, `1`/`2`/`3`, `G`, `C`/`Z`/`X`/`F`/`B`, and
-every Inspection selection/editing key) is intentionally disabled during a
+`P`, scroll, `L`, `+`/`-`, `N`, `1`/`2`/`3`, `G`, `C`/`Z`/`X`/`F`/`B`, `R`,
+`M`/`V`/`Y`/`T`/`/`, and every Inspection selection/editing key) is
+intentionally disabled during a
 `--capture` run so captured frames stay reproducible regardless of the real
 system cursor/keyboard state — the CLI flags above are the supported way to
 change what a capture run looks like instead.
@@ -399,6 +414,58 @@ emissive glow (they're also §6.3 area lights) tends to outweigh the
 blended reflection. `Debug/Captures/session14_reflection_on.png` vs.
 `session14_reflection_off.png` (a grazing angle on the barracks windows)
 shows a real, measurable difference.
+
+## Polish pass
+
+A set of purely visual finishing touches, every one independently
+toggleable (live key + `--flag <on|off>`, default ON) so none of them can
+ever obstruct verifying a required feature — turning ALL of them off
+reproduces this project's exact pre-polish output byte-for-byte (see
+`PROGRESS.md`'s Polish pass entry for the pixel-diff evidence).
+
+- **Tonemapping + gamma (`M`)** — Reinhard (`color/(color+1)`) compresses
+  unbounded-bright values (overlapping spotlights, emissive glass) with a
+  smooth shoulder instead of a hard clip, then a standard 2.2 gamma power
+  re-encodes for display. Every colour in this shader is authored and
+  mixed in LINEAR space throughout; this is the ONE place that leaves it.
+- **Vignette (`V`)** — a subtle screen-space darkening toward the corners
+  (down to 55% brightness at the extreme corner, never near-black).
+- **Night fog/haze (`Y`)** — exponential distance fog toward the same sky
+  colour a reflection miss already uses, softening the fence line and
+  beyond without ever fully flattening anything into one flat colour.
+- **Ground procedural detail (`T`)** — two octaves of hash-based value
+  noise (reusing the same `hash21` function this shader's area-light
+  jitter already relies on, CLAUDE.md §2 item 5's "formula, not texture"
+  rule) tint the ground plane with a patchy dirt/gravel look.
+- **Sky gradient + procedural stars (`/`)** — an oversized `Geometry.Cube`
+  (still one of the three base primitives), re-centred on the camera every
+  frame and drawn first as a skybox. A direction-based gradient plus a
+  sparse, twinkling procedural starfield — every star a small hashed POINT
+  within a direction-space grid cell (not the whole cell lit solid, which
+  looked blocky from a near-vertical view — caught and fixed via a
+  dedicated straight-up test capture, `Debug/Captures/
+  polish_sky_stars.png`).
+- **Live FPS readout (window title)** — a rolling average over 0.5s, no
+  dedicated toggle since it draws nothing into the framebuffer for a
+  toggle to obstruct.
+- **`--benchmark <frames>`** — disables vsync, measures steady-state frame
+  time (excluding a 10-frame warm-up), reports avg/min/max ms and FPS and
+  whether the 60 FPS (16.7ms) budget is held. Result on this machine:
+  **67.1 FPS average (14.9ms), 1.77ms of budget to spare** at 2560x1440 in
+  Patrol Mode — comfortably over target, no optimisation pass needed.
+- **`--msaa <N>`** — multisample anti-aliasing. The one item here that's
+  genuinely START-ONLY, not a live key: the sample count is baked into the
+  GL context's default framebuffer at window-creation time, and OpenGL has
+  no call to change it afterward without recreating the window.
+
+**Not implemented: full bloom** (threshold + blur + composite via extra
+framebuffers). CLAUDE.md §6.1 already lists it as "nice-to-have only";
+it's also the one candidate needing genuinely new `Engine` infrastructure
+(an FBO/render-target abstraction this project doesn't have yet) rather
+than a shader-only addition — cut in favour of not rushing new engine
+architecture for a nice-to-have, especially once tonemapping was already
+handling bloom's usual "blown-out highlights" motivation. See
+`PROGRESS.md`'s Polish pass entry for the full reasoning.
 
 ## Syllabus coverage
 

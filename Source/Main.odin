@@ -358,6 +358,41 @@ DEFAULT_EDIT_STEP_SCALE :: f32(1.0)
 // DEFAULT_CULL_MODE is GL, not OFF).
 DEFAULT_RAY_TRACED_REFLECTION_ENABLED :: true
 
+// Polish pass (Prompts.md, post-Session-14 "polish" session): every new
+// toggle here defaults ON, matching this project's existing convention for
+// a purely-additive visual improvement (DEFAULT_CULL_MODE is GL, not OFF;
+// DEFAULT_RAY_TRACED_REFLECTION_ENABLED, above, is true) — turning any of
+// them OFF reproduces this project's exact PRE-polish look pixel-for-pixel
+// (see each uniform's own comment in Shaders/Scene.glsl), so nothing
+// already required (shading modes, culling, depth test, projection,
+// reflection) is affected either way, satisfying this session's own rule
+// that every item stay toggleable without obstructing verification.
+DEFAULT_TONEMAPPING_ENABLED :: true
+DEFAULT_VIGNETTE_ENABLED :: true
+DEFAULT_FOG_ENABLED :: true
+DEFAULT_GROUND_DETAIL_ENABLED :: true
+DEFAULT_SKY_ENABLED :: true
+
+// Sky dome full size (Geometry.Cube takes full width/height/depth, not a
+// half-size). Must stay well inside the Camera's own far plane (Library/
+// Camera.DEFAULT_FAR = 100) even measured from a CUBE CORNER — the
+// furthest point on the dome from a camera re-centred at its middle every
+// frame: 40 * sqrt(3) ~= 69.3, comfortable margin under 100 for camera
+// movement anywhere inside the fence (Library/Scene/Objects.odin's
+// FENCE_HALF_WIDTH/DEPTH = 14).
+SKY_CUBE_SIZE :: f32(80.0)
+
+// How often the live window title's FPS readout refreshes — every frame
+// would be both noisy (a single frame's dt is a poor FPS estimate) and
+// wasteful (glfw.SetWindowTitle every frame for no reason); twice a second
+// is frequent enough to read live, rare enough to be a stable number.
+FPS_DISPLAY_UPDATE_INTERVAL :: f32(0.5)
+
+// --benchmark's own warm-up window — see its accumulator variables' own
+// comment, right before the main loop, for why these frames are measured
+// but excluded from the reported average.
+BENCHMARK_WARMUP_FRAMES :: 10
+
 main :: proc() {
 	capture_frames, capture_path, do_capture := parse_capture_flag(os.args[1:])
 	start_projection := parse_projection_flag(os.args[1:])
@@ -376,6 +411,13 @@ main :: proc() {
 	test_inspection_prefix, run_inspection_test := parse_test_inspection_flag(os.args[1:])
 	edit_step_scale = DEFAULT_EDIT_STEP_SCALE
 	ray_traced_reflection_enabled = parse_reflection_flag(os.args[1:])
+	tonemapping_enabled = parse_tonemapping_flag(os.args[1:])
+	vignette_enabled = parse_vignette_flag(os.args[1:])
+	fog_enabled = parse_fog_flag(os.args[1:])
+	ground_detail_enabled = parse_ground_detail_flag(os.args[1:])
+	sky_enabled = parse_sky_flag(os.args[1:])
+	benchmark_frames, do_benchmark := parse_benchmark_flag(os.args[1:])
+	msaa_samples := parse_msaa_flag(os.args[1:])
 
 	if !glfw.Init() {
 		fmt.eprintln("Failed to initialize GLFW")
@@ -388,10 +430,22 @@ main :: proc() {
 	glfw.WindowHint(glfw.OPENGL_PROFILE, glfw.OPENGL_CORE_PROFILE)
 	glfw.WindowHint(glfw.OPENGL_FORWARD_COMPAT, true)
 	glfw.WindowHint(glfw.RESIZABLE, true)
-	// A capture run (or the headless Inspection test, Source/Inspection.
-	// odin's Run_Inspection_Test) has no one watching the window; hiding it
-	// avoids an on-screen flash for a run that closes itself after N frames.
-	glfw.WindowHint(glfw.VISIBLE, !do_capture && !run_inspection_test)
+	// MSAA sample count is a WINDOW HINT (fixed GL context state), not a
+	// live uniform/GL.Enable toggle like every other polish item this
+	// session — the sample count is baked into the default framebuffer at
+	// context creation and OpenGL has no call to change it afterward
+	// without recreating the window, so unlike M/V/Y/T/`/` above, this is a
+	// START-ONLY choice (--msaa), not a live key. 0 (the default) asks for
+	// no multisampling at all, matching this project's behaviour before
+	// this session.
+	if msaa_samples > 0 {
+		glfw.WindowHint(glfw.SAMPLES, msaa_samples)
+	}
+	// A capture or benchmark run (or the headless Inspection test, Source/
+	// Inspection.odin's Run_Inspection_Test) has no one watching the
+	// window; hiding it avoids an on-screen flash for a run that closes
+	// itself after N frames.
+	glfw.WindowHint(glfw.VISIBLE, !do_capture && !run_inspection_test && !do_benchmark)
 
 	// All 6 toggles build_window_title reads are already parsed above, so
 	// the FIRST title the window ever shows already reflects any --cull/
@@ -405,13 +459,28 @@ main :: proc() {
 	defer glfw.DestroyWindow(window)
 
 	glfw.MakeContextCurrent(window)
-	glfw.SwapInterval(1)
+	// A benchmark run wants the GPU's true unthrottled per-frame cost (this
+	// session's own task: "check that we hold 60 FPS... profile if not"),
+	// not whatever the display's own refresh rate happens to cap it at —
+	// vsync (SwapInterval(1), every other run) would otherwise hide a
+	// scene that's actually well under or over budget behind a flat
+	// "always ~60/~120/whatever Hz" reading.
+	glfw.SwapInterval(0 if do_benchmark else 1)
 	glfw.SetFramebufferSizeCallback(window, framebuffer_size_callback)
 	glfw.SetKeyCallback(window, key_callback)
 	glfw.SetMouseButtonCallback(window, mouse_button_callback)
 	glfw.SetScrollCallback(window, scroll_callback)
 
 	gl.load_up_to(GL_VERSION_MAJOR, GL_VERSION_MINOR, glfw.gl_set_proc_address)
+
+	if msaa_samples > 0 {
+		// The SAMPLES window hint above only REQUESTS a multisampled
+		// default framebuffer; GL_MULTISAMPLE still needs enabling like any
+		// other fixed-function raster stage, same as CULL_FACE/DEPTH_TEST
+		// below.
+		gl.Enable(gl.MULTISAMPLE); dbg.GL_Check()
+		fmt.printfln("MSAA: %dx (--msaa)", msaa_samples)
+	}
 
 	fmt.printfln("GPU vendor:   %s", gl.GetString(gl.VENDOR))
 	fmt.printfln("GPU renderer: %s", gl.GetString(gl.RENDERER))
@@ -462,6 +531,19 @@ main :: proc() {
 	// rule, the same way CAMERA_START_EYE being a compile-time constant
 	// isn't either.
 	ground_model := la.mul(la.matrix4_translate(la.Vector3f32{0, GROUND_Y, 0}), la.matrix4_rotate(-math.PI * 0.5, la.Vector3f32{1, 0, 0}))
+
+	// Polish pass sky dome (`/` key, --sky): one giant Cube — still one of
+	// CLAUDE.md §2 item 6's three base primitives, not a bespoke skybox
+	// mesh type — built once here; ITS TRANSFORM (not its geometry) is
+	// re-centred on the camera fresh every frame below, the same "static
+	// mesh, live transform" split the ground plane above already uses.
+	// sky_material only exists because Draw_Node always wants one; the
+	// fragment shader takes a completely different, material-ignoring path
+	// for any u_IsSky fragment (Shaders/Scene.glsl's own comment).
+	sky_mesh := geo.Cube(SKY_CUBE_SIZE, SKY_CUBE_SIZE, SKY_CUBE_SIZE)
+	geo.Upload(&sky_mesh)
+	defer geo.Destroy(&sky_mesh)
+	sky_material := scenepkg.Default_Material(la.Vector3f32{0, 0, 0})
 
 	light_rig := lightspkg.Build_Rig(&scene)
 	defer delete(light_rig)
@@ -622,6 +704,17 @@ main :: proc() {
 
 	frame_count := 0
 	last_frame_time := glfw.GetTime()
+
+	// Benchmark accumulators (--benchmark <frames> only). The first
+	// BENCHMARK_WARMUP_FRAMES are excluded from the average: shader
+	// compilation, first-frame GL state setup, and driver "getting warm"
+	// costs are real but one-time, and would otherwise skew a steady-state
+	// throughput number this session's own task asks for ("check that we
+	// hold 60 FPS... profile if not").
+	benchmark_frame_time_sum: f32
+	benchmark_frame_time_min := f32(1e9)
+	benchmark_frame_time_max := f32(0)
+	benchmark_measured_frames := 0
 	for !glfw.WindowShouldClose(window) {
 		glfw.PollEvents()
 
@@ -650,6 +743,24 @@ main :: proc() {
 				cam.Apply_Move(&camera, move_forward, move_right, move_up, dt_seconds, sprint)
 			}
 			last_cursor_x, last_cursor_y = cursor_x, cursor_y
+
+			// Polish pass: live frame-time overlay (this session's own
+			// task: "ms/FPS in the window title"). Averaged over
+			// FPS_DISPLAY_UPDATE_INTERVAL rather than shown per-frame — a
+			// single frame's dt is too noisy to read, and retitling the
+			// window every frame would be wasteful for no benefit. Gated to
+			// !do_capture as this whole block already is: a capture run's
+			// own frame timing isn't real interactive playback (frame_dt is
+			// a fixed nominal step there, see its own comment below), and
+			// nobody is watching a hidden window's title bar anyway.
+			fps_display_accum_time += dt_seconds
+			fps_display_accum_frames += 1
+			if fps_display_accum_time >= FPS_DISPLAY_UPDATE_INTERVAL {
+				fps_display_value = f32(fps_display_accum_frames) / fps_display_accum_time
+				fps_display_accum_time = 0
+				fps_display_accum_frames = 0
+				glfw.SetWindowTitle(window, build_window_title())
+			}
 
 			// P (projection) and scroll-zoom stay available in BOTH modes —
 			// neither fights against Patrol's own position/yaw/pitch
@@ -920,7 +1031,54 @@ main :: proc() {
 		sd.SetUniform(&shader, "u_RayTracedReflectionEnabled", reflection_enabled_value)
 		sd.SetUniform(&shader, "u_SkyColor", CLEAR_COLOR.x, CLEAR_COLOR.y, CLEAR_COLOR.z)
 
+		// Polish pass (Prompts.md, post-Session-14): uniforms every fragment
+		// reads regardless of what it's shading — see each one's own
+		// comment in Shaders/Scene.glsl for what it does.
+		tonemapping_value: i32 = 0
+		if tonemapping_enabled do tonemapping_value = 1
+		sd.SetUniform(&shader, "u_TonemappingEnabled", tonemapping_value)
+		vignette_value: i32 = 0
+		if vignette_enabled do vignette_value = 1
+		sd.SetUniform(&shader, "u_VignetteEnabled", vignette_value)
+		sd.SetUniform(&shader, "u_Resolution", f32(current_fb_width), f32(current_fb_height))
+		fog_value: i32 = 0
+		if fog_enabled do fog_value = 1
+		sd.SetUniform(&shader, "u_FogEnabled", fog_value)
+		sd.SetUniform(&shader, "u_Time", animation_time)
+
+		// Sky dome — drawn FIRST (before the ground and every scene node),
+		// with culling and depth-writing both off, so it paints only
+		// whatever pixels nothing else draws over: the standard skybox
+		// technique. u_IsSky reset to false immediately after so every
+		// subsequent Draw_Node call (ground, scene nodes, gizmos) isn't
+		// accidentally left in "sky mode" — GL program uniforms persist
+		// across draw calls until explicitly overwritten.
+		if sky_enabled {
+			sky_model := la.matrix4_translate(camera.position)
+			gl.Disable(gl.CULL_FACE); dbg.GL_Check()
+			gl.DepthMask(false); dbg.GL_Check()
+			sd.SetUniform(&shader, "u_IsSky", i32(1))
+			scenepkg.Draw_Node(&shader, view, projection, sky_model, &sky_mesh, sky_material)
+			sd.SetUniform(&shader, "u_IsSky", i32(0))
+			gl.DepthMask(true); dbg.GL_Check()
+			// Restores THIS frame's real cull_mode (C key) — apply_render_
+			// state is idempotent (it was already called once above, before
+			// gl.Clear), so calling it again here is just "undo the sky's
+			// own temporary gl.Disable(CULL_FACE)", nothing more.
+			apply_render_state()
+		}
+
+		// u_IsGround true for ONLY this one draw call (the ground plane
+		// isn't part of the Scene hierarchy's node loop at all — see
+		// u_IsGround's own comment in Shaders/Scene.glsl for why a
+		// Material.Reflective-style per-node flag isn't needed here), reset
+		// immediately after for the same "don't leak into the next draw
+		// call" reason as u_IsSky above.
+		ground_detail_value: i32 = 0
+		if ground_detail_enabled do ground_detail_value = 1
+		sd.SetUniform(&shader, "u_IsGround", ground_detail_value)
 		scenepkg.Draw_Node(&shader, view, projection, ground_model, &ground_mesh, ground_material)
+		sd.SetUniform(&shader, "u_IsGround", i32(0))
 
 		// Roadmap step 10 (this session's task: "highlighted (tint...drawn
 		// by the same render path)") — highlighted_node is -1 (never
@@ -943,6 +1101,35 @@ main :: proc() {
 			}
 			fmt.printfln("Captured frame %d/%d to %s", frame_count, capture_frames, capture_path)
 			glfw.SetWindowShouldClose(window, true)
+		}
+
+		if do_benchmark {
+			if frame_count > BENCHMARK_WARMUP_FRAMES {
+				benchmark_frame_time_sum += dt_seconds
+				benchmark_frame_time_min = min(benchmark_frame_time_min, dt_seconds)
+				benchmark_frame_time_max = max(benchmark_frame_time_max, dt_seconds)
+				benchmark_measured_frames += 1
+			}
+			if frame_count == benchmark_frames {
+				if benchmark_measured_frames == 0 {
+					fmt.eprintfln("Benchmark: --benchmark %d must exceed the %d warm-up frames", benchmark_frames, BENCHMARK_WARMUP_FRAMES)
+					os.exit(1)
+				}
+				avg_ms := (benchmark_frame_time_sum / f32(benchmark_measured_frames)) * 1000.0
+				avg_fps := 1000.0 / avg_ms
+				target_ms := f32(1000.0 / 60.0)
+				fmt.printfln(
+					"Benchmark: %d frames measured (after %d warm-up, vsync off) at %dx%d — avg %.3fms (%.1f FPS), min %.3fms, max %.3fms",
+					benchmark_measured_frames, BENCHMARK_WARMUP_FRAMES, fb_width, fb_height,
+					avg_ms, avg_fps, benchmark_frame_time_min*1000.0, benchmark_frame_time_max*1000.0,
+				)
+				if avg_ms > target_ms {
+					fmt.printfln("Benchmark: average frame time EXCEEDS the 60 FPS budget (%.3fms) by %.3fms", target_ms, avg_ms-target_ms)
+				} else {
+					fmt.printfln("Benchmark: holds 60 FPS with %.3fms of budget to spare", target_ms-avg_ms)
+				}
+				glfw.SetWindowShouldClose(window, true)
+			}
 		}
 
 		glfw.SwapBuffers(window)
@@ -1043,6 +1230,25 @@ reset_all_requested: bool
 // ray-traced reflection, same "callback sets the var directly" pattern as
 // every other simple toggle above.
 ray_traced_reflection_enabled: bool
+
+// Polish pass (Prompts.md, post-Session-14) toggle state — same "callback
+// sets the var directly, the main loop applies/uploads it" pattern every
+// toggle above already uses. See each DEFAULT_*_ENABLED constant's own
+// comment for the on-by-default reasoning.
+tonemapping_enabled: bool
+vignette_enabled: bool
+fog_enabled: bool
+ground_detail_enabled: bool
+sky_enabled: bool
+
+// fps_display_value is the last computed rolling-average FPS (updated at
+// most every FPS_DISPLAY_UPDATE_INTERVAL, main loop); fps_display_accum_*
+// are that average's own in-progress accumulators, reset every time it
+// fires. build_window_title reads fps_display_value the same way it reads
+// every other toggle state below.
+fps_display_value: f32
+fps_display_accum_time: f32
+fps_display_accum_frames: int
 
 key_callback :: proc "c" (window: glfw.WindowHandle, key, scancode, action, mods: i32) {
 	// "c" calling convention procs get no implicit Odin context (unlike an
@@ -1232,6 +1438,31 @@ key_callback :: proc "c" (window: glfw.WindowHandle, key, scancode, action, mods
 		ray_traced_reflection_enabled = !ray_traced_reflection_enabled
 		glfw.SetWindowTitle(window, build_window_title())
 	}
+	// Polish pass (Prompts.md, post-Session-14): M/V/Y/T/`/` — the 5
+	// unclaimed letter keys left in this project by this point (every
+	// other single letter is either a movement key, WASD/QE, or already
+	// bound above) plus one punctuation key for the 5th. Each just flips
+	// its own bool and retitles, same pattern as every toggle above.
+	if key == glfw.KEY_M && action == glfw.PRESS {
+		tonemapping_enabled = !tonemapping_enabled
+		glfw.SetWindowTitle(window, build_window_title())
+	}
+	if key == glfw.KEY_V && action == glfw.PRESS {
+		vignette_enabled = !vignette_enabled
+		glfw.SetWindowTitle(window, build_window_title())
+	}
+	if key == glfw.KEY_Y && action == glfw.PRESS {
+		fog_enabled = !fog_enabled
+		glfw.SetWindowTitle(window, build_window_title())
+	}
+	if key == glfw.KEY_T && action == glfw.PRESS {
+		ground_detail_enabled = !ground_detail_enabled
+		glfw.SetWindowTitle(window, build_window_title())
+	}
+	if key == glfw.KEY_SLASH && action == glfw.PRESS {
+		sky_enabled = !sky_enabled
+		glfw.SetWindowTitle(window, build_window_title())
+	}
 }
 
 // mouse_button_callback only ever handles the LEFT button — see Screen_
@@ -1261,6 +1492,14 @@ build_window_title :: proc() -> cstring {
 	backface_debug_state := "On" if backface_debug_enabled else "Off"
 	depth_visualization_state := "On" if depth_visualization_enabled else "Off"
 	reflection_state := "On" if ray_traced_reflection_enabled else "Off"
+	// Polish pass (Prompts.md, post-Session-14) — same "Name:State" style as
+	// every toggle above, abbreviated (Tone/Vig/Grnd) so 5 more toggles
+	// don't make an already-long title unreadable.
+	tonemapping_state := "On" if tonemapping_enabled else "Off"
+	vignette_state := "On" if vignette_enabled else "Off"
+	fog_state := "On" if fog_enabled else "Off"
+	ground_detail_state := "On" if ground_detail_enabled else "Off"
+	sky_state := "On" if sky_enabled else "Off"
 	// Roadmap step 9: shown as a bracketed suffix only while actually
 	// paused, rather than an always-on "Paused:Off" chunk — the title is
 	// already six toggles long, and Off is the overwhelmingly common case.
@@ -1274,7 +1513,7 @@ build_window_title :: proc() -> cstring {
 	selection_suffix := fmt.tprintf(" Sel:%s", selected_node_name) if current_mode == .Inspection else ""
 
 	return fmt.ctprintf(
-		"SENTINEL - %s - %s%s | Speed:%.2fx Cull:%s Depth:%s Wire:%s BFDbg:%s DepthVis:%s Refl:%s%s",
+		"SENTINEL - %s - %s%s | Speed:%.2fx Cull:%s Depth:%s Wire:%s BFDbg:%s DepthVis:%s Refl:%s Tone:%s Vig:%s Fog:%s Grnd:%s Sky:%s FPS:%.0f%s",
 		MODE_NAME[current_mode],
 		SHADING_MODE_NAME[shading_mode],
 		paused_suffix,
@@ -1285,6 +1524,12 @@ build_window_title :: proc() -> cstring {
 		backface_debug_state,
 		depth_visualization_state,
 		reflection_state,
+		tonemapping_state,
+		vignette_state,
+		fog_state,
+		ground_detail_state,
+		sky_state,
+		fps_display_value,
 		selection_suffix,
 	)
 }
@@ -1788,6 +2033,187 @@ parse_reflection_flag :: proc(args: []string) -> bool {
 	}
 
 	return DEFAULT_RAY_TRACED_REFLECTION_ENABLED
+}
+
+// parse_tonemapping_flag looks for "--tonemapping <on|off>" anywhere in
+// argv — the non-interactive way to pick a starting tonemapping state for a
+// --capture/--benchmark run (the M key is skipped during either), same
+// pattern as parse_reflection_flag above.
+parse_tonemapping_flag :: proc(args: []string) -> bool {
+	for i := 0; i < len(args); i += 1 {
+		if args[i] != "--tonemapping" do continue
+
+		if i + 1 >= len(args) {
+			fmt.eprintln("--tonemapping requires one argument: <on|off>")
+			os.exit(1)
+		}
+
+		switch args[i + 1] {
+		case "on":
+			return true
+		case "off":
+			return false
+		case:
+			fmt.eprintfln("--tonemapping: expected 'on' or 'off', got '%s'", args[i + 1])
+			os.exit(1)
+		}
+	}
+
+	return DEFAULT_TONEMAPPING_ENABLED
+}
+
+// parse_vignette_flag looks for "--vignette <on|off>" anywhere in argv —
+// same pattern as parse_tonemapping_flag above.
+parse_vignette_flag :: proc(args: []string) -> bool {
+	for i := 0; i < len(args); i += 1 {
+		if args[i] != "--vignette" do continue
+
+		if i + 1 >= len(args) {
+			fmt.eprintln("--vignette requires one argument: <on|off>")
+			os.exit(1)
+		}
+
+		switch args[i + 1] {
+		case "on":
+			return true
+		case "off":
+			return false
+		case:
+			fmt.eprintfln("--vignette: expected 'on' or 'off', got '%s'", args[i + 1])
+			os.exit(1)
+		}
+	}
+
+	return DEFAULT_VIGNETTE_ENABLED
+}
+
+// parse_fog_flag looks for "--fog <on|off>" anywhere in argv — same pattern
+// as parse_tonemapping_flag above.
+parse_fog_flag :: proc(args: []string) -> bool {
+	for i := 0; i < len(args); i += 1 {
+		if args[i] != "--fog" do continue
+
+		if i + 1 >= len(args) {
+			fmt.eprintln("--fog requires one argument: <on|off>")
+			os.exit(1)
+		}
+
+		switch args[i + 1] {
+		case "on":
+			return true
+		case "off":
+			return false
+		case:
+			fmt.eprintfln("--fog: expected 'on' or 'off', got '%s'", args[i + 1])
+			os.exit(1)
+		}
+	}
+
+	return DEFAULT_FOG_ENABLED
+}
+
+// parse_ground_detail_flag looks for "--ground-detail <on|off>" anywhere in
+// argv — same pattern as parse_tonemapping_flag above.
+parse_ground_detail_flag :: proc(args: []string) -> bool {
+	for i := 0; i < len(args); i += 1 {
+		if args[i] != "--ground-detail" do continue
+
+		if i + 1 >= len(args) {
+			fmt.eprintln("--ground-detail requires one argument: <on|off>")
+			os.exit(1)
+		}
+
+		switch args[i + 1] {
+		case "on":
+			return true
+		case "off":
+			return false
+		case:
+			fmt.eprintfln("--ground-detail: expected 'on' or 'off', got '%s'", args[i + 1])
+			os.exit(1)
+		}
+	}
+
+	return DEFAULT_GROUND_DETAIL_ENABLED
+}
+
+// parse_sky_flag looks for "--sky <on|off>" anywhere in argv — same pattern
+// as parse_tonemapping_flag above.
+parse_sky_flag :: proc(args: []string) -> bool {
+	for i := 0; i < len(args); i += 1 {
+		if args[i] != "--sky" do continue
+
+		if i + 1 >= len(args) {
+			fmt.eprintln("--sky requires one argument: <on|off>")
+			os.exit(1)
+		}
+
+		switch args[i + 1] {
+		case "on":
+			return true
+		case "off":
+			return false
+		case:
+			fmt.eprintfln("--sky: expected 'on' or 'off', got '%s'", args[i + 1])
+			os.exit(1)
+		}
+	}
+
+	return DEFAULT_SKY_ENABLED
+}
+
+// parse_benchmark_flag looks for "--benchmark <frames>" anywhere in argv —
+// this session's required "check that we hold 60 FPS" tooling: unlike
+// --capture, a benchmark run disables vsync (see glfw.SwapInterval's own
+// comment above) and prints a real avg/min/max frame-time report instead of
+// saving a screenshot. Mirrors parse_capture_flag's own argument-parsing
+// shape.
+parse_benchmark_flag :: proc(args: []string) -> (frames: int, requested: bool) {
+	for i := 0; i < len(args); i += 1 {
+		if args[i] != "--benchmark" do continue
+
+		if i + 1 >= len(args) {
+			fmt.eprintln("--benchmark requires one argument: <frames>")
+			os.exit(1)
+		}
+
+		parsed_frames, ok := strconv.parse_int(args[i + 1])
+		if !ok || parsed_frames <= BENCHMARK_WARMUP_FRAMES {
+			fmt.eprintfln("--benchmark: expected an integer frame count > %d, got '%s'", BENCHMARK_WARMUP_FRAMES, args[i + 1])
+			os.exit(1)
+		}
+
+		return parsed_frames, true
+	}
+
+	return 0, false
+}
+
+// parse_msaa_flag looks for "--msaa <N>" anywhere in argv — N is a sample
+// count (2, 4, 8...), passed straight through to glfw.WindowHint(SAMPLES,
+// N) before window creation (see that call site's own comment for why this
+// can't be a live key like every other polish toggle). Omitted entirely
+// (returns 0) means "don't request multisampling", this project's exact
+// pre-polish behaviour.
+parse_msaa_flag :: proc(args: []string) -> i32 {
+	for i := 0; i < len(args); i += 1 {
+		if args[i] != "--msaa" do continue
+
+		if i + 1 >= len(args) {
+			fmt.eprintln("--msaa requires one argument: <sample count>")
+			os.exit(1)
+		}
+
+		parsed_samples, ok := strconv.parse_int(args[i + 1])
+		if !ok || parsed_samples <= 0 {
+			fmt.eprintfln("--msaa: expected a positive integer sample count, got '%s'", args[i + 1])
+			os.exit(1)
+		}
+
+		return i32(parsed_samples)
+	}
+
+	return 0
 }
 
 // parse_test_inspection_flag looks for "--test-inspection <path-prefix>"

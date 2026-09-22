@@ -461,6 +461,53 @@ uniform Proxy u_Proxies[MAX_PROXIES];
 uniform int u_ProxyCount;
 
 // ---------------------------------------------------------------------------
+// Polish pass (Prompts.md, "polish" session, post-Session-14): a handful of
+// independently toggleable finishing touches, per that session's own rule
+// ("each item must be toggleable so the instructor's verification is never
+// obstructed") — every one of these defaults such that turning it OFF
+// reproduces this project's exact pre-polish look, so none of the required
+// toggles above (shading mode, culling, depth test, projection, reflection)
+// are affected by any combination of these being on or off.
+// ---------------------------------------------------------------------------
+
+// M key: Reinhard tonemap + 2.2 gamma encode, applied ONCE at the very end
+// of main() to whatever `result` every other code path above already
+// computed in LINEAR space (every BaseColor/light colour/fog/sky colour in
+// this file is authored and mixed as if linear, never gamma-encoded until
+// here) — see apply_tonemap_gamma's own comment below.
+uniform bool u_TonemappingEnabled;
+// V key: a screen-space darkening toward the frame's corners. Needs actual
+// pixel dimensions (gl_FragCoord.xy alone is in PIXELS, not a 0-1 range) —
+// u_Resolution is the one new piece of frame state this needs, uploaded
+// each frame from the same glfw.GetFramebufferSize() call the aspect ratio
+// already comes from (Source/Main.odin).
+uniform bool u_VignetteEnabled;
+uniform vec2 u_Resolution;
+// Y key: exponential distance fog toward u_SkyColor (already declared above
+// for reflection misses) — literally "fog colour matching the sky", this
+// session's own task text.
+uniform bool u_FogEnabled;
+// T key: hash-based dirt/gravel variation on the ground plane ONLY.
+// Source/Main.odin sets this true for the one dedicated ground Draw_Node
+// call and false again immediately after — see that call site's own
+// comment for why a per-node Material flag (this project's usual pattern,
+// e.g. u_IsReflectiveSurface) isn't needed here: the ground isn't part of
+// the Scene hierarchy's node loop at all, just one standalone draw call.
+uniform bool u_IsGround;
+// `/` key: an oversized cube, always re-centred on the camera every frame
+// (Source/Main.odin), rendered FIRST with depth-write and culling both
+// disabled so real geometry always draws over it — the standard "skybox"
+// technique. u_IsSky fragments skip the entire back-face/depth-vis/shading/
+// reflection pipeline below (none of it applies to a sky dome) via an early
+// return right at the top of main().
+uniform bool u_IsSky;
+// Sky star twinkle only; NOT used to drive any geometry, light, or camera
+// path (CLAUDE.md §2 item 5 is about never CACHING recomputed scene state,
+// not about avoiding a clock read — every position/light in this project
+// already reads real per-frame state exactly like this).
+uniform float u_Time;
+
+// ---------------------------------------------------------------------------
 // Shared lighting code — FRAGMENT STAGE COPY. See this file's header
 // comment; identical to the vertex stage's copy above except the jitter
 // seed line inside area_light_contribution (that function's own comment
@@ -907,29 +954,151 @@ vec3 trace_reflection(vec3 ray_origin, vec3 ray_dir) {
 	return shaded * shadow_factor;
 }
 
-void main() {
-	// --- Roadmap step 8: back-face classification, done once per fragment
-	// here, shared by MANUAL culling's discard, the backface-debug tint,
-	// and (implicitly) GL_CULL_FACE mode — see u_CullMode's own comment for
-	// why a back-facing fragment simply never reaches this shader at all in
-	// that last mode.
-	vec3 normal = normalize(v_WorldNormal);
-	vec3 direction_to_eye = u_IsOrthographic
-		? -normalize(u_ViewDirection)
-		: normalize(u_ViewPosition - v_WorldPosition);
-	bool is_back_facing = dot(normal, direction_to_eye) < 0.0;
+// ---------------------------------------------------------------------------
+// Polish pass helpers. See the uniform block above for each toggle's own
+// comment on what it does and why it's safe to combine with every existing
+// required toggle.
+// ---------------------------------------------------------------------------
 
-	if (u_CullMode == CULL_MANUAL && is_back_facing) {
-		// Same final IMAGE as GL_CULL_FACE (this fragment never appears in
-		// the framebuffer) but not the same performance cost — see
-		// u_CullMode's own comment above.
-		discard;
+// hash31 is hash21's 3D sibling (hash21's own comment, above, explains the
+// technique) — needed for the star field below, which buckets a 3D
+// DIRECTION into cells rather than a 2D screen/world position.
+float hash31(vec3 p) {
+	return fract(sin(dot(p, vec3(12.9898, 78.233, 45.164))) * 43758.5453);
+}
+
+// value_noise is a textbook bilinearly-interpolated value-noise: hash the 4
+// corners of the grid cell `p` falls in, then blend between them with a
+// smoothstep-shaped weight (not linear — linear interpolation of value
+// noise shows visible grid-aligned creases). Two octaves of this (see
+// apply_ground_detail below) is enough for a "patchy dirt/gravel" look
+// without ever touching a texture or a precomputed table — every value is
+// re-derived from `p` alone, every call.
+float value_noise(vec2 p) {
+	vec2 cell = floor(p);
+	vec2 f = fract(p);
+	float a = hash21(cell);
+	float b = hash21(cell + vec2(1.0, 0.0));
+	float c = hash21(cell + vec2(0.0, 1.0));
+	float d = hash21(cell + vec2(1.0, 1.0));
+	vec2 weight = f * f * (3.0 - 2.0 * f);
+	return mix(mix(a, b, weight.x), mix(c, d, weight.x), weight.y);
+}
+
+// apply_ground_detail tints the ground's already-lit colour with a coarse
+// "patch" layer (large, soft light/dark regions) plus a fine "speckle"
+// layer (small gravel-like grain), both sampled from the fragment's own
+// WORLD-space XZ position — never cached, recomputed every fragment every
+// frame exactly like every other formula-driven value in this project
+// (CLAUDE.md §2 item 5).
+vec3 apply_ground_detail(vec3 color, vec3 world_position) {
+	float coarse = value_noise(world_position.xz * 0.12);
+	float fine = value_noise(world_position.xz * 1.3);
+	float pattern = coarse * 0.65 + fine * 0.35;
+	return color * mix(0.82, 1.18, pattern);
+}
+
+// apply_fog blends `color` toward u_SkyColor as an exponential function of
+// distance from the eye — the standard "atmospheric haze" model (thicker
+// air the further the light travels), not a linear ramp, so nearby objects
+// stay essentially untouched while the fence line and beyond visibly soften
+// into the night sky. Capped below 1.0 (FOG_MAX_OPACITY) so nothing ever
+// fully vanishes into a flat colour at any distance this scene's ~28x28
+// fence footprint can produce.
+vec3 apply_fog(vec3 color, float distance_from_camera) {
+	const float FOG_DENSITY = 0.035;
+	const float FOG_MAX_OPACITY = 0.85;
+	float fog_factor = (1.0 - exp(-distance_from_camera * FOG_DENSITY)) * FOG_MAX_OPACITY;
+	return mix(color, u_SkyColor, fog_factor);
+}
+
+// apply_vignette darkens toward the frame's corners — a fixed screen-space
+// falloff (NOT world-space, unlike fog above), the classic "lens/eye
+// attention" cue. Subtle by design: the darkest corner only drops to 55% of
+// its un-vignetted brightness (`mix(0.55, 1.0, ...)` below), never near-black.
+vec3 apply_vignette(vec3 color) {
+	vec2 uv = gl_FragCoord.xy / u_Resolution;
+	float dist = length(uv - vec2(0.5)) * 1.4;
+	float vignette = 1.0 - smoothstep(0.5, 1.05, dist);
+	return color * mix(0.55, 1.0, vignette);
+}
+
+// apply_tonemap_gamma is the ONE place in this entire shader that leaves
+// linear colour space — every BaseColor, light colour, fog/sky colour, and
+// blend above this point is authored and mixed as if linear (this session's
+// own task: "make sure all colours are handled in a consistent linear
+// space"). Reinhard (`color / (color + 1)`) compresses the unbounded-bright
+// values this scene can produce (overlapping spotlight cores, emissive
+// glass) down toward 1.0 with a smooth shoulder instead of the hard clip
+// that would otherwise happen at the framebuffer's own 0-1 range; the
+// standard 2.2 gamma power then re-encodes for display. Skipping this
+// (`u_TonemappingEnabled == false`) reproduces this project's exact
+// pre-polish output — every colour before this session was already
+// implicitly hard-clipped/un-gamma-corrected the same way, so OFF is a true
+// regression-free fallback, not just "a different look".
+vec3 apply_tonemap_gamma(vec3 color) {
+	vec3 mapped = color / (color + vec3(1.0));
+	return pow(mapped, vec3(1.0 / 2.2));
+}
+
+// sky_color: a night-sky gradient (this project's existing u_SkyColor near
+// the horizon, darkening toward the zenith/nadir) plus a sparse procedural
+// starfield in the upper hemisphere — both pure functions of `direction`
+// and `time`, no star catalogue, no texture (CLAUDE.md §2 item 5 applied to
+// the sky exactly as it's already applied to every mesh and light in this
+// project).
+vec3 sky_color(vec3 direction, float time) {
+	float up = clamp(direction.y, -1.0, 1.0);
+	vec3 zenith = u_SkyColor * 0.25;
+	vec3 nadir = u_SkyColor * 0.4;
+	vec3 gradient = up >= 0.0
+		? mix(u_SkyColor, zenith, pow(up, 0.7))
+		: mix(u_SkyColor, nadir, pow(-up, 0.7));
+
+	// One star CANDIDATE per cell of a fine direction-space grid — but,
+	// crucially, only a small hashed POINT within that cell actually lights
+	// up (`angular_distance`/`star_radius` below), not the whole cell:
+	// an early version of this lit the entire cell whenever `exists`
+	// passed its threshold, which looked fine from a normal, mostly-
+	// level camera (each cell subtends a tiny fraction of the screen) but
+	// turned into huge blocky shapes when looking nearly straight up,
+	// where a handful of cells fill most of the frame — confirmed via a
+	// dedicated straight-up test capture, not assumed. A per-cell POINT
+	// keeps every star the same small angular size regardless of which
+	// direction the camera is actually looking.
+	vec3 stars = vec3(0.0);
+	if (up > 0.02) {
+		float grid = 140.0;
+		vec3 cell = floor(direction * grid);
+		float exists = hash31(cell);
+		if (exists > 0.997) {
+			// Jitters the star's position within its cell (three more
+			// differently-offset hashes) so the field doesn't read as an
+			// obviously regular lattice.
+			vec3 jitter = vec3(hash31(cell + vec3(3.1)), hash31(cell + vec3(7.7)), hash31(cell + vec3(11.3))) - 0.5;
+			vec3 star_direction = normalize((cell + 0.5 + jitter*0.6) / grid);
+			float angular_distance = length(direction - star_direction);
+			float star_radius = 0.0035;
+			float star_mask = 1.0 - smoothstep(0.0, star_radius, angular_distance);
+
+			float brightness = hash31(cell + vec3(17.0));
+			float twinkle = 0.6 + 0.4 * sin(time * 2.0 + brightness * 6.2831853);
+			float fade = smoothstep(0.02, 0.2, up);
+			stars = vec3(brightness * twinkle * fade * star_mask);
+		}
 	}
 
+	return gradient + stars;
+}
+
+void main() {
 	// Item 3: an alternate full-screen debug view — grayscale linearised
-	// depth instead of lit colour, for every fragment that reaches this
-	// point (i.e. survived the MANUAL discard above, same as any other
-	// mode would draw).
+	// depth instead of lit colour. Checked FIRST, even before the sky dome
+	// branch right below: this is a diagnostic about THIS FRAGMENT's own
+	// rasterized depth (gl_FragCoord.z alone), which is well-defined for
+	// ANY fragment, sky included — showing the sky in its own gradient
+	// colour here instead would make the required depth-visualisation
+	// toggle behave inconsistently across the frame for no good reason.
 	if (u_DepthVisualization) {
 		// gl_FragCoord.z is WINDOW-space depth, always in [0, 1] regardless
 		// of the clip-space convention the projection matrix itself uses
@@ -960,6 +1129,38 @@ void main() {
 		float normalized_depth = clamp((linear_depth - u_Near) / (u_Far - u_Near), 0.0, 1.0);
 		FragColor = vec4(vec3(normalized_depth), 1.0);
 		return;
+	}
+
+	// Roadmap: sky dome (see u_IsSky's own comment above) — an entirely
+	// different fragment, skipping every bit of scene shading below
+	// (back-face classification, Flat/Gouraud/Phong, reflection, ground
+	// detail all assume real scene geometry, none of which apply to a
+	// direction-only gradient+stars background).
+	if (u_IsSky) {
+		vec3 direction = normalize(v_WorldPosition - u_ViewPosition);
+		vec3 sky_result = sky_color(direction, u_Time);
+		if (u_VignetteEnabled) sky_result = apply_vignette(sky_result);
+		if (u_TonemappingEnabled) sky_result = apply_tonemap_gamma(sky_result);
+		FragColor = vec4(sky_result, 1.0);
+		return;
+	}
+
+	// --- Roadmap step 8: back-face classification, done once per fragment
+	// here, shared by MANUAL culling's discard, the backface-debug tint,
+	// and (implicitly) GL_CULL_FACE mode — see u_CullMode's own comment for
+	// why a back-facing fragment simply never reaches this shader at all in
+	// that last mode.
+	vec3 normal = normalize(v_WorldNormal);
+	vec3 direction_to_eye = u_IsOrthographic
+		? -normalize(u_ViewDirection)
+		: normalize(u_ViewPosition - v_WorldPosition);
+	bool is_back_facing = dot(normal, direction_to_eye) < 0.0;
+
+	if (u_CullMode == CULL_MANUAL && is_back_facing) {
+		// Same final IMAGE as GL_CULL_FACE (this fragment never appears in
+		// the framebuffer) but not the same performance cost — see
+		// u_CullMode's own comment above.
+		discard;
 	}
 
 	vec3 result;
@@ -1032,6 +1233,25 @@ void main() {
 		// visible (culling OFF; MANUAL already discarded these fragments
 		// above, and GL mode never delivers them to this shader at all).
 		result = vec3(1.0, 0.0, 1.0); // magenta
+	}
+
+	// Polish pass tail — see each uniform's own comment above. Fixed order:
+	// ground detail (a material-level change) -> fog (atmosphere between
+	// the surface and the eye) -> vignette (a lens/frame effect) -> tonemap
+	// + gamma (the final, ONE-TIME leave-linear-space step, last so it sees
+	// everything else that touched `result`).
+	if (u_IsGround) {
+		result = apply_ground_detail(result, v_WorldPosition);
+	}
+	if (u_FogEnabled) {
+		float fog_distance = length(v_WorldPosition - u_ViewPosition);
+		result = apply_fog(result, fog_distance);
+	}
+	if (u_VignetteEnabled) {
+		result = apply_vignette(result);
+	}
+	if (u_TonemappingEnabled) {
+		result = apply_tonemap_gamma(result);
 	}
 
 	FragColor = vec4(result, 1.0);

@@ -304,6 +304,11 @@ Print_Controls :: proc() {
 	fmt.println("  F            Toggle wireframe")
 	fmt.println("  B            Toggle back-face debug tint")
 	fmt.println("  R            Toggle ray-traced reflection (jeep windshield, tank periscope, barracks windows)")
+	fmt.println("  M            Toggle tonemapping + gamma correction")
+	fmt.println("  V            Toggle vignette")
+	fmt.println("  Y            Toggle night fog/haze")
+	fmt.println("  T            Toggle ground procedural detail (dirt/gravel)")
+	fmt.println("  /            Toggle sky gradient + procedural stars")
 	fmt.println("  H            Print this list again")
 	fmt.println("  Esc          Quit")
 }
