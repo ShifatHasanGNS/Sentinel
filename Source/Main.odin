@@ -202,7 +202,6 @@ import gl "vendor:OpenGL"
 
 import cam "../Library/Camera"
 import geo "../Library/Geometry"
-import lightspkg "../Library/Lights"
 import scenepkg "../Library/Scene"
 
 import dbg "../Library/Engine/Debugger"
@@ -409,9 +408,6 @@ BENCHMARK_WARMUP_FRAMES :: 10
 main :: proc() {
 	capture_frames, capture_path, do_capture := parse_capture_flag(os.args[1:])
 	start_projection := parse_projection_flag(os.args[1:])
-	gizmos_visible = parse_gizmos_flag(os.args[1:])
-	area_light_sample_count = parse_area_samples_flag(os.args[1:])
-	area_light_jitter = parse_area_jitter_flag(os.args[1:])
 	shading_mode = parse_shading_flag(os.args[1:])
 	ground_resolution = parse_ground_resolution_flag(os.args[1:])
 	cull_mode = parse_cull_flag(os.args[1:])
@@ -421,9 +417,11 @@ main :: proc() {
 	depth_visualization_enabled = parse_depth_visualization_flag(os.args[1:])
 	current_mode = parse_mode_flag(os.args[1:])
 	animation_speed_scale = parse_patrol_speed_flag(os.args[1:])
-	test_inspection_prefix, run_inspection_test := parse_test_inspection_flag(os.args[1:])
+	// [PROGRESS-DEMO] Branch-only: --test-inspection and ray-traced
+	// reflection are both removed on this branch (the former verified
+	// light-tracking specifically; the latter needs Library/Lights-derived
+	// material/light data). See PROGRESS-DEMO notes throughout this file.
 	edit_step_scale = DEFAULT_EDIT_STEP_SCALE
-	ray_traced_reflection_enabled = parse_reflection_flag(os.args[1:])
 	tonemapping_enabled = parse_tonemapping_flag(os.args[1:])
 	vignette_enabled = parse_vignette_flag(os.args[1:])
 	fog_enabled = parse_fog_flag(os.args[1:])
@@ -456,11 +454,9 @@ main :: proc() {
 	if msaa_samples > 0 {
 		glfw.WindowHint(glfw.SAMPLES, msaa_samples)
 	}
-	// A capture or benchmark run (or the headless Inspection test, Source/
-	// Inspection.odin's Run_Inspection_Test) has no one watching the
-	// window; hiding it avoids an on-screen flash for a run that closes
-	// itself after N frames.
-	glfw.WindowHint(glfw.VISIBLE, !do_capture && !run_inspection_test && !do_benchmark)
+	// A capture or benchmark run has no one watching the window; hiding it
+	// avoids an on-screen flash for a run that closes itself after N frames.
+	glfw.WindowHint(glfw.VISIBLE, !do_capture && !do_benchmark)
 
 	// All 6 toggles build_window_title reads are already parsed above, so
 	// the FIRST title the window ever shows already reflects any --cull/
@@ -560,16 +556,10 @@ main :: proc() {
 	defer geo.Destroy(&sky_mesh)
 	sky_material := scenepkg.Default_Material(la.Vector3f32{0, 0, 0})
 
-	light_rig := lightspkg.Build_Rig(&scene)
-	defer delete(light_rig)
-	active_light_count := lightspkg.Active_Count(light_rig[:])
-	fmt.printfln(
-		"Lights: %d active, %d objects (lights > objects: %v)",
-		active_light_count,
-		object_count,
-		active_light_count > object_count,
-	)
-	fmt.printfln("Area light samples: %d (+/- to change, J to toggle jitter, currently %v)", area_light_sample_count, area_light_jitter)
+	// [PROGRESS-DEMO] Branch-only: Library/Lights' rig build/upload/gizmos
+	// and the area-light sample-count/jitter controls are removed here —
+	// see PROGRESS-DEMO notes throughout this file. Restore by switching
+	// to main or deleting this branch.
 
 	fmt.printfln(
 		"Render toggles: Cull=%s (C), Depth test=%v (Z), Depth visualization=%v (X), Wireframe=%v (F), Backface debug=%v (B)",
@@ -625,15 +615,10 @@ main :: proc() {
 	jeep_headlight_left_node := scenepkg.Find_Node(&scene, "Jeep Headlight Left")
 	jeep_headlight_right_node := scenepkg.Find_Node(&scene, "Jeep Headlight Right")
 
-	// Locate the two lights Patrol Mode animates the INTENSITY of, by which
-	// SCENE NODE they're parented to (find_light_by_parent, below) rather
-	// than a hardcoded index into Library/Lights.Build_Rig's internal
-	// append order — that order is Build_Rig's own implementation detail,
-	// not something this file should have to know or keep in sync by hand.
-	radar_beacon_node := scenepkg.Find_Node(&scene, "Radar Beacon")
-	beacon_light_index := find_light_by_parent(light_rig[:], radar_beacon_node)
-	fence_node := scenepkg.Find_Node(&scene, "Perimeter Fence")
-	fence_flicker_light_index := find_light_by_parent(light_rig[:], fence_node)
+	// [PROGRESS-DEMO] Branch-only: the radar-beacon/fence-lamp INTENSITY
+	// animations (Library/Lights-derived) are removed here — see the
+	// per-frame Patrol block below. Restore by switching to main or
+	// deleting this branch.
 
 	// Roadmap step 10 (this session's task): every selectable node ([/]
 	// cycles through this list — see Source/Inspection.odin's Build_
@@ -652,27 +637,10 @@ main :: proc() {
 	fmt.printfln("Inspection: %d selectable objects, starting selection %q ([/] to cycle, H for full controls)", len(selectable_nodes), selected_node_name)
 	Print_Controls()
 
-	// Roadmap step 11 (CLAUDE.md §6.2, Prompts.md Session 14): mark every
-	// glass surface's already-built Material as reflective — see Scene.
-	// Material.Reflective's own comment for why this is set here, by name,
-	// rather than in Library/Scene/Objects.odin at build time. Then resolve
-	// the proxy shape list's node names ONCE — Build_Proxies (main loop,
-	// below) re-derives every proxy's actual transform from this list
-	// EVERY frame, never caching a proxy's position/orientation itself.
-	reflective_count := 0
-	for name in REFLECTIVE_NODE_NAMES {
-		index := scenepkg.Find_Node(&scene, name)
-		if index == scenepkg.NO_PARENT {
-			panic(fmt.tprintf("Source/Main.odin: no Scene node named %q for the ray-traced reflection — Objects.odin and REFLECTIVE_NODE_NAMES have drifted out of sync", name))
-		}
-		scene.Nodes[index].Material.Reflective = true
-		reflective_count += 1
-	}
-	proxy_defs := Build_Proxy_Defs(&scene)
-	fmt.printfln("Reflection: %d reflective surfaces, %d proxy shapes (R to toggle)", reflective_count, len(proxy_defs))
-
-	gizmo_meshes := lightspkg.Build_Gizmo_Meshes()
-	defer lightspkg.Destroy_Gizmo_Meshes(&gizmo_meshes)
+	// [PROGRESS-DEMO] Branch-only: ray-traced reflection's proxy setup and
+	// Library/Lights' gizmo meshes are both removed here — see
+	// PROGRESS-DEMO notes throughout this file. Restore by switching to
+	// main or deleting this branch.
 
 	shader := sd.New(COMBINED_SHADER_PATH)
 	if shader.RendererID == 0 {
@@ -683,18 +651,6 @@ main :: proc() {
 	}
 	fmt.printfln("Shader program linked: id=%d", shader.RendererID)
 	defer sd.Delete(&shader)
-
-	// Roadmap step 10 (this session's task: "script a headless sequence...
-	// that selects the tank turret, rotates it, and asserts the
-	// searchlight's world position changed as expected"). Runs INSTEAD of
-	// the interactive loop below (Run_Inspection_Test calls os.exit itself
-	// once it has a verdict, so this never falls through) — everything it
-	// needs (scene, light_rig, shader, a real GL context) already exists at
-	// this point, and nothing after it (camera/cursor setup, the render
-	// loop) is relevant to a scripted, single-pass test.
-	if run_inspection_test {
-		Run_Inspection_Test(window, &scene, light_rig[:], &shader, test_inspection_prefix, int(fb_width), int(fb_height))
-	}
 
 	camera := cam.Camera_Looking_At(CAMERA_START_EYE, SCENE_FOCUS)
 	if start_projection == .Orthographic {
@@ -925,9 +881,8 @@ main :: proc() {
 			if radar_dish_node != scenepkg.NO_PARENT {
 				scene.Nodes[radar_dish_node].Local.Rotation.y = Patrol_Radar_Spin_Angle(animation_time)
 			}
-			if beacon_light_index >= 0 {
-				light_rig[beacon_light_index].Intensity = lightspkg.BEACON_INTENSITY * Patrol_Beacon_Intensity_Factor(animation_time)
-			}
+			// [PROGRESS-DEMO] Branch-only: beacon intensity blink removed —
+			// see PROGRESS-DEMO notes throughout this file.
 
 			// Optional life touches (this session's task marks these
 			// optional and explicitly keeps the tank hull/jeep root
@@ -941,9 +896,8 @@ main :: proc() {
 			if jeep_headlight_right_node != scenepkg.NO_PARENT {
 				scene.Nodes[jeep_headlight_right_node].Local.Rotation.x = Patrol_Jeep_Dip_Angle(animation_time)
 			}
-			if fence_flicker_light_index >= 0 {
-				light_rig[fence_flicker_light_index].Intensity = lightspkg.FENCE_LAMP_INTENSITY * Patrol_Fence_Flicker_Factor(animation_time)
-			}
+			// [PROGRESS-DEMO] Branch-only: fence-lamp flicker removed — see
+			// PROGRESS-DEMO notes throughout this file.
 		}
 
 		// Push this frame's cull/depth-test/wireframe toggles to GL — see
@@ -996,17 +950,9 @@ main :: proc() {
 		sd.SetUniform(&shader, "u_ViewPosition", camera.position.x, camera.position.y, camera.position.z)
 		sd.SetUniform(&shader, "u_AmbientColor", AMBIENT_COLOR.r, AMBIENT_COLOR.g, AMBIENT_COLOR.b)
 		sd.SetUniform(&shader, "u_AmbientStrength", f32(AMBIENT_STRENGTH))
-		// Every light's world Position/Direction is re-derived fresh every
-		// frame from its parent's CURRENT world matrix, never computed once
-		// and reused as though fixed (CLAUDE.md §2 item 10) — this is what
-		// makes the demo animation above (and, later, real Patrol/
-		// Inspection Mode movement) actually visible on attached lights.
-		lightspkg.Update_From_Scene(light_rig[:], world_matrices[:])
-		lightspkg.Upload(&shader, light_rig[:])
-		sd.SetUniform(&shader, "u_AreaLightSampleCount", i32(area_light_sample_count))
-		jitter_value: i32 = 0
-		if area_light_jitter do jitter_value = 1
-		sd.SetUniform(&shader, "u_AreaLightJitter", jitter_value)
+		// [PROGRESS-DEMO] Branch-only: Library/Lights' per-frame update/
+		// upload and the area-light sample-count/jitter uniforms are
+		// removed here — see PROGRESS-DEMO notes throughout this file.
 		sd.SetUniform(&shader, "u_ShadingMode", shading_mode)
 
 		// Roadmap step 8 (CLAUDE.md §4/§9): culling/depth-visualization
@@ -1031,19 +977,9 @@ main :: proc() {
 		sd.SetUniform(&shader, "u_Near", camera.near)
 		sd.SetUniform(&shader, "u_Far", camera.far)
 
-		// Roadmap step 11 (CLAUDE.md §6.2, Prompts.md Session 14): the
-		// proxy array is rebuilt from THIS frame's `world_matrices` —
-		// already computed above, never cached — so a reflection updates
-		// the instant an object moves, whether that's Patrol's own
-		// animation or a live Inspection-Mode edit (this session's task:
-		// "the reflection must update when the instructor moves the
-		// reflected objects").
-		frame_proxies := Build_Proxies(proxy_defs[:], world_matrices[:])
-		Upload_Proxies(&shader, frame_proxies[:])
-		delete(frame_proxies)
-		reflection_enabled_value: i32 = 0
-		if ray_traced_reflection_enabled do reflection_enabled_value = 1
-		sd.SetUniform(&shader, "u_RayTracedReflectionEnabled", reflection_enabled_value)
+		// [PROGRESS-DEMO] Branch-only: ray-traced reflection's per-frame
+		// proxy rebuild/upload is removed here — see PROGRESS-DEMO notes
+		// throughout this file.
 		sd.SetUniform(&shader, "u_SkyColor", CLEAR_COLOR.x, CLEAR_COLOR.y, CLEAR_COLOR.z)
 
 		// [PROGRESS-DEMO] Branch-only — see DEFAULT_OBJECTS_ONLY_MODE's own
@@ -1111,9 +1047,8 @@ main :: proc() {
 		draw_scene_nodes(&shader, view, projection, &scene, world_matrices[:], highlighted_node, Inspection_Highlight_Pulse(animation_time))
 		delete(world_matrices)
 
-		if gizmos_visible {
-			lightspkg.Draw_Gizmos(&shader, view, projection, light_rig[:], &gizmo_meshes)
-		}
+		// [PROGRESS-DEMO] Branch-only: light gizmos removed — see
+		// PROGRESS-DEMO notes throughout this file.
 
 		frame_count += 1
 
@@ -1174,19 +1109,9 @@ framebuffer_size_callback :: proc "c" (window: glfw.WindowHandle, width, height:
 projection_toggle_requested: bool
 scroll_delta_y: f32
 
-// gizmos_visible toggles Library/Lights.Draw_Gizmos (key L). Starts from
-// parse_gizmos_flag's result (set once in main() before the loop begins),
-// then flips on each L press exactly like projection_toggle_requested
-// flips the projection above.
-gizmos_visible: bool
-
-// area_light_sample_count/area_light_jitter (roadmap step 6, CLAUDE.md
-// §6.3) drive Shaders/Scene.glsl's u_AreaLightSampleCount/u_AreaLightJitter
-// — +/- and J below, or --area-samples/--area-jitter for a --capture run.
-// Both start from their parse_*_flag result in main(), same pattern as
-// gizmos_visible above.
-area_light_sample_count: int
-area_light_jitter: bool
+// [PROGRESS-DEMO] Branch-only: gizmos_visible/area_light_sample_count/
+// area_light_jitter (all Library/Lights-derived) removed here — see
+// PROGRESS-DEMO notes throughout this file.
 
 // shading_mode drives Shaders/Scene.glsl's u_ShadingMode (keys 1/2/3,
 // roadmap step 7). ground_resolution/ground_resolution_toggle_requested
@@ -1249,10 +1174,8 @@ edit_step_scale: f32
 reset_selected_requested: bool
 reset_all_requested: bool
 
-// Roadmap step 11 (CLAUDE.md §6.2, Prompts.md Session 14) — R toggles the
-// ray-traced reflection, same "callback sets the var directly" pattern as
-// every other simple toggle above.
-ray_traced_reflection_enabled: bool
+// [PROGRESS-DEMO] Branch-only: ray_traced_reflection_enabled removed —
+// see PROGRESS-DEMO notes throughout this file.
 
 // Polish pass (Prompts.md, post-Session-14) toggle state — same "callback
 // sets the var directly, the main loop applies/uploads it" pattern every
@@ -1291,27 +1214,9 @@ key_callback :: proc "c" (window: glfw.WindowHandle, key, scancode, action, mods
 	if key == glfw.KEY_P && action == glfw.PRESS {
 		projection_toggle_requested = true
 	}
-	if key == glfw.KEY_L && action == glfw.PRESS {
-		gizmos_visible = !gizmos_visible
-	}
-	// EQUAL/KP_ADD share the same "+/-" pairing on most keyboards ('+' is
-	// shift-EQUAL, not its own key on a US layout); both are wired so the
-	// comparison this session's task asks for (N=1 vs N=8) is one keypress
-	// away regardless of numpad availability.
-	if (key == glfw.KEY_EQUAL || key == glfw.KEY_KP_ADD) && action == glfw.PRESS {
-		area_light_sample_count = min(area_light_sample_count + 1, lightspkg.MAX_AREA_LIGHT_SAMPLES)
-	}
-	if (key == glfw.KEY_MINUS || key == glfw.KEY_KP_SUBTRACT) && action == glfw.PRESS {
-		area_light_sample_count = max(area_light_sample_count - 1, 1)
-	}
-	// N, not J (roadmap step 10, Prompts.md Session 13): J is now claimed by
-	// Inspection Mode's IJKL translate cluster below (this session's task
-	// names IJKL specifically), so area-light jitter moved here — a
-	// deliberate reassignment, documented in README/PROGRESS.md, not a
-	// silent break of a Session 9 control.
-	if key == glfw.KEY_N && action == glfw.PRESS {
-		area_light_jitter = !area_light_jitter
-	}
+	// [PROGRESS-DEMO] Branch-only: light-gizmo toggle (L) and area-light
+	// sample-count/jitter controls (+/-/N) removed — see PROGRESS-DEMO
+	// notes throughout this file.
 	if key == glfw.KEY_1 && action == glfw.PRESS {
 		shading_mode = SHADING_FLAT
 		glfw.SetWindowTitle(window, build_window_title())
@@ -1457,13 +1362,8 @@ key_callback :: proc "c" (window: glfw.WindowHandle, key, scancode, action, mods
 	if key == glfw.KEY_H && action == glfw.PRESS {
 		Print_Controls()
 	}
-	// Roadmap step 11 (CLAUDE.md §6.2, Prompts.md Session 14): R toggles
-	// the ray-traced reflection — works in either mode, same as every
-	// other debug/comparison toggle (C/Z/X/F/B) above.
-	if key == glfw.KEY_R && action == glfw.PRESS {
-		ray_traced_reflection_enabled = !ray_traced_reflection_enabled
-		glfw.SetWindowTitle(window, build_window_title())
-	}
+	// [PROGRESS-DEMO] Branch-only: R (ray-traced reflection toggle)
+	// removed — see PROGRESS-DEMO notes throughout this file.
 	// Polish pass (Prompts.md, post-Session-14): M/V/Y/T/`/` — the 5
 	// unclaimed letter keys left in this project by this point (every
 	// other single letter is either a movement key, WASD/QE, or already
@@ -1517,7 +1417,8 @@ build_window_title :: proc() -> cstring {
 	wireframe_state := "On" if wireframe_enabled else "Off"
 	backface_debug_state := "On" if backface_debug_enabled else "Off"
 	depth_visualization_state := "On" if depth_visualization_enabled else "Off"
-	reflection_state := "On" if ray_traced_reflection_enabled else "Off"
+	// [PROGRESS-DEMO] Branch-only: reflection_state removed from the
+	// title — see PROGRESS-DEMO notes throughout this file.
 	// Polish pass (Prompts.md, post-Session-14) — same "Name:State" style as
 	// every toggle above, abbreviated (Tone/Vig/Grnd) so 5 more toggles
 	// don't make an already-long title unreadable.
@@ -1539,7 +1440,7 @@ build_window_title :: proc() -> cstring {
 	selection_suffix := fmt.tprintf(" Sel:%s", selected_node_name) if current_mode == .Inspection else ""
 
 	return fmt.ctprintf(
-		"SENTINEL - %s - %s%s | Speed:%.2fx Cull:%s Depth:%s Wire:%s BFDbg:%s DepthVis:%s Refl:%s Tone:%s Vig:%s Fog:%s Grnd:%s Sky:%s FPS:%.0f%s",
+		"SENTINEL - %s - %s%s | Speed:%.2fx Cull:%s Depth:%s Wire:%s BFDbg:%s DepthVis:%s Tone:%s Vig:%s Fog:%s Grnd:%s Sky:%s FPS:%.0f%s",
 		MODE_NAME[current_mode],
 		SHADING_MODE_NAME[shading_mode],
 		paused_suffix,
@@ -1549,7 +1450,6 @@ build_window_title :: proc() -> cstring {
 		wireframe_state,
 		backface_debug_state,
 		depth_visualization_state,
-		reflection_state,
 		tonemapping_state,
 		vignette_state,
 		fog_state,
@@ -1639,20 +1539,8 @@ count_back_facing_triangles :: proc(mesh: ^geo.Mesh, normal_matrix: la.Matrix3f3
 	return count
 }
 
-// find_light_by_parent returns the index of the FIRST light in `lights`
-// whose ParentNode matches `node`, or -1 if none does. Used once at
-// startup (not per-frame) to locate the specific lights Patrol Mode
-// animates (the radar beacon, one fence lamp) by the SCENE NODE they're
-// attached to, rather than a hardcoded array index into Library/Lights.
-// Build_Rig's internal append order — that order is Build_Rig's own
-// implementation detail, not something this file should have to know or
-// keep in sync by hand.
-find_light_by_parent :: proc(lights: []lightspkg.Light, node: int) -> int {
-	for light, i in lights {
-		if light.ParentNode == node do return i
-	}
-	return -1
-}
+// [PROGRESS-DEMO] Branch-only: find_light_by_parent removed — see
+// PROGRESS-DEMO notes throughout this file.
 
 // build_ground_mesh builds and uploads the ground plane's LOCAL-space mesh
 // as a `resolution` x `resolution` grid of small geo.Plane cells, stitched
@@ -1768,58 +1656,9 @@ parse_projection_flag :: proc(args: []string) -> cam.Projection_Mode {
 	return .Perspective
 }
 
-// parse_gizmos_flag looks for a bare "--gizmos" flag anywhere in argv, the
-// non-interactive way to force Library/Lights.Draw_Gizmos on for a
-// --capture run (the L key itself is skipped during --capture, same as
-// every other live input — see the do_capture guard in main()'s loop).
-// Defaults to off, matching gizmos_visible's zero value for a normal
-// interactive run before the first L press.
-parse_gizmos_flag :: proc(args: []string) -> bool {
-	for arg in args {
-		if arg == "--gizmos" do return true
-	}
-	return false
-}
-
-// parse_area_samples_flag looks for "--area-samples <N>" anywhere in argv
-// — the non-interactive way to pick a starting area-light sample count for
-// a --capture run (the +/- keys are skipped during --capture, same as
-// every other live input), specifically so an N=1-vs-N=8 comparison
-// capture pair doesn't depend on live key-hold timing. Defaults to
-// DEFAULT_AREA_LIGHT_SAMPLE_COUNT; clamps (not errors) an out-of-range
-// value to [1, MAX_AREA_LIGHT_SAMPLES] — same range the live +/- keys are
-// already clamped to, so a --capture run can't silently ask for something
-// the shader's fixed-size MAX_AREA_SAMPLES array couldn't hold anyway.
-parse_area_samples_flag :: proc(args: []string) -> int {
-	for i := 0; i < len(args); i += 1 {
-		if args[i] != "--area-samples" do continue
-
-		if i + 1 >= len(args) {
-			fmt.eprintln("--area-samples requires one argument: <N>")
-			os.exit(1)
-		}
-
-		parsed, ok := strconv.parse_int(args[i + 1])
-		if !ok {
-			fmt.eprintfln("--area-samples: expected an integer, got '%s'", args[i + 1])
-			os.exit(1)
-		}
-
-		return clamp(parsed, 1, lightspkg.MAX_AREA_LIGHT_SAMPLES)
-	}
-
-	return DEFAULT_AREA_LIGHT_SAMPLE_COUNT
-}
-
-// parse_area_jitter_flag looks for a bare "--area-jitter" flag anywhere in
-// argv, the non-interactive way to force jitter on for a --capture run —
-// same reasoning as parse_gizmos_flag above.
-parse_area_jitter_flag :: proc(args: []string) -> bool {
-	for arg in args {
-		if arg == "--area-jitter" do return true
-	}
-	return false
-}
+// [PROGRESS-DEMO] Branch-only: parse_gizmos_flag/parse_area_samples_flag/
+// parse_area_jitter_flag (all Library/Lights-derived) removed — see
+// PROGRESS-DEMO notes throughout this file.
 
 // parse_shading_flag looks for "--shading <flat|gouraud|phong>" anywhere in
 // argv — the non-interactive way to pick a starting shading mode for a
@@ -2033,33 +1872,8 @@ parse_patrol_speed_flag :: proc(args: []string) -> f32 {
 	return DEFAULT_ANIMATION_SPEED_SCALE
 }
 
-// parse_reflection_flag looks for "--reflection <on|off>" anywhere in argv
-// — the non-interactive way to pick a starting ray-traced-reflection state
-// for a --capture run (the R key is skipped during --capture, same as
-// every other live input). Defaults to DEFAULT_RAY_TRACED_REFLECTION_
-// ENABLED (on).
-parse_reflection_flag :: proc(args: []string) -> bool {
-	for i := 0; i < len(args); i += 1 {
-		if args[i] != "--reflection" do continue
-
-		if i + 1 >= len(args) {
-			fmt.eprintln("--reflection requires one argument: <on|off>")
-			os.exit(1)
-		}
-
-		switch args[i + 1] {
-		case "on":
-			return true
-		case "off":
-			return false
-		case:
-			fmt.eprintfln("--reflection: expected 'on' or 'off', got '%s'", args[i + 1])
-			os.exit(1)
-		}
-	}
-
-	return DEFAULT_RAY_TRACED_REFLECTION_ENABLED
-}
+// [PROGRESS-DEMO] Branch-only: parse_reflection_flag removed — see
+// PROGRESS-DEMO notes throughout this file.
 
 // parse_tonemapping_flag looks for "--tonemapping <on|off>" anywhere in
 // argv — the non-interactive way to pick a starting tonemapping state for a

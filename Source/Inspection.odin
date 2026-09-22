@@ -22,7 +22,6 @@ import gl "vendor:OpenGL"
 
 import cam "../Library/Camera"
 import geo "../Library/Geometry"
-import lightspkg "../Library/Lights"
 import scenepkg "../Library/Scene"
 import dbg "../Library/Engine/Debugger"
 import sd "../Library/Engine/Shader"
@@ -293,9 +292,8 @@ Print_Controls :: proc() {
 	fmt.println("  ; / '        (Inspection) Decrease / increase translate+rotate step size")
 	fmt.println("  0            (Inspection) Reset selected object to its original transform")
 	fmt.println("  Shift+0      (Inspection) Reset ALL objects to their original transforms")
-	fmt.println("  L            Toggle light gizmos")
-	fmt.println("  + / -        Increase / decrease area-light sample count")
-	fmt.println("  N            Toggle area-light per-pixel jitter")
+	// [PROGRESS-DEMO] Branch-only: light-gizmo/area-light control lines
+	// removed — see PROGRESS-DEMO notes in Source/Main.odin.
 	fmt.println("  1 / 2 / 3    Shading mode: Flat / Gouraud / Phong")
 	fmt.println("  G            Toggle ground-grid resolution")
 	fmt.println("  C            Cycle back-face culling: Off -> Manual -> GL")
@@ -303,7 +301,6 @@ Print_Controls :: proc() {
 	fmt.println("  X            Toggle depth visualisation")
 	fmt.println("  F            Toggle wireframe")
 	fmt.println("  B            Toggle back-face debug tint")
-	fmt.println("  R            Toggle ray-traced reflection (jeep windshield, tank periscope, barracks windows)")
 	fmt.println("  M            Toggle tonemapping + gamma correction")
 	fmt.println("  V            Toggle vignette")
 	fmt.println("  Y            Toggle night fog/haze")
@@ -313,155 +310,11 @@ Print_Controls :: proc() {
 	fmt.println("  Esc          Quit")
 }
 
-// ---------------------------------------------------------------------------
-// Headless test (this session's task: "script a headless sequence... that
-// selects the tank turret, rotates it, and asserts the searchlight's world
-// position changed as expected. Capture screenshots for before/after").
-// Runs entirely through REAL code paths (Compute_World_Matrices, Update_
-// From_Scene, Apply_Rotate, draw_scene_nodes, Debug.Save_Screenshot) rather
-// than a separate mock/simulation, so a pass here is genuine evidence the
-// actual hierarchy-following behaviour works, not just that this test's
-// own arithmetic is self-consistent.
-// ---------------------------------------------------------------------------
-
-INSPECTION_TEST_TURRET_ROTATION_DEGREES :: 90.0
-// A moved-but-not-nothing threshold: at the turret searchlight's own
-// offset from its pivot (Library/Lights.Build_Rig: roughly half the
-// turret's own width away), even a few degrees of rotation moves it by
-// noticeably more than this — see the run's own printed numbers for the
-// ACTUAL distance, this is just the floor for "clearly not a no-op".
-INSPECTION_TEST_MIN_MOVEMENT :: 0.05
-// How much the searchlight's OWN distance from the turret's world position
-// (its pivot) is allowed to drift — should be ~0 for a pure rotation about
-// that pivot; a real translation bug (as opposed to a rotation) would move
-// the light without preserving this distance.
-INSPECTION_TEST_MAX_RADIUS_DRIFT :: 0.01
-
-// inspection_test_render_and_capture draws one frame (real world-matrix
-// recompute, real Update_From_Scene, real draw_scene_nodes) and saves a
-// screenshot — a top-level proc (not nested in Run_Inspection_Test below)
-// specifically because Odin's `name :: proc(...) {}` proc declarations do
-// NOT close over an enclosing proc's locals; every value it needs
-// (including the test camera's own position/near/far) is an explicit
-// parameter instead.
-@(private = "file")
-inspection_test_render_and_capture :: proc(
-	window: glfw.WindowHandle,
-	shader: ^sd.Shader,
-	view, projection: la.Matrix4f32,
-	view_position: la.Vector3f32,
-	near, far: f32,
-	scene: ^scenepkg.Hierarchy,
-	light_rig: []lightspkg.Light,
-	highlighted_node: int,
-	fb_width, fb_height: int,
-	path: string,
-) {
-	gl.ClearColor(CLEAR_COLOR.x, CLEAR_COLOR.y, CLEAR_COLOR.z, CLEAR_COLOR.w); dbg.GL_Check()
-	gl.Clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT); dbg.GL_Check()
-
-	world_matrices := scenepkg.Compute_World_Matrices(scene)
-	defer delete(world_matrices)
-	lightspkg.Update_From_Scene(light_rig, world_matrices[:])
-	lightspkg.Upload(shader, light_rig)
-
-	sd.SetUniform(shader, "u_ViewPosition", view_position.x, view_position.y, view_position.z)
-	sd.SetUniform(shader, "u_AmbientColor", AMBIENT_COLOR.r, AMBIENT_COLOR.g, AMBIENT_COLOR.b)
-	sd.SetUniform(shader, "u_AmbientStrength", f32(AMBIENT_STRENGTH))
-	sd.SetUniform(shader, "u_AreaLightSampleCount", i32(DEFAULT_AREA_LIGHT_SAMPLE_COUNT))
-	sd.SetUniform(shader, "u_AreaLightJitter", i32(0))
-	sd.SetUniform(shader, "u_ShadingMode", DEFAULT_SHADING_MODE)
-	sd.SetUniform(shader, "u_CullMode", DEFAULT_CULL_MODE)
-	sd.SetUniform(shader, "u_ViewDirection", 0.0, 0.0, -1.0)
-	sd.SetUniform(shader, "u_IsOrthographic", i32(0))
-	sd.SetUniform(shader, "u_BackfaceDebug", i32(0))
-	sd.SetUniform(shader, "u_DepthVisualization", i32(0))
-	sd.SetUniform(shader, "u_Near", near)
-	sd.SetUniform(shader, "u_Far", far)
-
-	draw_scene_nodes(shader, view, projection, scene, world_matrices[:], highlighted_node, Inspection_Highlight_Pulse(0))
-
-	if err := capture.Save_Screenshot(path, fb_width, fb_height); err != nil {
-		fmt.eprintfln("FAIL: screenshot to %s failed: %v", path, err)
-		os.exit(1)
-	}
-	glfw.SwapBuffers(window)
-}
-
-// Run_Inspection_Test executes the scripted sequence and exits the process
-// with 0 (pass) or 1 (fail) — it does not return, since there is no
-// sensible "continue running normally afterward" for a test entry point.
-Run_Inspection_Test :: proc(
-	window: glfw.WindowHandle,
-	scene: ^scenepkg.Hierarchy,
-	light_rig: []lightspkg.Light,
-	shader: ^sd.Shader,
-	path_prefix: string,
-	fb_width, fb_height: int,
-) {
-	fmt.println("--- Inspection Mode headless test: rotate Tank Turret, verify searchlight moves ---")
-
-	turret_node := scenepkg.Find_Node(scene, "Tank Turret")
-	if turret_node == scenepkg.NO_PARENT {
-		fmt.eprintln("FAIL: no 'Tank Turret' node found")
-		os.exit(1)
-	}
-	searchlight_index := find_light_by_parent(light_rig, turret_node)
-	if searchlight_index < 0 {
-		fmt.eprintln("FAIL: no light parented to 'Tank Turret' found")
-		os.exit(1)
-	}
-
-	// A fixed, reproducible camera — same eye/target every run, same
-	// reasoning --capture's own reproducibility promise already relies on
-	// (CLAUDE.md §1.2), since this test's own pass/fail doesn't depend on
-	// the view but its two screenshots should still be comparable images.
-	test_camera := cam.Camera_Looking_At(CAMERA_START_EYE, SCENE_FOCUS)
-	view := cam.View_Matrix(&test_camera)
-	projection := cam.Projection_Matrix(&test_camera, f32(fb_width)/f32(fb_height))
-
-	// BEFORE: render/capture, then read the searchlight's world position
-	// and its distance from the turret's own world position (its pivot).
-	before_path := fmt.tprintf("%s_before.bmp", path_prefix)
-	inspection_test_render_and_capture(window, shader, view, projection, test_camera.position, test_camera.near, test_camera.far, scene, light_rig, turret_node, fb_width, fb_height, before_path)
-	before_world_matrices := scenepkg.Compute_World_Matrices(scene)
-	before_pivot := scenepkg.World_Position(before_world_matrices[turret_node])
-	before_position := light_rig[searchlight_index].Position
-	before_radius := la.length(before_position - before_pivot)
-	delete(before_world_matrices)
-	fmt.printfln("  Before: turret yaw=%.1f deg, searchlight world position=%v (radius from pivot %.4f)", math.to_degrees(scene.Nodes[turret_node].Local.Rotation.y), before_position, before_radius)
-
-	// ACT: rotate the turret by a fixed test angle — the SAME Apply_Rotate
-	// the interactive 4/5/6/7/8/9 keys call, not a separate code path.
-	Apply_Rotate(scene, turret_node, la.Vector3f32{0, math.to_radians(f32(INSPECTION_TEST_TURRET_ROTATION_DEGREES)), 0})
-
-	// AFTER: render/capture, then re-read the same two values.
-	after_path := fmt.tprintf("%s_after.bmp", path_prefix)
-	inspection_test_render_and_capture(window, shader, view, projection, test_camera.position, test_camera.near, test_camera.far, scene, light_rig, turret_node, fb_width, fb_height, after_path)
-	after_world_matrices := scenepkg.Compute_World_Matrices(scene)
-	after_pivot := scenepkg.World_Position(after_world_matrices[turret_node])
-	after_position := light_rig[searchlight_index].Position
-	after_radius := la.length(after_position - after_pivot)
-	delete(after_world_matrices)
-	fmt.printfln("  After:  turret yaw=%.1f deg, searchlight world position=%v (radius from pivot %.4f)", math.to_degrees(scene.Nodes[turret_node].Local.Rotation.y), after_position, after_radius)
-
-	movement := la.length(after_position - before_position)
-	radius_drift := abs(after_radius - before_radius)
-	fmt.printfln("  Searchlight moved %.4f world units; pivot-radius drift %.4f", movement, radius_drift)
-
-	passed := true
-	if movement < INSPECTION_TEST_MIN_MOVEMENT {
-		fmt.eprintfln("FAIL: searchlight moved only %.4f units (< %.4f) — rotation doesn't appear to be reaching the light", movement, f32(INSPECTION_TEST_MIN_MOVEMENT))
-		passed = false
-	}
-	if radius_drift > INSPECTION_TEST_MAX_RADIUS_DRIFT {
-		fmt.eprintfln("FAIL: distance from turret pivot drifted by %.4f (> %.4f) — moved like a translation, not a rotation about the pivot", radius_drift, f32(INSPECTION_TEST_MAX_RADIUS_DRIFT))
-		passed = false
-	}
-
-	if passed {
-		fmt.println("PASS: rotating Tank Turret moved the searchlight's world position as a rotation about the turret's own pivot, hierarchy-correct.")
-		os.exit(0)
-	}
-	os.exit(1)
-}
+// [PROGRESS-DEMO] Branch-only (progress_objects), not on main: the
+// headless "--test-inspection" turret/searchlight test that used to live
+// here (inspection_test_render_and_capture, Run_Inspection_Test) is
+// removed on this branch along with Library/Lights, since its entire
+// premise is verifying that a LIGHT tracks the turret through the
+// hierarchy — out of scope for a progress check that precedes the
+// illumination-model section. Restore by switching to main or deleting
+// this branch; the real implementation is untouched there.
