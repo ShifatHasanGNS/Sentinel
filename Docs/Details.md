@@ -108,6 +108,7 @@ transforms each frame — Patrol via pure formulas, Inspection via live
 input — never which draw call runs; both modes call the exact same
 `draw_scene_nodes` every frame. `Tab` sets `mode_switch_requested`; the
 main loop then:
+
 - Leaving Inspection for Patrol: calls `cam.Patrol_Nearest_Angle(camera.position)`
   to find the closest point on the circular patrol path from wherever
   the free camera currently is, and derives a `patrol_time_offset` so
@@ -131,9 +132,11 @@ itself keeps advancing in the background regardless of mode (only
 Knows nothing about SENTINEL's own scene/objects; pure GL plumbing.
 
 ### `Library/Engine/Debugger/Debugger.odin`
+
 **Purpose:** Wraps OpenGL's error-polling API into a panic-on-error
 assertion, plus a `Here()` stdout marker for print-debugging.
 **Key procedures:**
+
 - `GL_Clear_Errors()` — drains the GL error queue via `gl.GetError()` in
   a loop until `gl.NO_ERROR`, discarding whatever it finds.
 - `GL_Check(location := #caller_location)` — clears the queue, re-polls;
@@ -144,27 +147,31 @@ assertion, plus a `Here()` stdout marker for print-debugging.
 - `Here()` — prints a `"\n====== Here ======\n"` marker to stderr.
 - `GL_Error(error_code) -> string` (file-private) — switches over the 7
   standard GL error enums, returning the spec's own descriptive text.
-**How it connects:** Every other `Library/Engine` package calls
-`dbg.GL_Check()` immediately after nearly every `gl.*` call
-(`gl.Foo(...); dbg.GL_Check()`) — the project's only GL error-checking
-mechanism.
+  **How it connects:** Every other `Library/Engine` package calls
+  `dbg.GL_Check()` immediately after nearly every `gl.*` call
+  (`gl.Foo(...); dbg.GL_Check()`) — the project's only GL error-checking
+  mechanism.
 
 ### `Library/Engine/IndexBuffer/IndexBuffer.odin`
+
 **Purpose:** Thin wrapper around one GL element/index buffer object (EBO).
 **Key procedures:**
+
 - `IndexBuffer { RendererID: u32, Count: int }`.
 - `New(data: []u32) -> IndexBuffer` — generates + binds a buffer, uploads
   `data` via `gl.BufferData` (`gl.STATIC_DRAW`); `Count = len(data)`, so
   it can never drift from what was actually uploaded.
 - `Delete`/`Bind`/`Unbind`, `GetCount(i_buffer) -> int`.
-**How it connects:** `Library/Engine/Renderer` binds it before every
-`gl.DrawElements`; `Library/Geometry`'s `Mesh` owns one internally
-(created during `Upload`).
+  **How it connects:** `Library/Engine/Renderer` binds it before every
+  `gl.DrawElements`; `Library/Geometry`'s `Mesh` owns one internally
+  (created during `Upload`).
 
 ### `Library/Engine/Renderer/Renderer.odin`
+
 **Purpose:** Bundles one `VertexArray` + `IndexBuffer` + `Shader` triple
 and issues its draw call; also owns the global `gl.Clear`.
 **Key procedures:**
+
 - `Renderer { VertexArray: ^va.VertexArray, IndexBuffer: ^ib.IndexBuffer, Shader: ^sd.Shader }`
   — three raw pointers, no ownership of its own.
 - `New`/`Renew` — construct or re-point a `Renderer`.
@@ -174,17 +181,19 @@ and issues its draw call; also owns the global `gl.Clear`.
   missing one fails loudly instead of null-dereferencing later), binds
   VAO → IndexBuffer → Shader, then `gl.DrawElements(gl.TRIANGLES, ...)`.
 - `Clear()` — `gl.Clear(COLOR_BUFFER_BIT | DEPTH_BUFFER_BIT)`.
-**How it connects:** A known limitation: `Draw` only ever binds exactly
-ONE triple per call, no per-object uniform support. In practice
-SENTINEL's real render loop bypasses this `Draw` entirely and calls
-`Library/Geometry`'s own `Draw(mesh, shader)` per node instead (which
-does its own VAO/EBO bind); only `Clear` sees real per-frame use.
+  **How it connects:** A known limitation: `Draw` only ever binds exactly
+  ONE triple per call, no per-object uniform support. In practice
+  SENTINEL's real render loop bypasses this `Draw` entirely and calls
+  `Library/Geometry`'s own `Draw(mesh, shader)` per node instead (which
+  does its own VAO/EBO bind); only `Clear` sees real per-frame use.
 
 ### `Library/Engine/Shader/Shader.odin`
+
 **Purpose:** Compiles a combined vertex+fragment GLSL source file (split
 on `#shader vertex`/`#shader fragment` markers) into a linked GL
 program, plus a full set of typed, location-caching uniform-upload procs.
 **Key procedures:**
+
 - `Shader { FilePath: string, RendererID: u32, UniformLocationCache: map[string]i32 }`.
 - `New(shader_source_file_path) -> Shader` — resolves the path,
   `load_shaders_from` splits it into vertex/fragment source, each
@@ -210,44 +219,50 @@ program, plus a full set of typed, location-caching uniform-upload procs.
 - `compile_shader(shader_type, shader_src) -> u32` (file-private) —
   creates/uploads/compiles a shader object, checks `COMPILE_STATUS`, and
   on failure reads+panics with the GL info log.
-**How it connects:** One shared `Shader` instance, built once from
-`Shaders/Scene.glsl` in `Source/Main.odin`. `Library/Scene`'s
-`Draw_Node` and `Library/Geometry`'s `Draw` both call `SetUniform`/`Bind`
-on it every frame.
+  **How it connects:** One shared `Shader` instance, built once from
+  `Shaders/Scene.glsl` in `Source/Main.odin`. `Library/Scene`'s
+  `Draw_Node` and `Library/Geometry`'s `Draw` both call `SetUniform`/`Bind`
+  on it every frame.
 
 ### `Library/Engine/VertexArray/VertexArray.odin`
+
 **Purpose:** Wraps a GL Vertex Array Object (VAO) and describes a
 `VertexBuffer`'s memory layout to it.
 **Key procedures:**
+
 - `VertexArray { RendererID: u32 }`; `New`/`Delete`/`Bind`/`Unbind`.
 - `AddBuffer(v_array, v_buffer, layout: ^VertexBufferLayout)` — binds
   VAO then VBO; for each `layout.Elements[i]`, calls
   `gl.VertexAttribPointer(u32(i), count, type, normalized, stride, offset)`
-  + `gl.EnableVertexAttribArray(u32(i))`, advancing a running byte
-  `offset` by each element's `size` — so attribute locations are
-  assigned 0, 1, 2... in `Elements` order.
-**How it connects:** `Library/Geometry`'s `Mesh.Upload` creates one VAO,
-one VBO of `Vertex` structs, one layout (position + normal), and calls
-`AddBuffer` once to wire them together.
+  - `gl.EnableVertexAttribArray(u32(i))`, advancing a running byte
+    `offset` by each element's `size` — so attribute locations are
+    assigned 0, 1, 2... in `Elements` order.
+    **How it connects:** `Library/Geometry`'s `Mesh.Upload` creates one VAO,
+    one VBO of `Vertex` structs, one layout (position + normal), and calls
+    `AddBuffer` once to wire them together.
 
 ### `Library/Engine/VertexBuffer/VertexBuffer.odin`
+
 **Purpose:** Thin wrapper around one GL array buffer (VBO) of raw vertex
 data.
 **Key procedures:**
+
 - `VertexBuffer { RendererID: u32 }`.
 - `New(data: []$T) -> VertexBuffer` — a generic proc (Odin's `$T`
   polymorphic parameter): binds `gl.ARRAY_BUFFER`, uploads via
   `gl.BufferData(..., len(data)*size_of(T), raw_data(data), gl.STATIC_DRAW)`
   — `T` inferred from the argument, so the byte-size math is always
   correct regardless of the struct/primitive type passed.
-**How it connects:** `Mesh.Upload` calls `vb.New(mesh.Vertices[:])` to
-upload interleaved position+normal data.
+  **How it connects:** `Mesh.Upload` calls `vb.New(mesh.Vertices[:])` to
+  upload interleaved position+normal data.
 
 ### `Library/Engine/VertexBufferLayout/VertexBufferLayout.odin`
+
 **Purpose:** A CPU-side builder recording a sequence of vertex-attribute
 descriptions plus the accumulated per-vertex stride, later fed straight
 into `VertexArray.AddBuffer`'s `gl.VertexAttribPointer` calls.
 **Key procedures:**
+
 - `VertexBufferElement { type: int, count: int, normalized: bool, size: int }`
   (file-private).
 - `VertexBufferLayout { Elements: [dynamic]VertexBufferElement, Stride: int }`.
@@ -255,9 +270,9 @@ into `VertexArray.AddBuffer`'s `gl.VertexAttribPointer` calls.
   the Odin `typeid` (`i8`/`u8`/`i16`/`u16`/`i32`/`u32`/`f32`/`f64`),
   mapping each to its GL enum and byte width, appends the element, adds
   its size to the running `Stride`.
-**How it connects:** `Mesh.Upload` pushes one entry for `a_Position`
-(f32×3) and one for `a_Normal` (f32×3), matching the `Vertex` struct's
-two fields exactly.
+  **How it connects:** `Mesh.Upload` pushes one entry for `a_Position`
+  (f32×3) and one for `a_Normal` (f32×3), matching the `Vertex` struct's
+  two fields exactly.
 
 ---
 
@@ -268,6 +283,7 @@ requires (Cube, Tetrahedron, Plane), plus the combining helper
 everything else is built from.
 
 ### `Library/Geometry/Geometry.odin`
+
 **Purpose:** Generates the three legally-allowed base primitives
 procedurally at runtime, provides `Append_Mesh` as the sole mechanism
 for building every other (composite/curved-looking) shape from
@@ -275,6 +291,7 @@ instances of those three, and wraps a `Mesh`'s GL upload/draw/destroy
 lifecycle.
 
 **Mesh/Vertex data layout:**
+
 - `Vertex { Position: Vector3f32, Normal: Vector3f32 }` — no colour
   field (that lives in `Scene.Material`, applied at draw time).
 - `Mesh { Vertices: [dynamic]Vertex, Indices: [dynamic]u32, vertex_buffer, index_buffer, vertex_array, layout, uploaded: bool }`
@@ -284,6 +301,7 @@ lifecycle.
   pointers).
 
 **Key procedures:**
+
 - `Empty_Mesh() -> Mesh` — zero-value starting accumulator.
 - `Cube(width, height, depth) -> Mesh` — full (not half) dimensions,
   centered on local origin. Loops over 3 axes × 2 signs (6 faces); each
@@ -360,9 +378,11 @@ objects and every non-primitive shape from them. `Library/Scene/Transform.odin`'
 of SENTINEL-specific object names — fully theme-agnostic.
 
 ### `Library/Geometry/Geometry_test.odin`
+
 **Purpose:** Verifies winding/normal correctness and `Append_Mesh`'s
 transform behaviour for every generator (`odin test Library/Geometry`).
 **What it verifies:**
+
 - Cube: triangle normals match their own geometric winding; all normals
   point outward from `{0,0,0}`; exactly 24 vertices / 36 indices; face
   extents match the given width/height/depth exactly.
@@ -389,12 +409,14 @@ transform behaviour for every generator (`odin test Library/Geometry`).
 ## 4. `Library/Camera` — free-fly camera, projections, Patrol path
 
 ### `Library/Camera/Camera.odin`
+
 **Purpose:** Free-fly camera (Inspection Mode), perspective/orthographic
 projection matrices, and a formula-driven Patrol Mode path — everything
 needed to build a view + projection matrix each frame, with zero GLFW
 dependency (unit-testable without a window/GL context).
 
 **Key types/constants:**
+
 - `Camera { position, yaw, pitch (radians), fov_y, near, far, projection (enum), ortho_half_height, move_speed, sprint_multiplier, look_sensitivity }`.
 - `Projection_Mode` enum — `.Perspective` / `.Orthographic`.
 - `WORLD_UP = (0,1,0)`.
@@ -415,6 +437,7 @@ dependency (unit-testable without a window/GL context).
   never closes/repeats).
 
 **Key procedures:**
+
 - `Default_Camera(position) -> Camera` — facing -Z, default lens/move params.
 - `Camera_Looking_At(position, target) -> Camera` — solves starting
   yaw/pitch via `yaw_pitch_looking_at`.
@@ -477,10 +500,12 @@ only on `core:math`/`core:math/linalg` — no GLFW, Scene, or Lights
 knowledge.
 
 ### `Library/Camera/Camera_test.odin`
+
 **Purpose:** `odin test Library/Camera` — confidence checks on how this
 project USES `core:math/linalg` (empirically, not assumed from docs)
 plus correctness tests for every proc above.
 **What it verifies:**
+
 - Baseline linalg sanity: identity matrix neutral, 4×4 multiply
   associative, `matrix4_inverse` round-trips to identity, `normalize`
   produces unit length.
@@ -516,12 +541,14 @@ plus correctness tests for every proc above.
 SENTINEL-specific; built from `Library/Geometry`'s three primitives.
 
 ### `Library/Scene/Transform.odin`
+
 **Purpose:** A hand-rolled scene-graph replacement — a flat array of
 nodes with integer parent indices, local transforms, and a per-node
 material — plus the world-matrix math and the shared draw call every
 node goes through.
 
 **Key types:**
+
 - `Transform { Position: vec3, Rotation: vec3 (radians, Euler: X=pitch, Y=yaw, Z=roll), Scale: vec3 }`.
 - `Material { BaseColor: vec3, SpecularStrength: f32, Shininess: f32, EmissionColor: vec3, Reflective: bool }`
   — `EmissionColor` is for self-lit parts (glass/beacons); `Reflective`
@@ -533,6 +560,7 @@ node goes through.
   pointer wouldn't.
 
 **Key procedures:**
+
 - `Identity_Transform() -> Transform` — Position (0,0,0), Rotation
   (0,0,0), Scale (1,1,1).
 - `Local_Matrix(t) -> Matrix4f32` — `translate * (yaw * pitch * roll) * scale`;
@@ -577,6 +605,7 @@ mutate `Node.Local` directly; `Source/Patrol.odin`'s formulas write the
 same `Local.Rotation` fields for automatic animation.
 
 ### `Library/Scene/Objects.odin`
+
 **Purpose:** Builds all 9 SENTINEL scene objects — `Build_Scene() -> Hierarchy`
 calls 9 `build_*` procedures, each constructing one object's geometry
 procedurally and adding it (plus any child nodes) to the shared
@@ -585,21 +614,22 @@ hierarchy.
 **Scene layout** (all 9 are root nodes at a fixed `*_POSITION` constant;
 only 3 objects have child nodes):
 
-| # | Object | Root node | Children | Notes |
-| - | --- | --- | --- | --- |
-| 1 | Watchtower | `"Watchtower"` | `"Watchtower Floodlight Head"` | 4 legs, platform, railing ring, 4-slab pyramid roof; head is a separate child so it can rotate independently in Patrol Mode |
-| 2 | Perimeter fence + gate | `"Perimeter Fence"` | `"Perimeter Gate"` | Full rectangular loop of posts+panels via a boundary-walk formula, with a gap left for the gate |
-| 3 | Armored jeep | `"Jeep"` | `"Jeep Windshield"`, `"Jeep Headlight Left"`, `"Jeep Headlight Right"` | Body/cabin/hood/4 wheels baked into root; windshield and both headlights are explicit children |
-| 4 | Sandbag bunker | `"Sandbag Bunker"` | none | U-shaped 3-wall, 2-row stacked ring-sandbags, staggered per row |
-| 5 | Radar mast | `"Radar Mast"` | `"Radar Dish"`, `"Radar Beacon"` | Dish tilted 35°; both dish and beacon are children for independent Patrol-Mode animation |
-| 6 | Barracks hut | `"Barracks Hut"` | `"Barracks Window 1/2/3"` | Box body + 2-slab wedge roof + door baked in; 3 windows on the back wall are children (area-light geometry) |
-| 7 | Cargo crate stack | `"Cargo Crate Stack"` | none | 6 crates, size/rotation/offset varied by a deterministic function of loop index `i` |
-| 8 | Battle tank | `"Tank Hull"` | `"Tank Turret"` → `"Tank Barrel"`, `"Tank Periscope"` | **3-level chain**: Hull (root, glacis+headlights+treads+10 wheels baked in) → Turret (child, searchlight housing baked in) → Barrel and Periscope (both children of Turret) |
-| 9 | Gun emplacement | `"Gun Emplacement"` | none | Sandbag ring, 3-leg tripod, gun body+barrel, work-light post; deliberately no children, no articulation |
+| #   | Object                 | Root node             | Children                                                               | Notes                                                                                                                                                                       |
+| --- | ---------------------- | --------------------- | ---------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | Watchtower             | `"Watchtower"`        | `"Watchtower Floodlight Head"`                                         | 4 legs, platform, railing ring, 4-slab pyramid roof; head is a separate child so it can rotate independently in Patrol Mode                                                 |
+| 2   | Perimeter fence + gate | `"Perimeter Fence"`   | `"Perimeter Gate"`                                                     | Full rectangular loop of posts+panels via a boundary-walk formula, with a gap left for the gate                                                                             |
+| 3   | Armored jeep           | `"Jeep"`              | `"Jeep Windshield"`, `"Jeep Headlight Left"`, `"Jeep Headlight Right"` | Body/cabin/hood/4 wheels baked into root; windshield and both headlights are explicit children                                                                              |
+| 4   | Sandbag bunker         | `"Sandbag Bunker"`    | none                                                                   | U-shaped 3-wall, 2-row stacked ring-sandbags, staggered per row                                                                                                             |
+| 5   | Radar mast             | `"Radar Mast"`        | `"Radar Dish"`, `"Radar Beacon"`                                       | Dish tilted 35°; both dish and beacon are children for independent Patrol-Mode animation                                                                                    |
+| 6   | Barracks hut           | `"Barracks Hut"`      | `"Barracks Window 1/2/3"`                                              | Box body + 2-slab wedge roof + door baked in; 3 windows on the back wall are children (area-light geometry)                                                                 |
+| 7   | Cargo crate stack      | `"Cargo Crate Stack"` | none                                                                   | 6 crates, size/rotation/offset varied by a deterministic function of loop index `i`                                                                                         |
+| 8   | Battle tank            | `"Tank Hull"`         | `"Tank Turret"` → `"Tank Barrel"`, `"Tank Periscope"`                  | **3-level chain**: Hull (root, glacis+headlights+treads+10 wheels baked in) → Turret (child, searchlight housing baked in) → Barrel and Periscope (both children of Turret) |
+| 9   | Gun emplacement        | `"Gun Emplacement"`   | none                                                                   | Sandbag ring, 3-leg tripod, gun body+barrel, work-light post; deliberately no children, no articulation                                                                     |
 
 **Composition technique used:** Two shared ring helpers do all the
 "cylinder-like" composition, both using the box-ring-via-runtime-loop
 technique CLAUDE.md §2 item 6 requires:
+
 - `append_ring_y(dst, segment, count, radius, y_offset)` — sweeps
   `count` copies of a box `segment` around a circle of `radius` in the
   local XZ plane (rotation about Y), composed as
@@ -628,6 +658,7 @@ technique CLAUDE.md §2 item 6 requires:
   placements (legs, hoods, doors, treads, etc.).
 
 **Key procedures/constants:**
+
 - `Build_Scene() -> Hierarchy` — calls all 9 `build_*` procs in order.
 - `build_watchtower`, `build_perimeter_fence`, `build_jeep`,
   `build_bunker`, `build_radar`, `build_barracks`, `build_crate_stack`,
@@ -658,10 +689,12 @@ technique CLAUDE.md §2 item 6 requires:
 every frame for the rest of the program's life.
 
 ### `Library/Scene/Transform_test.odin`
+
 **Purpose:** Hierarchy correctness checks (`odin test Library/Scene`) —
 confirms `Compute_World_Matrices` composes parent/child transforms
 correctly through multi-level chains.
 **What it verifies:**
+
 - A root node's world position equals its own local Position.
 - A 3-level base→arm→tip chain (identity rotations) puts the tip at its
   local offset (2,0,0) in world space.
@@ -691,6 +724,7 @@ startup sequence, main loop, and mode-switching mechanism are covered in
 full in §1 above — this section covers everything else.)
 
 ### 6.1 Key package-level state (globals)
+
 - `current_mode: Mode`, `mode_switch_requested: bool`, `patrol_time_offset: f32`
 - `animation_time: f32`, `animation_paused: bool`, `animation_speed_scale: f32`
   — the one shared clock driving all Patrol animation.
@@ -713,27 +747,27 @@ full in §1 above — this section covers everything else.)
 
 ### 6.2 Input handling (`key_callback`)
 
-| Key | Effect |
-| --- | --- |
-| Esc | Close window |
-| P | Toggle perspective/orthographic |
-| 1/2/3 | Shading mode Flat/Gouraud/Phong |
-| G | Toggle ground grid resolution |
-| C | Cycle cull mode Off→Manual→GL |
-| Z | Toggle depth test |
-| X | Toggle depth visualization |
-| F | Toggle wireframe |
-| B | Toggle back-face debug tint |
-| Tab | Request mode switch |
-| Space | Pause/resume animation clock |
-| , / . | Slow/speed animation clock |
-| [ / ] | Select prev/next (Inspection) |
-| J/L, I/K, U/O | Translate local X-/X+, Z-/Z+, Y+/Y- (Inspection) |
+| Key           | Effect                                                    |
+| ------------- | --------------------------------------------------------- |
+| Esc           | Close window                                              |
+| P             | Toggle perspective/orthographic                           |
+| 1/2/3         | Shading mode Flat/Gouraud/Phong                           |
+| G             | Toggle ground grid resolution                             |
+| C             | Cycle cull mode Off→Manual→GL                             |
+| Z             | Toggle depth test                                         |
+| X             | Toggle depth visualization                                |
+| F             | Toggle wireframe                                          |
+| B             | Toggle back-face debug tint                               |
+| Tab           | Request mode switch                                       |
+| Space         | Pause/resume animation clock                              |
+| , / .         | Slow/speed animation clock                                |
+| [ / ]         | Select prev/next (Inspection)                             |
+| J/L, I/K, U/O | Translate local X-/X+, Z-/Z+, Y+/Y- (Inspection)          |
 | 4/5, 6/7, 8/9 | Rotate yaw-/yaw+, pitch-/pitch+, roll-/roll+ (Inspection) |
-| ' / ; | Increase/decrease edit step scale |
-| 0 / Shift+0 | Reset selected / reset all |
-| H | Print controls |
-| M/V/Y/T/`/` | Toggle tonemapping/vignette/fog/ground-detail/sky |
+| ' / ;         | Increase/decrease edit step scale                         |
+| 0 / Shift+0   | Reset selected / reset all                                |
+| H             | Print controls                                            |
+| M/V/Y/T/`/`   | Toggle tonemapping/vignette/fog/ground-detail/sky         |
 
 `mouse_button_callback` sets `pick_requested` on left-click;
 `scroll_callback` accumulates `scroll_delta_y`.
@@ -752,6 +786,7 @@ full in §1 above — this section covers everything else.)
 `--test-inspection` were removed with their call sites — see §6.6.
 
 ### 6.4 Render-state toggles (`apply_render_state`)
+
 - `cull_mode == CULL_OFF`: `gl.Disable(gl.CULL_FACE)`.
 - `CULL_MANUAL`: `gl.Disable(gl.CULL_FACE)` (the shader does its own
   discard instead).
@@ -818,6 +853,7 @@ windows) are excluded as not independently interesting to edit.
 named sub-node is missing (name/scene drift).
 
 **Mouse picking mechanism:** Three-stage pipeline.
+
 1. `Screen_Point_To_Ray(view, projection, ndc_x, ndc_y)` unprojects one
    NDC point through the inverse of `projection * view` at both the
    near clip plane (z=-1) and far clip plane (z=1), dividing each by
@@ -862,6 +898,7 @@ node's `Material.EmissionColor` before drawing — the stored material is
 never mutated, no second render pass or outline mesh is used.
 
 **Key procedures:**
+
 - `Build_Selectable_Nodes(scene) -> [dynamic]int` — the 12-node list
   described above.
 - `Compute_Local_AABB(mesh) -> AABB` — scans a mesh's local-space
@@ -888,10 +925,12 @@ edit-delta accumulation. `Build_Selectable_Nodes`/`Compute_Local_AABB`
 run once at startup in `Main.odin`.
 
 ### `Source/Inspection_test.odin`
+
 **Purpose:** Unit tests for the ray/AABB picking math — the one piece of
 Inspection Mode with no live interactive way to verify it (mouse
 clicking needs an actual human) and no analytic cross-check otherwise.
 **What it verifies:**
+
 - `Ray_Intersects_AABB` hits a centered unit box at the expected
   distance (t≈4 for a ray at z=5 aimed at a box spanning z=[-1,1]).
 - Correctly misses a box off to the side.
@@ -925,6 +964,7 @@ render path; only what drives node/light transforms differs, so every
 while `current_mode == .Patrol`.
 
 **Key procedures** (all `proc(t: f32) -> f32`, pure):
+
 - `Patrol_Floodlight_Sweep_Angle(t)` = `sin(t * 0.5) * (50° in rad)` —
   sine sweep, rate 0.5 rad/s, ±50° amplitude. Drives the Watchtower
   Floodlight Head's Y rotation.
@@ -990,6 +1030,7 @@ live in both places since each stage runs on different hardware and
 can't call into the other.
 
 **Vertex stage:**
+
 - Inputs: `layout(location=0) a_Position`, `layout(location=1) a_Normal`.
 - Uniforms read: `u_MVP`, `u_Model`, `u_NormalMatrix`, `u_ShadingMode`,
   `u_BaseColor`/`u_SpecularStrength`/`u_Shininess`/`u_EmissionColor`,
@@ -1008,6 +1049,7 @@ can't call into the other.
   `vec3(0.0)` to both (Phong ignores them entirely).
 
 **Fragment stage — `main()` control flow, in order:**
+
 1. `u_ObjectsOnlyMode` early-return → `FragColor = vec4(u_BaseColor, 1.0); return;`
    ([PROGRESS-DEMO], branch-only).
 2. `u_DepthVisualization` early-return → grayscale linearised depth,
@@ -1039,6 +1081,7 @@ specular is tinted by the LIGHT's colour, not the surface's own base
 colour.
 
 **Light types handled (`light_contribution` / `area_light_contribution`):**
+
 - **Directional:** `to_light = normalize(-light.direction)`, no
   distance attenuation.
 - **Point/Spot:** `attenuation = 1 / (constant + linear*d + quadratic*d²)`.
@@ -1106,6 +1149,7 @@ Fresnel-Schlick blend:
 `fresnel = base_reflectance(0.15) + (1-0.15) * pow(1 - dot(normal,-incident), 5)`.
 
 **Polish pass (ground detail, fog, vignette, tonemap, sky):**
+
 - `apply_ground_detail`: two octaves of `value_noise` (coarse `*0.12`
   scale, fine `*1.3` scale, world-space XZ), blended
   `coarse*0.65 + fine*0.35`, multiplies the ground's colour by

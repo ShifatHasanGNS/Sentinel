@@ -31,6 +31,13 @@
 !/Screenshots/
 !/Screenshots/*.png
 
+# ...and /Docs/report/latex/assets/, the screenshots the LaTeX progress
+# report (Docs/report/latex/report.tex) embeds via \includegraphics —
+# same reasoning: needed for the report to actually build/render from a
+# fresh checkout, not just on the machine that captured them.
+!/Docs/report/latex/assets/
+!/Docs/report/latex/assets/*.png
+
 # OS/editor cruft
 .DS_Store
 __MACOSX/
