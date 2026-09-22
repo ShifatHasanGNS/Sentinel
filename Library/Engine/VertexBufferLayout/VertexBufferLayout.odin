@@ -1,10 +1,3 @@
-// Package VertexBufferLayout — Library/Engine sub-package.
-// Theme-agnostic: must never know about SENTINEL-specific scene/object code.
-// Carried over from the earlier learning-project Engine.zip skeleton
-// (Requirements.md §7, CLAUDE.md §13.2). Audited: no core:math/linalg usage.
-// Push() already infers GL type/size from an Odin typeid at the call site —
-// fine as-is, unrelated to the linalg ban. Re-confirm during Session 1b.
-
 package VertexBufferLayout
 
 import "core:fmt"

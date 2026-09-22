@@ -1,9 +1,3 @@
-// Package VertexArray — Library/Engine sub-package.
-// Theme-agnostic: must never know about SENTINEL-specific scene/object code.
-// Carried over from the earlier learning-project Engine.zip skeleton
-// (Requirements.md §7, CLAUDE.md §13.2). Audited: no core:math/linalg usage,
-// looks reusable as-is. Re-confirm during Session 1b's Engine integration pass.
-
 package VertexArray
 
 import dbg "../Debugger"
@@ -33,9 +27,6 @@ Unbind :: proc() {
 	gl.BindVertexArray(0); dbg.GL_Check()
 }
 
-// Binds v_array, describes v_buffer's layout to it via VertexAttribPointer
-// calls, then unbinds everything again so this call doesn't leave global GL
-// state (which VAO/VBO is bound) hanging around for whatever code runs next.
 AddBuffer :: proc(
 	v_array: ^VertexArray,
 	v_buffer: ^vb.VertexBuffer,
@@ -43,7 +34,7 @@ AddBuffer :: proc(
 ) {
 	Bind(v_array)
 	vb.Bind(v_buffer)
-	defer Unbind() // unbind VAO last, so it's still active while VBO unbinds
+	defer Unbind()
 	defer vb.Unbind()
 
 	offset := 0
@@ -60,6 +51,6 @@ AddBuffer :: proc(
 
 		gl.EnableVertexAttribArray(u32(i)); dbg.GL_Check()
 
-		offset += element.size // Next Offset
+		offset += element.size
 	}
 }

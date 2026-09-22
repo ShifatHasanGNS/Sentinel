@@ -1,14 +1,4 @@
-// Geometry_test.odin — winding/normal correctness checks, run with
-// `odin test Library/Geometry`.
-//
-// A winding bug here would silently break back-face culling and lighting
-// later (CLAUDE.md §4), so every generator is checked the same two ways:
-//   1. Every triangle's geometric normal (cross(v1-v0, v2-v0), from its OWN
-//      winding) must match its stored normal — confirms winding and the
-//      stored normal never disagree, whatever the winding happens to be.
-//   2. For CLOSED meshes only (Cube, Tetrahedron — a Plane has no interior
-//      to point "outward" from, see Geometry.odin's Plane comment), every
-//      triangle's normal must point away from the mesh's own centre.
+// Geometry_test.odin — winding/normal correctness checks.
 package Geometry
 
 import "core:math"
@@ -35,10 +25,7 @@ test_cube_normals_point_outward :: proc(t: ^testing.T) {
 test_cube_vertex_and_triangle_counts :: proc(t: ^testing.T) {
 	mesh := Cube(2, 3, 4)
 	defer Destroy(&mesh)
-	// 6 faces x 4 duplicated corners = 24 vertices; 6 faces x 2 triangles
-	// x 3 indices = 36 indices (CLAUDE.md §2 item 8's flat-shading
-	// duplication — no vertex is shared between two differently-oriented
-	// faces).
+	// 6 faces x 4 duplicated corners = 24 vertices; 36 indices.
 	testing.expectf(t, len(mesh.Vertices) == 24, "expected 24 vertices, got %d", len(mesh.Vertices))
 	testing.expectf(t, len(mesh.Indices) == 36, "expected 36 indices, got %d", len(mesh.Indices))
 }
@@ -82,7 +69,6 @@ test_tetrahedron_normals_point_outward :: proc(t: ^testing.T) {
 test_tetrahedron_vertex_and_triangle_counts :: proc(t: ^testing.T) {
 	mesh := Tetrahedron(2)
 	defer Destroy(&mesh)
-	// 4 triangular faces x 3 duplicated corners = 12 vertices, 12 indices.
 	testing.expectf(t, len(mesh.Vertices) == 12, "expected 12 vertices, got %d", len(mesh.Vertices))
 	testing.expectf(t, len(mesh.Indices) == 12, "expected 12 indices, got %d", len(mesh.Indices))
 }
@@ -94,10 +80,6 @@ test_plane_triangle_normals_match_winding :: proc(t: ^testing.T) {
 	expect_winding_matches_normals(t, mesh)
 }
 
-// Plane's winding convention is fixed by design (see Geometry.odin), not
-// auto-oriented — checked directly here rather than via
-// expect_normals_point_outward (which needs a closed mesh with a
-// well-defined interior, which a flat Plane isn't).
 @(test)
 test_plane_faces_positive_z :: proc(t: ^testing.T) {
 	mesh := Plane(2, 3)
@@ -145,10 +127,6 @@ test_append_mesh_offsets_indices_for_second_instance :: proc(t: ^testing.T) {
 	testing.expectf(t, len(dst.Vertices) == 2 * len(src.Vertices), "expected %d vertices, got %d", 2 * len(src.Vertices), len(dst.Vertices))
 	testing.expectf(t, len(dst.Indices) == 2 * len(src.Indices), "expected %d indices, got %d", 2 * len(src.Indices), len(dst.Indices))
 
-	// The second instance's indices must point at ITS OWN copy of the
-	// vertices (offset by len(src.Vertices)), not back at the first
-	// instance's — every index in the second half must be >=
-	// len(src.Vertices).
 	second_half_start := len(src.Indices)
 	for index in dst.Indices[second_half_start:] {
 		testing.expectf(t, int(index) >= len(src.Vertices), "expected second instance's indices to be offset, got index %d", index)
@@ -170,21 +148,13 @@ test_append_mesh_translates_positions :: proc(t: ^testing.T) {
 	}
 }
 
-// Confirms Append_Mesh transforms normals by the NORMAL matrix (inverse-
-// transpose), not the raw transform: under a non-uniform scale, a naive
-// "transform the normal like a position" would tilt the normal away from
-// perpendicular-to-the-face, which is exactly the bug CLAUDE.md §5.3's
-// normal-matrix requirement exists to prevent.
 @(test)
 test_append_mesh_keeps_normals_perpendicular_under_non_uniform_scale :: proc(t: ^testing.T) {
-	src := Plane(2, 2) // flat quad, normal (0, 0, 1)
+	src := Plane(2, 2)
 	defer Destroy(&src)
 
 	dst := Empty_Mesh()
 	defer Destroy(&dst)
-	// A non-uniform scale entirely WITHIN the plane's own surface (x and y,
-	// leaving z alone) must not rotate a normal that was already
-	// perpendicular to that surface — it should stay exactly (0, 0, 1).
 	Append_Mesh(&dst, src, la.matrix4_scale(la.Vector3f32{1, 5, 1}))
 
 	for vertex in dst.Vertices {
@@ -194,23 +164,17 @@ test_append_mesh_keeps_normals_perpendicular_under_non_uniform_scale :: proc(t: 
 
 @(test)
 test_append_mesh_rotates_normals :: proc(t: ^testing.T) {
-	src := Plane(2, 2) // flat quad, normal (0, 0, 1)
+	src := Plane(2, 2)
 	defer Destroy(&src)
 
 	dst := Empty_Mesh()
 	defer Destroy(&dst)
-	// +90 degrees about +Y sends +Z -> +X (the same rotation direction
-	// already confirmed in Library/Camera/Camera_test.odin).
 	Append_Mesh(&dst, src, la.matrix4_rotate(math.to_radians(f32(90)), la.Vector3f32{0, 1, 0}))
 
 	for vertex in dst.Vertices {
 		expect_vector3_near(t, vertex.Normal, la.Vector3f32{1, 0, 0})
 	}
 }
-
-// ---------------------------------------------------------------------------
-// Shared verification helpers, used by every generator's tests above.
-// ---------------------------------------------------------------------------
 
 @(private = "file")
 expect_winding_matches_normals :: proc(t: ^testing.T, mesh: Mesh, loc := #caller_location) {

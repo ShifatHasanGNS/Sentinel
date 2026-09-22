@@ -1,15 +1,3 @@
-// Package Shader — Library/Engine sub-package.
-// Theme-agnostic: must never know about SENTINEL-specific scene/object code.
-// Carried over from the earlier learning-project Engine.zip skeleton
-// (Requirements.md §7, CLAUDE.md §13.2).
-//
-// core:math/linalg IS ALLOWED in this project (CLAUDE.md §2 item 3,
-// updated — previously banned). SetUniformMatrix2f32/3f32/4f32 below take
-// `core:math/linalg` matrix types (la.Matrix2f32/3f32/4f32) and call
-// la.to_ptr(mat) exactly as provided in the original Engine.zip skeleton —
-// this is now the intended usage, not a conflict. No rework needed; use
-// these procs directly once a Shader is compiled.
-
 package Shader
 
 import dbg "../Debugger"
@@ -244,7 +232,6 @@ load_shaders_from :: proc(shader_file_src: string) -> (vert_src: string, frag_sr
 		FRAGMENT,
 	}
 
-	// Read the actual file specified by the parameter
 	data, error := os.read_entire_file(shader_file_src, context.allocator)
 	defer delete(data)
 	if error != nil {log.warnf("Failed to read file: %s", shader_file_src); return "", ""}
@@ -253,7 +240,6 @@ load_shaders_from :: proc(shader_file_src: string) -> (vert_src: string, frag_sr
 	lines := strings.split(content, "\n")
 	defer delete(lines)
 
-	// Use string builders for efficient concatenation
 	vert_builder: strings.Builder
 	frag_builder: strings.Builder
 	defer strings.builder_destroy(&vert_builder)
@@ -266,19 +252,16 @@ load_shaders_from :: proc(shader_file_src: string) -> (vert_src: string, frag_sr
 	for line in lines {
 		trimmed := strings.trim_space(line)
 
-		// Skip empty lines and comments
 		if len(trimmed) == 0 || strings.has_prefix(trimmed, "//") {
 			continue
 		}
 
-		// Handle version directive
 		if strings.has_prefix(trimmed, "#version") && !version_added {
 			version_line = strings.concatenate({trimmed, "\n"})
 			version_added = true
 			continue
 		}
 
-		// Handle shader type directives
 		if strings.has_prefix(trimmed, "#shader vertex") {
 			current_shader = ShaderType.VERTEX
 			continue
@@ -287,7 +270,6 @@ load_shaders_from :: proc(shader_file_src: string) -> (vert_src: string, frag_sr
 			continue
 		}
 
-		// Add line to appropriate shader
 		switch current_shader {
 		case .VERTEX:
 			strings.write_string(&vert_builder, trimmed)
@@ -296,11 +278,9 @@ load_shaders_from :: proc(shader_file_src: string) -> (vert_src: string, frag_sr
 			strings.write_string(&frag_builder, trimmed)
 			strings.write_string(&frag_builder, "\n")
 		case .NONE:
-		// Ignore lines before any shader directive
 		}
 	}
 
-	// Build final shader sources with version prepended
 	vert_content := strings.to_string(vert_builder)
 	frag_content := strings.to_string(frag_builder)
 
@@ -311,7 +291,6 @@ load_shaders_from :: proc(shader_file_src: string) -> (vert_src: string, frag_sr
 		frag_src = strings.concatenate({version_line, frag_content})
 	}
 
-	// Clean up version_line if it was allocated
 	if version_added do delete(version_line)
 
 	return vert_src, frag_src

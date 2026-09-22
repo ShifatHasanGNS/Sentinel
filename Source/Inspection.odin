@@ -1,15 +1,4 @@
-// Inspection.odin — Inspection Mode's selection, mouse-picking, and
-// translate/rotate editing (roadmap step 10, CLAUDE.md §7/§9; Prompts.md
-// Session 13). Source/Main.odin's file header has anticipated a dedicated
-// file for this since Session 11 ("GLFW key/mouse callbacks, object
-// selection... added once Inspection Mode exists") — this is that file,
-// following the same split Source/Patrol.odin established last session:
-// every proc here is either a PURE function (AABB/ray math, the highlight
-// colour blend) or an explicit-parameter mutator (Apply_Translate/
-// Apply_Rotate/Reset_Node) — nothing reaches into package-level state
-// directly except the few read-only constants below, so the SAME procs
-// are usable from both the interactive main loop and the headless test
-// routine at the bottom of this file without duplicating any logic.
+// Inspection Mode: selection, mouse picking, translate/rotate editing.
 package main
 
 import "core:fmt"
@@ -27,23 +16,8 @@ import dbg "../Library/Engine/Debugger"
 import sd "../Library/Engine/Shader"
 import capture "../Debug"
 
-// The 3 independently-movable SUB-nodes this session's task explicitly
-// names beyond the 9 root objects ("tank hull, tank turret, tower
-// floodlight head, radar dish, jeep, etc." — tank hull/jeep are already
-// root objects, so the genuinely NEW additions are these three). Not an
-// open-ended "every child node is selectable" list: the other child nodes
-// (jeep/tank headlights, tank barrel/periscope, barracks windows) aren't
-// independently interesting to translate/rotate for a demo, and CLAUDE.md
-// §5.3's required hierarchy-verification chains (tower, jeep, tank
-// hull->turret) are already fully covered by root Tank Hull + this list's
-// Tank Turret and Watchtower Floodlight Head.
 SELECTABLE_SUB_NODE_NAMES :: [3]string{"Tank Turret", "Watchtower Floodlight Head", "Radar Dish"}
 
-// Build_Selectable_Nodes returns every selectable Scene node index: the 9
-// root objects in their Build_Scene order, then the 3 named sub-nodes
-// above, in that fixed order — `[`/`]` cycle through this list, not
-// scene.Nodes directly (which also includes non-selectable children like
-// headlight housings and barracks windows).
 Build_Selectable_Nodes :: proc(scene: ^scenepkg.Hierarchy) -> [dynamic]int {
 	selectable := make([dynamic]int, 0, 12)
 
@@ -61,33 +35,13 @@ Build_Selectable_Nodes :: proc(scene: ^scenepkg.Hierarchy) -> [dynamic]int {
 	return selectable
 }
 
-// ---------------------------------------------------------------------------
-// Highlighting the selected node — a material EMISSION tint blended in at
-// draw time, through the exact same Scene.Draw_Node path every other mesh
-// already uses (this session's task: "highlighted (tint or outline drawn
-// by the same render path)"). No shader change, no second pass, no
-// outline mesh: draw_scene_nodes below just hands Draw_Node a temporarily
-// brightened COPY of the selected node's own Material for one draw call,
-// never mutating the node's stored Material itself.
-// ---------------------------------------------------------------------------
-
 INSPECTION_HIGHLIGHT_COLOR :: la.Vector3f32{0.7, 1.0, 1.0}
 INSPECTION_HIGHLIGHT_PULSE_RATE :: 3.0 // rad/s, argument to sin()
 
-// Inspection_Highlight_Pulse returns a [0, 1] pulsing factor for the
-// selected-node tint — a gentle breathing highlight (CLAUDE.md §2 item 5:
-// a runtime formula, not a static tint) so the selection reads clearly
-// even against an already-bright material, and keeps drawing the eye back
-// to it during a long editing session.
 Inspection_Highlight_Pulse :: proc(t: f32) -> f32 {
 	return 0.5 + 0.5*math.sin(t*INSPECTION_HIGHLIGHT_PULSE_RATE)
 }
 
-// draw_scene_nodes draws every node in `scene`, applying the highlight
-// tint to exactly ONE (`highlighted_node`, or -1 for none) — factored out
-// so the interactive main loop and Run_Inspection_Test below share this
-// one drawing path instead of two copies of the same highlight logic
-// (craft: don't duplicate logic).
 draw_scene_nodes :: proc(shader: ^sd.Shader, view, projection: la.Matrix4f32, scene: ^scenepkg.Hierarchy, world_matrices: []la.Matrix4f32, highlighted_node: int, highlight_pulse: f32) {
 	for &node, i in scene.Nodes {
 		model := world_matrices[i]
@@ -99,23 +53,14 @@ draw_scene_nodes :: proc(shader: ^sd.Shader, view, projection: la.Matrix4f32, sc
 	}
 }
 
-// ---------------------------------------------------------------------------
-// Translate / rotate / reset — all operate on the node's LOCAL transform
-// (this session's task, verbatim: "so children follow and attached lights
-// follow automatically" — Scene.Compute_World_Matrices already composes
-// world = parent_world * local every frame, and Library/Lights.Update_
-// From_Scene already re-derives every light's world position/direction
-// from its parent's CURRENT world matrix every frame, CLAUDE.md §2 item
-// 10 — so editing a LOCAL transform is the entire mechanism; nothing else
-// needs to know an edit happened).
-// ---------------------------------------------------------------------------
+// Translate/rotate/reset act on the node's LOCAL transform, so children and attached lights follow automatically.
 
 BASE_TRANSLATE_STEP :: 0.25 // world units per key press, before edit_step_scale
 BASE_ROTATE_STEP_DEGREES :: 5.0 // degrees per key press, before edit_step_scale
 
 EDIT_STEP_MIN_SCALE :: 0.2
 EDIT_STEP_MAX_SCALE :: 5.0
-EDIT_STEP_FACTOR :: 1.25 // multiplicative per `;`/`'` press, same convention Patrol's speed keys use
+EDIT_STEP_FACTOR :: 1.25 // multiplicative per press
 
 Apply_Translate :: proc(scene: ^scenepkg.Hierarchy, node_index: int, local_delta: la.Vector3f32) {
 	scene.Nodes[node_index].Local.Position += local_delta
@@ -129,25 +74,11 @@ Reset_Node :: proc(scene: ^scenepkg.Hierarchy, node_index: int, original: scenep
 	scene.Nodes[node_index].Local = original
 }
 
-// ---------------------------------------------------------------------------
-// Mouse picking (this session's task: "ray from the cursor through the
-// inverse projection/view, tested against bounding spheres/boxes" — a good
-// place to show off inverse projection). Implemented for real, not
-// skipped, but with one deliberate, documented adaptation: SEE
-// Screen_Point_To_Ray's own comment on why the "cursor" here is the
-// viewport CENTRE, not GLFW's live cursor position.
-// ---------------------------------------------------------------------------
-
 AABB :: struct {
 	Min, Max: [3]f32,
 }
 
-// Compute_Local_AABB scans a mesh's own LOCAL-space vertices once (at
-// startup, per selectable node — not per frame) for its axis-aligned
-// bounding box. Plain [3]f32 rather than la.Vector3f32 specifically so
-// Ray_Intersects_AABB below can loop over axes with `[i]` indexing, which
-// this project's other code never needed to rely on la.Vector3f32
-// supporting.
+// Local-space AABB, computed once per selectable node.
 Compute_Local_AABB :: proc(mesh: ^geo.Mesh) -> AABB {
 	box := AABB{Min = {1e30, 1e30, 1e30}, Max = {-1e30, -1e30, -1e30}}
 	for v in mesh.Vertices {
@@ -161,10 +92,7 @@ Compute_Local_AABB :: proc(mesh: ^geo.Mesh) -> AABB {
 	return box
 }
 
-// Ray_Intersects_AABB is the standard slab method: shrink [t_min, t_max]
-// against each axis's pair of planes in turn, empty means no hit. Returns
-// the nearest non-negative hit distance `t` (so a ray starting INSIDE the
-// box still reports a sane t=0-ish hit, not the far exit point).
+// Slab method; returns nearest non-negative hit t.
 Ray_Intersects_AABB :: proc(ray_origin, ray_direction: la.Vector3f32, box: AABB) -> (t: f32, hit: bool) {
 	origin := [3]f32{ray_origin.x, ray_origin.y, ray_origin.z}
 	dir := [3]f32{ray_direction.x, ray_direction.y, ray_direction.z}
@@ -173,8 +101,7 @@ Ray_Intersects_AABB :: proc(ray_origin, ray_direction: la.Vector3f32, box: AABB)
 	t_max := f32(1e30)
 	for axis in 0 ..< 3 {
 		if abs(dir[axis]) < 1e-8 {
-			// Ray parallel to this axis's slab: either always inside it
-			// (origin within [min, max]) or never hits the box at all.
+			// parallel to axis: inside range, or no hit
 			if origin[axis] < box.Min[axis] || origin[axis] > box.Max[axis] do return 0, false
 			continue
 		}
@@ -189,33 +116,13 @@ Ray_Intersects_AABB :: proc(ray_origin, ray_direction: la.Vector3f32, box: AABB)
 		if t_min > t_max do return 0, false
 	}
 
-	if t_max < 0 do return 0, false // whole box is behind the ray
+	if t_max < 0 do return 0, false // box is behind the ray
 	return t_min if t_min >= 0 else t_max, true
 }
 
-// Screen_Point_To_Ray unprojects one NDC point (x, y both in [-1, 1])
-// through the INVERSE of view*projection, at both the near and far planes,
-// and returns the world-space ray between them — the literal "ray from the
-// cursor through the inverse projection/view" this session's task asks
-// for, and correct for BOTH projections without a special case: in
-// perspective every ray's ORIGIN differs slightly per pixel (converging
-// toward the eye, not literally AT it) and points outward; in orthographic
-// every ray is parallel but each has its OWN origin on the near plane —
-// unprojecting the actual near point (rather than assuming camera.position
-// as a shared origin) handles both automatically.
-//
-// The "cursor" fed into this is the viewport CENTRE, not GLFW's live
-// cursor position — a deliberate adaptation, not a shortcut: Inspection
-// Mode's free-fly camera runs with the cursor in glfw.CURSOR_DISABLED mode
-// (Source/Main.odin, unchanged since Session 2) so mouse movement can
-// drive unbounded look deltas; GLFW's own docs state the position reported
-// in that mode is a virtual accumulator, not a real on-screen pixel
-// coordinate, so unprojecting it would pick whatever's under a
-// meaningless, unbounded number, not whatever's visually under the cursor.
-// A viewport-centre "crosshair" pick — aim the camera at the object, left-
-// click to select it — sidesteps that entirely using the EXACT SAME ray
-// math a true cursor-position pick would use, and is a standard, honest
-// convention for exactly this kind of FPS-style captured-cursor camera.
+// Unprojects NDC (near/far) through the inverse of view*projection. Uses the viewport CENTRE, not the
+// live cursor: Inspection's free-fly camera runs with CURSOR_DISABLED, whose reported position is a
+// virtual accumulator, not a real pixel — so a centre-crosshair pick is used instead.
 Screen_Point_To_Ray :: proc(view, projection: la.Matrix4f32, ndc_x, ndc_y: f32) -> (origin, direction: la.Vector3f32) {
 	inverse_view_projection := la.matrix4_inverse(la.mul(projection, view))
 
@@ -233,11 +140,7 @@ Screen_Point_To_Ray :: proc(view, projection: la.Matrix4f32, ndc_x, ndc_y: f32) 
 	return
 }
 
-// Pick_Node casts one ray against every selectable node's world-space AABB
-// (its LOCAL-space box transformed by taking the ray into LOCAL space via
-// the node's own inverse world matrix, rather than transforming 8 box
-// corners into world space every call) and returns the index INTO
-// `selectable` of the NEAREST hit, or -1 if the ray hits nothing.
+// Nearest AABB hit among `selectable`, or -1.
 Pick_Node :: proc(world_matrices: []la.Matrix4f32, selectable: []int, local_aabbs: []AABB, ray_origin, ray_direction: la.Vector3f32) -> int {
 	best_index := -1
 	best_t := f32(1e30)
@@ -260,15 +163,6 @@ Pick_Node :: proc(world_matrices: []la.Matrix4f32, selectable: []int, local_aabb
 
 	return best_index
 }
-
-// ---------------------------------------------------------------------------
-// Printed key list (this session's task: "a help overlay OR printed key
-// list (H)" — this project has no text-rendering pipeline to draw an
-// overlay with, same reasoning Session 10/11's window-title toggles
-// already established, so the printed-list fallback is the honest choice,
-// not a shortcut). Also printed once at startup, unconditionally, so a
-// fresh run always shows the controls without needing an H press first.
-// ---------------------------------------------------------------------------
 
 Print_Controls :: proc() {
 	fmt.println("--- SENTINEL controls (H to reprint) ---")

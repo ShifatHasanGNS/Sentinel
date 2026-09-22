@@ -1,11 +1,4 @@
-// Inspection_test.odin — unit tests for Source/Inspection.odin's ray/AABB
-// picking math, run with `odin test Source`. This is the one piece of this
-// session's work with no live interactive way to verify it (mouse clicking
-// requires an actual human at an actual window) and no analytic-formula
-// cross-check the way the searchlight-rotation headless test has — so it
-// gets real, isolated unit tests instead, the same "don't just trust the
-// math, check it" standard Library/Camera/Camera_test.odin already holds
-// the rest of this project's geometry to.
+// Unit tests for Inspection.odin's ray/AABB picking math.
 package main
 
 import "core:math"
@@ -58,11 +51,6 @@ test_ray_intersects_aabb_ignores_box_behind_the_ray :: proc(t: ^testing.T) {
 	testing.expect(t, !hit, "expected no hit for a box entirely behind the ray's direction")
 }
 
-// Confirms Screen_Point_To_Ray's own documented claim: for a camera facing
-// -Z at the origin, the screen-centre ray (NDC 0,0) must point straight
-// down -Z, matching Library/Camera.Camera's own Forward at yaw=pitch=0 —
-// the same "known configuration, known answer" standard Camera_test.odin
-// already uses throughout.
 @(test)
 test_screen_point_to_ray_centre_matches_camera_forward :: proc(t: ^testing.T) {
 	test_camera := cam.Default_Camera(la.Vector3f32{0, 0, 5})
@@ -75,10 +63,6 @@ test_screen_point_to_ray_centre_matches_camera_forward :: proc(t: ^testing.T) {
 	testing.expectf(t, math.abs(origin.x) <= EPSILON && math.abs(origin.y) <= EPSILON, "expected the near point to be on the camera's own forward axis (x~=0, y~=0), got %v", origin)
 }
 
-// An end-to-end sanity check of the whole picking pipeline: a camera at
-// the origin facing -Z, two boxes at different depths directly ahead —
-// Pick_Node must return the NEARER one, not just "a" hit, and a ray aimed
-// off to the side must return -1 (nothing).
 @(test)
 test_pick_node_returns_nearest_hit :: proc(t: ^testing.T) {
 	test_camera := cam.Default_Camera(la.Vector3f32{0, 0, 0})
