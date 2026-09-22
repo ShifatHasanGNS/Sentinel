@@ -346,6 +346,12 @@ TRIANGLE_COUNT_DEMO_OBJECT :: "Watchtower"
 GROUND_GRID_LOW_RESOLUTION :: 1
 GROUND_GRID_HIGH_RESOLUTION :: 24
 
+// Roadmap step 10 (CLAUDE.md §7/§9, Prompts.md Session 13): Inspection
+// Mode's starting translate/rotate step-size multiplier — see Source/
+// Inspection.odin's BASE_TRANSLATE_STEP/BASE_ROTATE_STEP_DEGREES for the
+// base amounts this scales.
+DEFAULT_EDIT_STEP_SCALE :: f32(1.0)
+
 main :: proc() {
 	capture_frames, capture_path, do_capture := parse_capture_flag(os.args[1:])
 	start_projection := parse_projection_flag(os.args[1:])
@@ -361,6 +367,8 @@ main :: proc() {
 	depth_visualization_enabled = parse_depth_visualization_flag(os.args[1:])
 	current_mode = parse_mode_flag(os.args[1:])
 	animation_speed_scale = parse_patrol_speed_flag(os.args[1:])
+	test_inspection_prefix, run_inspection_test := parse_test_inspection_flag(os.args[1:])
+	edit_step_scale = DEFAULT_EDIT_STEP_SCALE
 
 	if !glfw.Init() {
 		fmt.eprintln("Failed to initialize GLFW")
@@ -373,9 +381,10 @@ main :: proc() {
 	glfw.WindowHint(glfw.OPENGL_PROFILE, glfw.OPENGL_CORE_PROFILE)
 	glfw.WindowHint(glfw.OPENGL_FORWARD_COMPAT, true)
 	glfw.WindowHint(glfw.RESIZABLE, true)
-	// A capture run has no one watching the window; hiding it avoids an
-	// on-screen flash for a run that closes itself after N frames.
-	glfw.WindowHint(glfw.VISIBLE, !do_capture)
+	// A capture run (or the headless Inspection test, Source/Inspection.
+	// odin's Run_Inspection_Test) has no one watching the window; hiding it
+	// avoids an on-screen flash for a run that closes itself after N frames.
+	glfw.WindowHint(glfw.VISIBLE, !do_capture && !run_inspection_test)
 
 	// All 6 toggles build_window_title reads are already parsed above, so
 	// the FIRST title the window ever shows already reflects any --cull/
@@ -392,6 +401,7 @@ main :: proc() {
 	glfw.SwapInterval(1)
 	glfw.SetFramebufferSizeCallback(window, framebuffer_size_callback)
 	glfw.SetKeyCallback(window, key_callback)
+	glfw.SetMouseButtonCallback(window, mouse_button_callback)
 	glfw.SetScrollCallback(window, scroll_callback)
 
 	gl.load_up_to(GL_VERSION_MAJOR, GL_VERSION_MINOR, glfw.gl_set_proc_address)
@@ -415,6 +425,17 @@ main :: proc() {
 
 	scene := scenepkg.Build_Scene()
 	defer scenepkg.Destroy(&scene)
+
+	// Roadmap step 10 (reset keys, this session's task: "Reset-node and
+	// reset-all keys"): every node's LOCAL transform exactly as Build_Scene
+	// left it, captured ONCE before anything (Patrol or Inspection) ever
+	// edits it — this is the build-time rest pose reset restores, not
+	// "whatever it happened to be a moment ago".
+	original_transforms := make([]scenepkg.Transform, len(scene.Nodes))
+	defer delete(original_transforms)
+	for node, i in scene.Nodes {
+		original_transforms[i] = node.Local
+	}
 
 	object_count, node_count := 0, len(scene.Nodes)
 	for node in scene.Nodes {
@@ -510,6 +531,23 @@ main :: proc() {
 	fence_node := scenepkg.Find_Node(&scene, "Perimeter Fence")
 	fence_flicker_light_index := find_light_by_parent(light_rig[:], fence_node)
 
+	// Roadmap step 10 (this session's task): every selectable node ([/]
+	// cycles through this list — see Source/Inspection.odin's Build_
+	// Selectable_Nodes for exactly which nodes and why), plus its own
+	// LOCAL-space bounding box for mouse picking (computed once here, not
+	// per pick — a mesh's local geometry never changes after Build_Scene,
+	// only its world TRANSFORM does).
+	selectable_nodes := Build_Selectable_Nodes(&scene)
+	defer delete(selectable_nodes)
+	selectable_aabbs := make([]AABB, len(selectable_nodes))
+	defer delete(selectable_aabbs)
+	for node_index, i in selectable_nodes {
+		selectable_aabbs[i] = Compute_Local_AABB(&scene.Nodes[node_index].Mesh)
+	}
+	selected_node_name = scene.Nodes[selectable_nodes[selected_index]].Name
+	fmt.printfln("Inspection: %d selectable objects, starting selection %q ([/] to cycle, H for full controls)", len(selectable_nodes), selected_node_name)
+	Print_Controls()
+
 	gizmo_meshes := lightspkg.Build_Gizmo_Meshes()
 	defer lightspkg.Destroy_Gizmo_Meshes(&gizmo_meshes)
 
@@ -522,6 +560,18 @@ main :: proc() {
 	}
 	fmt.printfln("Shader program linked: id=%d", shader.RendererID)
 	defer sd.Delete(&shader)
+
+	// Roadmap step 10 (this session's task: "script a headless sequence...
+	// that selects the tank turret, rotates it, and asserts the
+	// searchlight's world position changed as expected"). Runs INSTEAD of
+	// the interactive loop below (Run_Inspection_Test calls os.exit itself
+	// once it has a verdict, so this never falls through) — everything it
+	// needs (scene, light_rig, shader, a real GL context) already exists at
+	// this point, and nothing after it (camera/cursor setup, the render
+	// loop) is relevant to a scripted, single-pass test.
+	if run_inspection_test {
+		Run_Inspection_Test(window, &scene, light_rig[:], &shader, test_inspection_prefix, int(fb_width), int(fb_height))
+	}
 
 	camera := cam.Camera_Looking_At(CAMERA_START_EYE, SCENE_FOCUS)
 	if start_projection == .Orthographic {
@@ -613,6 +663,60 @@ main :: proc() {
 				}
 				glfw.SetWindowTitle(window, build_window_title())
 				mode_switch_requested = false
+			}
+
+			// Roadmap step 10 (this session's task): select/translate/
+			// rotate/reset only ever apply in Inspection Mode — Patrol's
+			// own animation drivers own these same nodes while Patrol is
+			// running (CLAUDE.md §2 item 9's "only the drivers... differ"),
+			// so letting an edit key ALSO write here would fight them every
+			// frame. The `else` branch discards any request that arrived
+			// while NOT in Inspection, rather than leaving it queued — a
+			// `[` pressed mid-Patrol, then a mode switch to Inspection a
+			// minute later, should not suddenly replay a stale cycle.
+			if current_mode == .Inspection {
+				if select_prev_requested {
+					selected_index = (selected_index - 1 + len(selectable_nodes)) % len(selectable_nodes)
+					selected_node_name = scene.Nodes[selectable_nodes[selected_index]].Name
+					glfw.SetWindowTitle(window, build_window_title())
+				}
+				if select_next_requested {
+					selected_index = (selected_index + 1) % len(selectable_nodes)
+					selected_node_name = scene.Nodes[selectable_nodes[selected_index]].Name
+					glfw.SetWindowTitle(window, build_window_title())
+				}
+
+				selected_scene_node := selectable_nodes[selected_index]
+				if pending_translate_delta != (la.Vector3f32{0, 0, 0}) {
+					Apply_Translate(&scene, selected_scene_node, pending_translate_delta)
+					pending_translate_delta = {0, 0, 0}
+				}
+				if pending_rotate_delta != (la.Vector3f32{0, 0, 0}) {
+					Apply_Rotate(&scene, selected_scene_node, pending_rotate_delta)
+					pending_rotate_delta = {0, 0, 0}
+				}
+				if reset_selected_requested {
+					Reset_Node(&scene, selected_scene_node, original_transforms[selected_scene_node])
+					reset_selected_requested = false
+				}
+				if reset_all_requested {
+					for i in 0 ..< len(scene.Nodes) {
+						Reset_Node(&scene, i, original_transforms[i])
+					}
+					reset_all_requested = false
+				}
+			} else {
+				select_prev_requested = false
+				select_next_requested = false
+				pending_translate_delta = {0, 0, 0}
+				pending_rotate_delta = {0, 0, 0}
+				reset_selected_requested = false
+				reset_all_requested = false
+				// A click during Patrol should NOT fire a pick the moment
+				// the user later switches to Inspection, using whatever
+				// view happens to exist by then — discard it here, same as
+				// every other request above.
+				pick_requested = false
 			}
 		}
 
@@ -707,6 +811,26 @@ main :: proc() {
 		view := cam.View_Matrix(&camera)
 		projection := cam.Projection_Matrix(&camera, aspect)
 
+		// Roadmap step 10 (this session's task: mouse picking) — needs
+		// `view`/`projection`, so it's handled here rather than in the
+		// earlier input block above. A pick reads THIS frame's world
+		// matrices (computed fresh right below) rather than a stale set,
+		// so a pick immediately after a Patrol->Inspection switch (whose
+		// camera pose changes this same frame) still ray-casts against
+		// where objects actually are right now.
+		if !do_capture && current_mode == .Inspection && pick_requested {
+			ray_origin, ray_direction := Screen_Point_To_Ray(view, projection, 0, 0)
+			pick_world_matrices := scenepkg.Compute_World_Matrices(&scene)
+			picked := Pick_Node(pick_world_matrices[:], selectable_nodes[:], selectable_aabbs, ray_origin, ray_direction)
+			delete(pick_world_matrices)
+			if picked >= 0 {
+				selected_index = picked
+				selected_node_name = scene.Nodes[selectable_nodes[selected_index]].Name
+				glfw.SetWindowTitle(window, build_window_title())
+			}
+		}
+		pick_requested = false
+
 		// One world-matrix pass per frame, shared by every node's draw
 		// call below (Scene.Compute_World_Matrices' own comment — CLAUDE.md
 		// §5.3's "computed top-down once per frame, cache per frame"). The
@@ -757,10 +881,12 @@ main :: proc() {
 
 		scenepkg.Draw_Node(&shader, view, projection, ground_model, &ground_mesh, ground_material)
 
-		for &node, i in scene.Nodes {
-			model := world_matrices[i]
-			scenepkg.Draw_Node(&shader, view, projection, model, &node.Mesh, node.Material)
-		}
+		// Roadmap step 10 (this session's task: "highlighted (tint...drawn
+		// by the same render path)") — highlighted_node is -1 (never
+		// matches any real node index) outside Inspection Mode, so Patrol
+		// draws with no highlight at all, same as before this session.
+		highlighted_node := selectable_nodes[selected_index] if current_mode == .Inspection else -1
+		draw_scene_nodes(&shader, view, projection, &scene, world_matrices[:], highlighted_node, Inspection_Highlight_Pulse(animation_time))
 		delete(world_matrices)
 
 		if gizmos_visible {
@@ -850,6 +976,28 @@ animation_paused: bool
 animation_speed_scale: f32
 patrol_time_offset: f32
 
+// Roadmap step 10 (CLAUDE.md §7/§9, Prompts.md Session 13) Inspection Mode
+// selection/editing state. selected_index indexes INTO selectable_nodes
+// (a main()-local list — see Source/Inspection.odin's Build_Selectable_
+// Nodes), not directly into scene.Nodes; selected_node_name is a display-
+// only cache kept in sync whenever selection changes, read by
+// build_window_title (same reason MODE_NAME/SHADING_MODE_NAME etc. are
+// plain package vars: build_window_title is called from key_callback,
+// which has no access to main()'s local `scene`). Every *_requested/
+// pending_* below follows the SAME "callback sets it, main loop consumes
+// and clears it" pattern this file already uses for projection_toggle_
+// requested and friends.
+selected_index: int
+selected_node_name: string
+select_next_requested: bool
+select_prev_requested: bool
+pick_requested: bool
+pending_translate_delta: la.Vector3f32
+pending_rotate_delta: la.Vector3f32
+edit_step_scale: f32
+reset_selected_requested: bool
+reset_all_requested: bool
+
 key_callback :: proc "c" (window: glfw.WindowHandle, key, scancode, action, mods: i32) {
 	// "c" calling convention procs get no implicit Odin context (unlike an
 	// ordinary proc) — build_window_title below needs one (it calls
@@ -878,7 +1026,12 @@ key_callback :: proc "c" (window: glfw.WindowHandle, key, scancode, action, mods
 	if (key == glfw.KEY_MINUS || key == glfw.KEY_KP_SUBTRACT) && action == glfw.PRESS {
 		area_light_sample_count = max(area_light_sample_count - 1, 1)
 	}
-	if key == glfw.KEY_J && action == glfw.PRESS {
+	// N, not J (roadmap step 10, Prompts.md Session 13): J is now claimed by
+	// Inspection Mode's IJKL translate cluster below (this session's task
+	// names IJKL specifically), so area-light jitter moved here — a
+	// deliberate reassignment, documented in README/PROGRESS.md, not a
+	// silent break of a Session 9 control.
+	if key == glfw.KEY_N && action == glfw.PRESS {
 		area_light_jitter = !area_light_jitter
 	}
 	if key == glfw.KEY_1 && action == glfw.PRESS {
@@ -945,6 +1098,99 @@ key_callback :: proc "c" (window: glfw.WindowHandle, key, scancode, action, mods
 		animation_speed_scale = max(animation_speed_scale/PATROL_SPEED_STEP_FACTOR, f32(PATROL_MIN_SPEED_SCALE))
 		glfw.SetWindowTitle(window, build_window_title())
 	}
+
+	// Roadmap step 10 (CLAUDE.md §7/§9, Prompts.md Session 13): Inspection
+	// Mode selection/editing. All of these only ever take effect while the
+	// main loop is actually in Inspection Mode (it discards them otherwise,
+	// see the main loop's own comment on why) — set unconditionally here so
+	// key_callback stays the simple "just flip/accumulate a var" shape
+	// every other key above already uses, with the mode check centralized
+	// in the one place that applies them (craft: push ifs up).
+	if key == glfw.KEY_LEFT_BRACKET && action == glfw.PRESS {
+		select_prev_requested = true
+	}
+	if key == glfw.KEY_RIGHT_BRACKET && action == glfw.PRESS {
+		select_next_requested = true
+	}
+	// PRESS or REPEAT (a key held down long enough fires REPEAT at the OS's
+	// own key-repeat rate) — this session's task asks for discrete "step
+	// size" stepping, not continuous WASD-style held movement, but holding
+	// a step key down to step repeatedly is still the expected feel, not a
+	// held-key CONTINUOUS drag.
+	if key == glfw.KEY_J && (action == glfw.PRESS || action == glfw.REPEAT) {
+		pending_translate_delta.x -= BASE_TRANSLATE_STEP * edit_step_scale
+	}
+	if key == glfw.KEY_L && (action == glfw.PRESS || action == glfw.REPEAT) {
+		pending_translate_delta.x += BASE_TRANSLATE_STEP * edit_step_scale
+	}
+	if key == glfw.KEY_I && (action == glfw.PRESS || action == glfw.REPEAT) {
+		pending_translate_delta.z -= BASE_TRANSLATE_STEP * edit_step_scale
+	}
+	if key == glfw.KEY_K && (action == glfw.PRESS || action == glfw.REPEAT) {
+		pending_translate_delta.z += BASE_TRANSLATE_STEP * edit_step_scale
+	}
+	if key == glfw.KEY_U && (action == glfw.PRESS || action == glfw.REPEAT) {
+		pending_translate_delta.y += BASE_TRANSLATE_STEP * edit_step_scale
+	}
+	if key == glfw.KEY_O && (action == glfw.PRESS || action == glfw.REPEAT) {
+		pending_translate_delta.y -= BASE_TRANSLATE_STEP * edit_step_scale
+	}
+	// Yaw/pitch/roll around the node's own LOCAL axes (Transform.Rotation's
+	// existing X=pitch/Y=yaw/Z=roll convention, Library/Scene/Transform.
+	// odin) — numbers rather than more letters specifically to avoid a
+	// second IJKL-style collision hunt; 1/2/3 are already shading, so 4-9
+	// were the next clean, unclaimed block.
+	rotate_step := math.to_radians(f32(BASE_ROTATE_STEP_DEGREES)) * edit_step_scale
+	if key == glfw.KEY_4 && (action == glfw.PRESS || action == glfw.REPEAT) {
+		pending_rotate_delta.y -= rotate_step
+	}
+	if key == glfw.KEY_5 && (action == glfw.PRESS || action == glfw.REPEAT) {
+		pending_rotate_delta.y += rotate_step
+	}
+	if key == glfw.KEY_6 && (action == glfw.PRESS || action == glfw.REPEAT) {
+		pending_rotate_delta.x -= rotate_step
+	}
+	if key == glfw.KEY_7 && (action == glfw.PRESS || action == glfw.REPEAT) {
+		pending_rotate_delta.x += rotate_step
+	}
+	if key == glfw.KEY_8 && (action == glfw.PRESS || action == glfw.REPEAT) {
+		pending_rotate_delta.z -= rotate_step
+	}
+	if key == glfw.KEY_9 && (action == glfw.PRESS || action == glfw.REPEAT) {
+		pending_rotate_delta.z += rotate_step
+	}
+	if key == glfw.KEY_APOSTROPHE && action == glfw.PRESS {
+		edit_step_scale = min(edit_step_scale*EDIT_STEP_FACTOR, f32(EDIT_STEP_MAX_SCALE))
+		fmt.printfln("Edit step scale: %.2fx", edit_step_scale)
+	}
+	if key == glfw.KEY_SEMICOLON && action == glfw.PRESS {
+		edit_step_scale = max(edit_step_scale/EDIT_STEP_FACTOR, f32(EDIT_STEP_MIN_SCALE))
+		fmt.printfln("Edit step scale: %.2fx", edit_step_scale)
+	}
+	// 0 resets the SELECTED node; Shift+0 resets ALL nodes — one key, mods
+	// distinguishes them, rather than needing a second dedicated key.
+	if key == glfw.KEY_0 && action == glfw.PRESS {
+		if mods & glfw.MOD_SHIFT != 0 {
+			reset_all_requested = true
+		} else {
+			reset_selected_requested = true
+		}
+	}
+	if key == glfw.KEY_H && action == glfw.PRESS {
+		Print_Controls()
+	}
+}
+
+// mouse_button_callback only ever handles the LEFT button — see Screen_
+// Point_To_Ray's own comment (Source/Inspection.odin) for why picking uses
+// the viewport centre rather than this event's own (button, mods) aren't
+// even needed beyond identifying which button. Deferred (pick_requested)
+// like every other main-loop-applied request, since picking needs `scene`/
+// `camera`/`view`/`projection`, none of which a "c" callback can reach.
+mouse_button_callback :: proc "c" (window: glfw.WindowHandle, button, action, mods: i32) {
+	if button == glfw.MOUSE_BUTTON_LEFT && action == glfw.PRESS {
+		pick_requested = true
+	}
 }
 
 // build_window_title reads every render-toggle package var (shading_mode,
@@ -965,9 +1211,16 @@ build_window_title :: proc() -> cstring {
 	// paused, rather than an always-on "Paused:Off" chunk — the title is
 	// already six toggles long, and Off is the overwhelmingly common case.
 	paused_suffix := " [Paused]" if animation_paused else ""
+	// Roadmap step 10 (this session's task: "shown in the window
+	// title/overlay"): the selected node's name only while actually in
+	// Inspection Mode — a selection persists across a mode switch (nothing
+	// asked for it to reset), but showing "Sel:X" while hands-off Patrol is
+	// running would read as if the instructor could edit something they
+	// currently can't.
+	selection_suffix := fmt.tprintf(" Sel:%s", selected_node_name) if current_mode == .Inspection else ""
 
 	return fmt.ctprintf(
-		"SENTINEL - %s - %s%s | Speed:%.2fx Cull:%s Depth:%s Wire:%s BFDbg:%s DepthVis:%s",
+		"SENTINEL - %s - %s%s | Speed:%.2fx Cull:%s Depth:%s Wire:%s BFDbg:%s DepthVis:%s%s",
 		MODE_NAME[current_mode],
 		SHADING_MODE_NAME[shading_mode],
 		paused_suffix,
@@ -977,6 +1230,7 @@ build_window_title :: proc() -> cstring {
 		wireframe_state,
 		backface_debug_state,
 		depth_visualization_state,
+		selection_suffix,
 	)
 }
 
@@ -1451,4 +1705,24 @@ parse_patrol_speed_flag :: proc(args: []string) -> f32 {
 	}
 
 	return DEFAULT_ANIMATION_SPEED_SCALE
+}
+
+// parse_test_inspection_flag looks for "--test-inspection <path-prefix>"
+// anywhere in argv — this session's required "debug CLI option" for the
+// headless rotate-the-turret-and-verify-the-searchlight-moved sequence
+// (Source/Inspection.odin's Run_Inspection_Test). `<path-prefix>_before.bmp`
+// and `<path-prefix>_after.bmp` are where the two screenshots land.
+parse_test_inspection_flag :: proc(args: []string) -> (prefix: string, requested: bool) {
+	for i := 0; i < len(args); i += 1 {
+		if args[i] != "--test-inspection" do continue
+
+		if i + 1 >= len(args) {
+			fmt.eprintln("--test-inspection requires one argument: <path-prefix>")
+			os.exit(1)
+		}
+
+		return args[i + 1], true
+	}
+
+	return "", false
 }

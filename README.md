@@ -9,8 +9,10 @@ everything else is generated at runtime.
 Implementation follows the session plan in `Prompts.md`, in order, one
 session at a time; see `PROGRESS.md` for exactly which roadmap steps are
 done. As of the current session, all 9 scene objects, the full hierarchical
-light rig (21 lights), barracks-window area-light sampling, and a live
-Flat/Gouraud/Phong shading toggle are implemented and running.
+light rig (21 lights), barracks-window area-light sampling, back-face
+culling/hidden-surface-removal demos, a formula-driven Patrol Mode, and a
+full Inspection Mode (object selection, mouse picking, translate/rotate
+editing) are implemented and running.
 
 Note: `CLAUDE.md` §8/§13 sketch `Engine/`, `Geometry/`, and `Scene/` as
 top-level siblings of `Source/`. This repo instead nests them one level
@@ -74,14 +76,13 @@ odin run Source -out:Sentinel -- --capture 5 Debug/Captures/session0.bmp
 `--capture <frames> <path>` renders that many frames, saves a screenshot,
 and exits — see `Debug/README.md`.
 
-## Modes (roadmap step 9)
+## Modes (roadmap steps 9-10)
 
 SENTINEL starts in **Patrol Mode** — a fully hands-off, formula-driven tour
 (CLAUDE.md §7's "zero input required" framing) — and `Tab` switches to
-**Inspection Mode** (free-fly camera; object select/translate/rotate arrives
-in roadmap step 10). Both modes draw through the exact same render path
-(CLAUDE.md §2 item 9); only the camera and a handful of node/light
-transforms are driven differently:
+**Inspection Mode**, the instructor's free-fly-plus-editing mode. Both modes
+draw through the exact same render path (CLAUDE.md §2 item 9); only the
+camera and a handful of node/light transforms are driven differently:
 
 - **Patrol**: the camera flies a smooth circular path around the outside of
   the perimeter fence (with a gentle height bob), always looking toward a
@@ -90,8 +91,18 @@ transforms are driven differently:
   optional "life touches" run: the tank turret slowly scans, the jeep's
   headlights dip, and one fence lamp flickers. The tank hull and jeep root
   stay static, as asked.
-- **Inspection**: the current free-fly camera (WASD/mouse/QE/Shift, `P`,
-  scroll-zoom) — unchanged from roadmap step 2.
+- **Inspection**: free-fly camera (WASD/mouse/QE/Shift, `P`, scroll-zoom,
+  unchanged from roadmap step 2) plus full object selection and editing
+  (roadmap step 10, below).
+- **Patrol's own animation drivers are frozen (not toggleable) the instant
+  you switch to Inspection** — a deliberate decision, not an oversight:
+  the floodlight/radar/beacon/turret-scan/jeep-dip/fence-flicker writes
+  are gated to `current_mode == .Patrol` in `Source/Main.odin`'s main
+  loop, so switching to Inspection simply stops writing them (they hold
+  their last value, they don't reset to a rest pose) rather than fighting
+  whatever the instructor is manually editing on the very same nodes.
+  `animation_time` itself keeps advancing in the background either way
+  (pausable only by `Space`), so resuming Patrol later doesn't feel stuck.
 - Switching **Patrol -> Inspection** keeps the camera exactly where Patrol
   left it (both modes share one Camera value, so there's nothing to hand
   off). Switching **Inspection -> Patrol** solves a phase offset so the
@@ -103,12 +114,73 @@ transforms are driven differently:
   animation (works in either mode); `,`/`.` rescale its speed
   multiplicatively (x0.8 / x1.25 per press, clamped to [0.1x, 8x]).
 
+## Inspection Mode: selection and editing (roadmap step 10)
+
+12 nodes are selectable: the 9 root objects, plus 3 independently-movable
+sub-nodes (Tank Turret, Watchtower Floodlight Head, Radar Dish) — see
+`Source/Inspection.odin`'s `Build_Selectable_Nodes`. `[`/`]` cycle through
+them; the selection also shows in the window title (`Sel:<name>`) and as a
+pulsing cyan tint on the selected node, drawn through the exact same
+`Scene.Draw_Node` path every other mesh uses (a temporarily brightened copy
+of that node's own material, not a second render pass or an outline mesh).
+
+**Mouse picking** is implemented for real — a genuine ray unprojected
+through the inverse view-projection matrix at both the near and far planes,
+tested against each selectable node's own local-space AABB (`Source/
+Inspection.odin`'s `Screen_Point_To_Ray`/`Ray_Intersects_AABB`/`Pick_Node`,
+covered by 7 unit tests in `Source/Inspection_test.odin`) — with one
+deliberate, documented adaptation: it picks whatever's at the **viewport
+centre**, not GLFW's live cursor position. Inspection's free-fly camera
+runs with the cursor in `glfw.CURSOR_DISABLED` mode for unbounded mouse-
+look, and GLFW's own docs describe the position reported in that mode as a
+virtual accumulator, not a real on-screen pixel — unprojecting it would
+pick whatever's under a meaningless number, not whatever's visually under
+the cursor. A "look at it, left-click to select it" crosshair pick uses the
+exact same ray/inverse-projection math a true cursor-position pick would,
+and is a standard convention for exactly this kind of captured-cursor
+camera.
+
+Translate/rotate operate on the selected node's **LOCAL** transform, so
+children and attached lights follow automatically — no separate "move the
+light too" step exists because `Scene.Compute_World_Matrices` and
+`Lights.Update_From_Scene` already recompute everything from local
+transforms fresh every frame (CLAUDE.md §2 item 10, §5.3). Verified with
+the tank specifically: rotating **Tank Hull** carries the turret (and
+everything on it) with it; rotating **Tank Turret** afterward moves only
+the turret, independently — both hull headlights and the turret searchlight
+track correctly through either edit (see `Source/Inspection.odin`'s
+headless test, and the `--test-inspection` section below).
+
+| Key / input      | Action                                                    |
+| ---------------- | ---------------------------------------------------------- |
+| `[` / `]`         | Select previous / next object                               |
+| Left click        | Pick the object at the screen centre (see above)             |
+| `I` / `K`         | Translate selected object: local Z- / Z+                     |
+| `J` / `L`         | Translate selected object: local X- / X+                     |
+| `U` / `O`         | Translate selected object: local Y- / Y+ (up/down)            |
+| `4` / `5`         | Rotate selected object: yaw- / yaw+ (local Y axis)            |
+| `6` / `7`         | Rotate selected object: pitch- / pitch+ (local X axis)        |
+| `8` / `9`         | Rotate selected object: roll- / roll+ (local Z axis)           |
+| `;` / `'`         | Decrease / increase the translate+rotate step size (x0.8 / x1.25) |
+| `0`               | Reset the selected object to its original transform           |
+| `Shift`+`0`       | Reset **all** objects to their original transforms            |
+| `H`               | Print the full control list to the console                    |
+
+All of the above only take effect in Inspection Mode — pressed during
+Patrol, they're discarded (not queued) rather than replaying once you
+switch modes later.
+
+**A key was deliberately moved:** area-light jitter is now `N`, not `J` —
+this session's task names `IJKL` specifically for the translate cluster,
+and `J` was already claimed by Session 9's jitter toggle. Reassigned, not
+silently dropped; the printed control list and this table are both
+up to date.
+
 ## Controls
 
-Free-fly camera controls (roadmap step 2), Patrol/Inspection mode controls
-(roadmap step 9), and the debug/comparison toggles added through roadmap
-step 8. Object selection/translate/rotate is roadmap step 10 and will be
-added to this table then, not replace it.
+Free-fly camera, Patrol/Inspection mode, and the debug/comparison toggles
+from roadmap step 8. See the section above for the Inspection-only
+selection/editing keys.
 
 | Key / input      | Action                                                    |
 | ---------------- | ---------------------------------------------------------- |
@@ -124,7 +196,7 @@ added to this table then, not replace it.
 | Scroll wheel      | Zoom the orthographic volume (only while in orthographic projection; either mode) |
 | `L`               | Toggle light gizmos (type-coded markers + aim lines for every active light) |
 | `+` / `-` (or numpad `+`/`-`) | Increase / decrease barracks-window area-light sample count (1-8) |
-| `J`               | Toggle per-pixel jitter on area-light sampling               |
+| `N`               | Toggle per-pixel jitter on area-light sampling (moved from `J`, see above) |
 | `1` / `2` / `3`   | Shading mode: Flat / Gouraud / Phong                        |
 | `G`               | Toggle ground-grid resolution (1x1 quad vs. 24x24 subdivided grid) |
 | `C`               | Cycle back-face culling: Off -> Manual (shader test) -> GL (hardware) |
@@ -134,17 +206,19 @@ added to this table then, not replace it.
 | `B`               | Toggle a magenta tint on back-facing fragments (debug aid — see below) |
 | `Esc`             | Quit                                                         |
 
-Mode, shading mode, animation pause state/speed, and all 5 roadmap-step-8
-toggles are shown together in the window title, e.g. `SENTINEL - Patrol -
-Phong [Paused] | Speed:1.25x Cull:GL Depth:On Wire:Off BFDbg:Off
-DepthVis:Off` — this project has no on-screen text-rendering pipeline, so
-the title bar is the readout.
+Mode, selected-object name (Inspection only), shading mode, animation pause
+state/speed, and all 5 roadmap-step-8 toggles are shown together in the
+window title, e.g. `SENTINEL - Inspection - Phong | Speed:1.00x Cull:GL
+Depth:On Wire:Off BFDbg:Off DepthVis:Off Sel:Tank Turret` — this project has
+no on-screen text-rendering pipeline, so the title bar (plus `H`'s printed
+list) is the readout.
 
 CLI flags for `--capture` runs (see `Debug/README.md`):
 
 | Flag                         | Effect                                                                 |
 | ----------------------------- | ----------------------------------------------------------------------- |
 | `--capture <frames> <path>`   | Render `frames` frames, save a screenshot to `path`, then exit          |
+| `--test-inspection <prefix>`  | Run the headless rotate-the-turret test (see below) instead of the normal loop |
 | `--mode <patrol\|inspection>` | Starting Mode (default `patrol`)                                        |
 | `--patrol-speed <scale>`      | Starting animation clock speed multiplier (default `1.0`)               |
 | `--projection <perspective\|orthographic>` | Starting projection mode (default `perspective`) |
@@ -160,11 +234,29 @@ CLI flags for `--capture` runs (see `Debug/README.md`):
 | `--depth-visualization`       | Start with the grayscale depth view on                                 |
 
 Interactive input (`Tab`, `Space`, `,`/`.`, mouse look, WASD/QE movement,
-`P`, scroll, `L`, `+`/`-`, `J`, `1`/`2`/`3`, `G`, `C`/`Z`/`X`/`F`/`B`) is
-intentionally disabled during a `--capture` run so captured frames stay
-reproducible regardless of the real system cursor/keyboard state — the CLI
-flags above are the supported way to change what a capture run looks like
-instead.
+`P`, scroll, `L`, `+`/`-`, `N`, `1`/`2`/`3`, `G`, `C`/`Z`/`X`/`F`/`B`, and
+every Inspection selection/editing key) is intentionally disabled during a
+`--capture` run so captured frames stay reproducible regardless of the real
+system cursor/keyboard state — the CLI flags above are the supported way to
+change what a capture run looks like instead.
+
+## Headless Inspection test (`--test-inspection`)
+
+```sh
+./Sentinel --test-inspection Debug/Captures/turret_test
+```
+
+Runs a scripted sequence through the SAME code paths the interactive
+controls use (`Apply_Rotate`, `Scene.Compute_World_Matrices`,
+`Lights.Update_From_Scene`, `draw_scene_nodes`) rather than a separate
+mock: selects Tank Turret, records the turret searchlight's world position
+and its distance from the turret's own pivot, renders `<prefix>_before.bmp`,
+rotates the turret 90 degrees about its local Y axis, re-records both
+values, renders `<prefix>_after.bmp`, and asserts two things — the
+searchlight moved by more than a small threshold (it isn't a no-op), and
+its distance from the turret's pivot barely changed (it moved like a
+rotation about that pivot, not some unrelated translation). Prints
+`PASS`/`FAIL` with the actual numbers and exits `0`/`1`.
 
 ## Back-face culling and hidden-surface removal (roadmap step 8)
 
