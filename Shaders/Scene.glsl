@@ -319,6 +319,16 @@ uniform float u_SpecularStrength;
 uniform float u_Shininess;
 uniform vec3 u_EmissionColor;
 
+// [PROGRESS-DEMO] Temporary, branch-only (`progress_objects`) toggle: when
+// true, main() below returns a fragment's own flat u_BaseColor immediately,
+// before ANY lighting, shading-mode, reflection, or polish-pass code runs
+// — a plain, unlit view of the procedural geometry/transforms only, for a
+// progress check that precedes the illumination-model section of the
+// syllabus. Not present on `main`; delete this whole branch to remove it
+// rather than trying to hand-revert it. See Source/Main.odin's
+// DEFAULT_OBJECTS_ONLY_MODE for where this is forced on.
+uniform bool u_ObjectsOnlyMode;
+
 uniform vec3 u_ViewPosition;
 
 // Global ambient term — a single scene-wide approximation of indirect/
@@ -1092,6 +1102,17 @@ vec3 sky_color(vec3 direction, float time) {
 }
 
 void main() {
+	// [PROGRESS-DEMO] Branch-only early exit — see u_ObjectsOnlyMode's own
+	// comment above. Deliberately the VERY FIRST thing in main(), before
+	// even u_DepthVisualization: nothing below this line (lighting, shading
+	// mode, ray-traced reflection, ground/fog/vignette/sky/tonemap) ever
+	// runs while this is on, which is the whole point — a flat, unlit view
+	// of whatever geometry/transforms the rest of the pipeline produced.
+	if (u_ObjectsOnlyMode) {
+		FragColor = vec4(u_BaseColor, 1.0);
+		return;
+	}
+
 	// Item 3: an alternate full-screen debug view — grayscale linearised
 	// depth instead of lit colour. Checked FIRST, even before the sky dome
 	// branch right below: this is a diagnostic about THIS FRAGMENT's own

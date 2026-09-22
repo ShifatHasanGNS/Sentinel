@@ -373,6 +373,19 @@ DEFAULT_FOG_ENABLED :: true
 DEFAULT_GROUND_DETAIL_ENABLED :: true
 DEFAULT_SKY_ENABLED :: true
 
+// [PROGRESS-DEMO] Branch-only (`progress_objects`), not present on `main`.
+// Forces Shaders/Scene.glsl's u_ObjectsOnlyMode uniform on, which makes
+// main() there return a fragment's own flat u_BaseColor immediately,
+// before lighting/shading-mode/reflection/polish code ever runs — every
+// toggle ABOVE this line (reflection, tonemapping, vignette, fog, ground
+// detail, sky) still gets its normal default and still gets uploaded each
+// frame exactly as on `main`, it's just that the shader never reaches the
+// code that would read most of them. Nothing here was removed or
+// commented out (this session's own instruction) — this one constant is
+// the entire change on the Odin side; delete the `progress_objects`
+// branch to remove it rather than hand-reverting.
+DEFAULT_OBJECTS_ONLY_MODE :: true
+
 // Sky dome full size (Geometry.Cube takes full width/height/depth, not a
 // half-size). Must stay well inside the Camera's own far plane (Library/
 // Camera.DEFAULT_FAR = 100) even measured from a CUBE CORNER — the
@@ -416,6 +429,8 @@ main :: proc() {
 	fog_enabled = parse_fog_flag(os.args[1:])
 	ground_detail_enabled = parse_ground_detail_flag(os.args[1:])
 	sky_enabled = parse_sky_flag(os.args[1:])
+	// [PROGRESS-DEMO] Branch-only — see DEFAULT_OBJECTS_ONLY_MODE's comment.
+	objects_only_mode = DEFAULT_OBJECTS_ONLY_MODE
 	benchmark_frames, do_benchmark := parse_benchmark_flag(os.args[1:])
 	msaa_samples := parse_msaa_flag(os.args[1:])
 
@@ -1031,6 +1046,14 @@ main :: proc() {
 		sd.SetUniform(&shader, "u_RayTracedReflectionEnabled", reflection_enabled_value)
 		sd.SetUniform(&shader, "u_SkyColor", CLEAR_COLOR.x, CLEAR_COLOR.y, CLEAR_COLOR.z)
 
+		// [PROGRESS-DEMO] Branch-only — see DEFAULT_OBJECTS_ONLY_MODE's own
+		// comment. Uploaded before the polish-pass uniforms below on
+		// purpose (no functional reason, just groups "the one flag that
+		// matters most for this branch" first).
+		objects_only_mode_value: i32 = 0
+		if objects_only_mode do objects_only_mode_value = 1
+		sd.SetUniform(&shader, "u_ObjectsOnlyMode", objects_only_mode_value)
+
 		// Polish pass (Prompts.md, post-Session-14): uniforms every fragment
 		// reads regardless of what it's shading — see each one's own
 		// comment in Shaders/Scene.glsl for what it does.
@@ -1240,6 +1263,9 @@ vignette_enabled: bool
 fog_enabled: bool
 ground_detail_enabled: bool
 sky_enabled: bool
+
+// [PROGRESS-DEMO] Branch-only, see DEFAULT_OBJECTS_ONLY_MODE's own comment.
+objects_only_mode: bool
 
 // fps_display_value is the last computed rolling-average FPS (updated at
 // most every FPS_DISPLAY_UPDATE_INTERVAL, main loop); fps_display_accum_*
