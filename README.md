@@ -171,7 +171,10 @@ normals every other object uses. That's expected, not a bug: a per-fragment
 but not identical measurements, and they can disagree by a pixel right at a
 smoothly-curved silhouette edge where the interpolated normal doesn't quite
 match the true triangle plane. On every flat-faced object in the scene the
-two methods are exact.
+two methods are exact. Re-verified the same way under `--projection
+orthographic` specifically (direction-to-eye uses a different, constant-
+per-screen formula there — see below): same story, same object, same
+~0.03% of pixels.
 
 **Debug view (`B`, `--backface-debug`):** independent of `C`, tints a
 back-facing fragment magenta instead of its normal shaded colour. Most
