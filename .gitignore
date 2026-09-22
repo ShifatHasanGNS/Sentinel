@@ -20,6 +20,17 @@
 *.ppm
 *.bmp
 
+# ...except /Screenshots/, a small, deliberately curated set of PNGs
+# README.md embeds (project overview, session 16 task: "screenshots
+# (generate with the capture flag)") — unlike Debug/Captures' hundreds of
+# session-by-session verification shots, these ARE part of the graded
+# deliverable: a fresh git clone needs them present for the README to
+# actually render, so the blanket *.png rule above needs an explicit
+# exception here rather than silently leaving the README's images broken
+# for anyone but the machine that generated them.
+!/Screenshots/
+!/Screenshots/*.png
+
 # OS/editor cruft
 .DS_Store
 __MACOSX/
