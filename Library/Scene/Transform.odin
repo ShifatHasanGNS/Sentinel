@@ -78,11 +78,23 @@ Local_Matrix :: proc(t: Transform) -> la.Matrix4f32 {
 // so shapes read with some depth/highlight now, sized to be trivially
 // replaced rather than extended when step 4 arrives. See Shaders/Scene.glsl
 // for the one hardcoded directional light it's shaded against.
+//
+// Reflective (roadmap step 11, CLAUDE.md §6.2, Prompts.md Session 14):
+// marks a node's surface as one of this project's genuinely ray-traced
+// reflective surfaces (the jeep windshield, tank periscope, and the 3
+// barracks windows — Source/Reflection.odin's REFLECTIVE_NODE_NAMES). Not
+// set by Objects.odin at build time — Source/Main.odin flips it on the
+// already-built Scene's own Node.Material by NAME lookup, the same
+// "Source decides which named nodes get a Session-specific behaviour,
+// Library/Scene stays theme-agnostic about WHY" split Patrol/Inspection's
+// node lookups already established. Defaults false, so every existing
+// Default_Material/MATERIAL_* call site needs no change.
 Material :: struct {
 	BaseColor:        la.Vector3f32,
 	SpecularStrength: f32,
 	Shininess:        f32,
 	EmissionColor:    la.Vector3f32,
+	Reflective:       bool,
 }
 
 // Default_Material is a non-emissive, moderately glossy material — the
@@ -234,5 +246,8 @@ Draw_Node :: proc(shader: ^sd.Shader, view, projection, model: la.Matrix4f32, me
 	sd.SetUniform(shader, "u_SpecularStrength", material.SpecularStrength)
 	sd.SetUniform(shader, "u_Shininess", material.Shininess)
 	sd.SetUniform(shader, "u_EmissionColor", material.EmissionColor.r, material.EmissionColor.g, material.EmissionColor.b)
+	reflective_value: i32 = 0
+	if material.Reflective do reflective_value = 1
+	sd.SetUniform(shader, "u_IsReflectiveSurface", reflective_value)
 	geo.Draw(mesh, shader)
 }

@@ -899,11 +899,23 @@ build_tank :: proc(h: ^Hierarchy) {
 	barrel_local.Position = {0, 0, TANK_TURRET_SIZE.z*0.5 + TANK_BARREL_LENGTH*0.5}
 	Add_Node(h, "Tank Barrel", turret_node, barrel_local, barrel, Default_Material(COLOR_GUN))
 
+	// Roadmap step 11 (CLAUDE.md §6.2, Prompts.md Session 14): re-angled
+	// from this project's original -90-degree "faces straight up" tilt
+	// once the periscope became one of this session's real ray-traced
+	// reflective surfaces (the user's own explicit choice, Session 14 —
+	// every glass surface, not just one). A periscope aimed at the sky
+	// would only ever reflect empty night sky, never anything useful to
+	// demonstrate — confirmed by a scouting capture before making this
+	// change, not assumed. -20 degrees (the SAME tilt the jeep windshield
+	// already uses) keeps it mounted flush on the turret roof but aimed
+	// mostly forward, over the barrel, so it can actually catch nearby
+	// scene geometry the way a real sighting periscope's forward-angled
+	// mirror would.
 	periscope := geo.Plane(0.3, 0.2)
 	geo.Upload(&periscope)
 	periscope_local := Identity_Transform()
 	periscope_local.Position = {0.5, TANK_TURRET_SIZE.y * 0.5+0.02, 0}
-	periscope_local.Rotation.x = math.to_radians(f32(-90)) // faces up
+	periscope_local.Rotation.x = math.to_radians(f32(-20))
 	Add_Node(h, "Tank Periscope", turret_node, periscope_local, periscope, MATERIAL_GLASS)
 }
 

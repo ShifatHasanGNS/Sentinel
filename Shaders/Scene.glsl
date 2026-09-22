@@ -410,6 +410,57 @@ uniform float u_Near;
 uniform float u_Far;
 
 // ---------------------------------------------------------------------------
+// Roadmap step 11 (CLAUDE.md §6.2, Prompts.md Session 14): one genuinely
+// ray-traced reflection, cast from every REFLECTIVE surface (the jeep
+// windshield, tank periscope, and all 3 barracks windows — the user's own
+// choice this session, every glass surface rather than CLAUDE.md §6.2's
+// originally-scoped single one) against a small array of PROXY shapes
+// standing in for the scene's other objects. See trace_reflection's own
+// comment, right before main() below, for the full primary/secondary-ray
+// mapping this implements. u_Proxies/u_ProxyCount are rebuilt and
+// re-uploaded fresh every frame (Source/Reflection.odin) — CLAUDE.md §2
+// item 10's "never cache scene data" rule, applied to reflection proxies
+// exactly as it already applies to lights and mesh transforms, which is
+// also WHY a moved/rotated reflected object updates its reflection
+// automatically: the proxy's own transform is never more than one frame
+// stale.
+// ---------------------------------------------------------------------------
+
+uniform bool u_IsReflectiveSurface;
+// R key, Source/Main.odin — lets the raster-only look (this surface shaded
+// as ordinary glass, no reflection ray cast at all) be compared directly
+// against the ray-traced one.
+uniform bool u_RayTracedReflectionEnabled;
+// A reflection ray that hits nothing returns this — the same night-sky
+// baseline CLEAR_COLOR already establishes for the whole scene
+// (Source/Main.odin), uploaded rather than duplicated as a second literal
+// so the two can never silently drift apart.
+uniform vec3 u_SkyColor;
+
+#define PROXY_SPHERE 0
+#define PROXY_BOX 1
+#define PROXY_CYLINDER 2
+#define MAX_PROXIES 16
+
+// Proxy mirrors Source/Reflection.odin's `Proxy` struct field-for-field.
+// InverseWorld is the WORLD -> LOCAL transform: Box/Cylinder intersection
+// tests transform the RAY into the proxy's own local space (where it's
+// simply axis-aligned, centred on its own origin) rather than transforming
+// the shape into world space every test — the identical trick Source/
+// Inspection.odin's mouse-picking AABB test already uses, now reused for
+// ray tracing instead of ray casting for a mouse pick.
+struct Proxy {
+	int type;
+	vec3 center;       // world-space; Sphere tests use this directly
+	mat4 inverseWorld;  // world -> local; Box/Cylinder tests use this
+	vec3 halfExtents;   // Box: local half-size XYZ. Cylinder: (radius, half-height, unused). Sphere: (radius, unused, unused).
+	vec3 color;
+};
+
+uniform Proxy u_Proxies[MAX_PROXIES];
+uniform int u_ProxyCount;
+
+// ---------------------------------------------------------------------------
 // Shared lighting code — FRAGMENT STAGE COPY. See this file's header
 // comment; identical to the vertex stage's copy above except the jitter
 // seed line inside area_light_contribution (that function's own comment
@@ -619,6 +670,243 @@ vec3 compute_lighting(vec3 normal, vec3 world_position, vec3 base_color, float s
 	return ambient + lit + emission_color;
 }
 
+// ---------------------------------------------------------------------------
+// Roadmap step 11 ray casting. In plain language, so this maps onto the
+// syllabus's own ray-tracing vocabulary directly (this session's task asks
+// for exactly this explanation):
+//   - PRIMARY ray: the one every rasterizer already implicitly casts from
+//     the eye through each pixel — this project doesn't trace it
+//     explicitly (the GPU's rasterizer does that job), but the fragment
+//     currently being shaded IS that primary ray's hit point.
+//   - SECONDARY (reflection) ray: cast explicitly, right here, FROM that
+//     primary hit point, in the mirror direction (GLSL's reflect())
+//     around the surface normal. This is the one genuinely ray-traced
+//     part of SENTINEL.
+//   - INTERSECTION TESTS: intersect_sphere/intersect_box_local/
+//     intersect_cylinder_local below are the analytic (closed-form, no
+//     iteration) tests every proxy shape gets checked against — the same
+//     kind of test a real ray tracer runs against every primitive in its
+//     scene, just against a small hand-picked PROXY approximation of
+//     SENTINEL's objects instead of their real meshes (CLAUDE.md §6.2's
+//     own "no acceleration structure needed at this object count"
+//     framing — a plain loop over ~11 proxies is the whole "scene
+//     traversal" this needs).
+//   - SHADING AT THE HIT: once the nearest intersection is found,
+//     trace_reflection calls compute_lighting AGAIN, exactly the way a
+//     real ray tracer shades whatever a ray hits — not a special
+//     "reflection-only" lighting model, the SAME function every rasterized
+//     fragment already uses.
+// ---------------------------------------------------------------------------
+
+// intersect_sphere is a textbook analytic ray-sphere test (quadratic in t,
+// `ray_dir` assumed normalized so a=1): returns the nearest t > 0, or a
+// negative value on a miss.
+float intersect_sphere(vec3 ray_origin, vec3 ray_dir, vec3 center, float radius) {
+	vec3 oc = ray_origin - center;
+	float b = dot(oc, ray_dir);
+	float c = dot(oc, oc) - radius*radius;
+	float discriminant = b*b - c;
+	if (discriminant < 0.0) return -1.0;
+
+	float sqrt_disc = sqrt(discriminant);
+	float t0 = -b - sqrt_disc;
+	float t1 = -b + sqrt_disc;
+	if (t0 > 0.001) return t0;
+	if (t1 > 0.001) return t1;
+	return -1.0;
+}
+
+// intersect_box_local is the slab method, run entirely in the box's own
+// LOCAL space (the caller already transformed the ray there via the
+// proxy's inverseWorld) — the exact same algorithm Source/Inspection.odin's
+// CPU-side Ray_Intersects_AABB uses for mouse picking, reimplemented here
+// in GLSL since the two run on different processors and can't share Odin
+// source. `local_dir` is deliberately NOT renormalized after the
+// inverseWorld transform (see trace_reflection's own comment on why the
+// resulting `t` needs a matching correction).
+float intersect_box_local(vec3 local_origin, vec3 local_dir, vec3 half_extents) {
+	vec3 inv_dir = 1.0 / local_dir;
+	vec3 t0s = (-half_extents - local_origin) * inv_dir;
+	vec3 t1s = (half_extents - local_origin) * inv_dir;
+	vec3 t_smaller = min(t0s, t1s);
+	vec3 t_bigger = max(t0s, t1s);
+
+	float t_min = max(max(t_smaller.x, t_smaller.y), t_smaller.z);
+	float t_max = min(min(t_bigger.x, t_bigger.y), t_bigger.z);
+	if (t_min > t_max || t_max < 0.001) return -1.0;
+	return t_min > 0.001 ? t_min : t_max;
+}
+
+// intersect_cylinder_local is a CAPPED cylinder around the LOCAL Y axis:
+// the infinite-cylinder quadratic in the local XZ plane, clamped to
+// [-half_height, +half_height], plus the two end-cap disks (so a ray
+// looking down onto a proxy still hits it, not just rays passing through
+// its side).
+float intersect_cylinder_local(vec3 local_origin, vec3 local_dir, vec3 half_extents) {
+	float radius = half_extents.x;
+	float half_height = half_extents.y;
+	float best_t = -1.0;
+
+	float a = local_dir.x*local_dir.x + local_dir.z*local_dir.z;
+	if (a > 1e-6) {
+		float b = 2.0 * (local_origin.x*local_dir.x + local_origin.z*local_dir.z);
+		float c = local_origin.x*local_origin.x + local_origin.z*local_origin.z - radius*radius;
+		float discriminant = b*b - 4.0*a*c;
+		if (discriminant >= 0.0) {
+			float sqrt_disc = sqrt(discriminant);
+			float t0 = (-b - sqrt_disc) / (2.0*a);
+			float t1 = (-b + sqrt_disc) / (2.0*a);
+			if (t0 > 0.001) {
+				float y = local_origin.y + t0*local_dir.y;
+				if (abs(y) <= half_height) best_t = t0;
+			}
+			if (best_t < 0.0 && t1 > 0.001) {
+				float y = local_origin.y + t1*local_dir.y;
+				if (abs(y) <= half_height) best_t = t1;
+			}
+		}
+	}
+
+	if (abs(local_dir.y) > 1e-6) {
+		float t_top = (half_height - local_origin.y) / local_dir.y;
+		if (t_top > 0.001) {
+			vec2 p = local_origin.xz + t_top*local_dir.xz;
+			if (dot(p, p) <= radius*radius && (best_t < 0.0 || t_top < best_t)) best_t = t_top;
+		}
+		float t_bottom = (-half_height - local_origin.y) / local_dir.y;
+		if (t_bottom > 0.001) {
+			vec2 p = local_origin.xz + t_bottom*local_dir.xz;
+			if (dot(p, p) <= radius*radius && (best_t < 0.0 || t_bottom < best_t)) best_t = t_bottom;
+		}
+	}
+
+	return best_t;
+}
+
+#define PROXY_SPECULAR_STRENGTH 0.2
+#define PROXY_SHININESS 12.0
+
+// trace_reflection casts (ray_origin, ray_dir) — the SECONDARY
+// (reflection) ray — against every proxy shape, finds the nearest hit,
+// shades it, and returns that colour, or u_SkyColor on a miss. Also casts
+// a hard SHADOW ray from the hit point toward the moonlight against the
+// same proxy array (CLAUDE.md §6.2's own "bonus, only if cheap" — reusing
+// these exact intersection routines makes it nearly free), the canonical
+// ray-tracing "is this point lit or occluded" query.
+vec3 trace_reflection(vec3 ray_origin, vec3 ray_dir) {
+	float best_t = 1e30;
+	int best_index = -1;
+
+	for (int i = 0; i < u_ProxyCount; i++) {
+		Proxy proxy = u_Proxies[i];
+		float t = -1.0;
+
+		if (proxy.type == PROXY_SPHERE) {
+			t = intersect_sphere(ray_origin, ray_dir, proxy.center, proxy.halfExtents.x);
+		} else {
+			vec3 local_origin = (proxy.inverseWorld * vec4(ray_origin, 1.0)).xyz;
+			vec3 local_dir = (proxy.inverseWorld * vec4(ray_dir, 0.0)).xyz;
+			t = proxy.type == PROXY_BOX
+				? intersect_box_local(local_origin, local_dir, proxy.halfExtents)
+				: intersect_cylinder_local(local_origin, local_dir, proxy.halfExtents);
+			// `t` above is a distance in LOCAL space, in units of
+			// `local_dir`'s own (possibly non-unit, since inverseWorld can
+			// carry a scale) length — dividing by that length converts it
+			// back to a WORLD-space distance along the original
+			// (unit-length) `ray_dir`. Every proxy here comes from a Scene
+			// node with uniform scale in practice (CLAUDE.md's objects are
+			// all built at a fixed size, never runtime-rescaled), so this
+			// single scalar correction is exact, not an approximation.
+			if (t > 0.0) t /= length(local_dir);
+		}
+
+		if (t > 0.001 && t < best_t) {
+			best_t = t;
+			best_index = i;
+		}
+	}
+
+	if (best_index < 0) return u_SkyColor;
+
+	Proxy hit_proxy = u_Proxies[best_index];
+	vec3 hit_point = ray_origin + ray_dir * best_t;
+
+	vec3 normal;
+	if (hit_proxy.type == PROXY_SPHERE) {
+		normal = normalize(hit_point - hit_proxy.center);
+	} else {
+		vec3 local_hit = (hit_proxy.inverseWorld * vec4(hit_point, 1.0)).xyz;
+		vec3 normal_local;
+		if (hit_proxy.type == PROXY_BOX) {
+			// Whichever LOCAL axis the hit point sits closest to its own
+			// half-extent on is the face that was actually hit.
+			vec3 ratio = abs(local_hit / hit_proxy.halfExtents);
+			if (ratio.x > ratio.y && ratio.x > ratio.z) normal_local = vec3(sign(local_hit.x), 0.0, 0.0);
+			else if (ratio.y > ratio.z) normal_local = vec3(0.0, sign(local_hit.y), 0.0);
+			else normal_local = vec3(0.0, 0.0, sign(local_hit.z));
+		} else {
+			float half_height = hit_proxy.halfExtents.y;
+			normal_local = abs(local_hit.y) >= half_height - 0.01
+				? vec3(0.0, sign(local_hit.y), 0.0)
+				: normalize(vec3(local_hit.x, 0.0, local_hit.z));
+		}
+		// LOCAL -> WORLD normal transform is transpose(inverseWorld) — the
+		// standard "normal matrix" identity when inverseWorld already IS
+		// world^-1, so no separate matrix upload is needed just for this.
+		normal = normalize((transpose(hit_proxy.inverseWorld) * vec4(normal_local, 0.0)).xyz);
+	}
+
+	// Shadow ray: search u_Lights for the scene's one DIRECTIONAL light
+	// (the moonlight) rather than assuming a fixed array index — this
+	// scene only ever has one, but finding it by TYPE keeps this code
+	// correct even if Library/Lights.Build_Rig's own append order ever
+	// changes.
+	float shadow_factor = 1.0;
+	vec3 to_moonlight = vec3(0.0);
+	bool has_moonlight = false;
+	for (int i = 0; i < min(u_ActiveLightCount, MAX_LIGHTS); i++) {
+		if (u_Lights[i].enabled && u_Lights[i].type == LIGHT_TYPE_DIRECTIONAL) {
+			to_moonlight = -normalize(u_Lights[i].direction);
+			has_moonlight = true;
+			break;
+		}
+	}
+	if (has_moonlight) {
+		vec3 shadow_origin = hit_point + normal * 0.02;
+		for (int i = 0; i < u_ProxyCount; i++) {
+			if (i == best_index) continue; // a surface can't shadow itself
+			Proxy proxy = u_Proxies[i];
+			float t;
+			if (proxy.type == PROXY_SPHERE) {
+				t = intersect_sphere(shadow_origin, to_moonlight, proxy.center, proxy.halfExtents.x);
+			} else {
+				vec3 lo = (proxy.inverseWorld * vec4(shadow_origin, 1.0)).xyz;
+				vec3 ld = (proxy.inverseWorld * vec4(to_moonlight, 0.0)).xyz;
+				t = proxy.type == PROXY_BOX ? intersect_box_local(lo, ld, proxy.halfExtents) : intersect_cylinder_local(lo, ld, proxy.halfExtents);
+			}
+			if (t > 0.001) {
+				shadow_factor = 0.35; // a soft-ish shadow, not fully black — this is one bounce's worth of a hand-wave, not a physically exact occlusion term
+				break;
+			}
+		}
+	}
+
+	// Shading at the hit — the SAME compute_lighting every rasterized
+	// fragment uses, not a separate "reflection shading" model. Simplified
+	// vs. a real object's own material (one shared specular/shininess for
+	// every proxy, no emission) — proportionate to what a rough PROXY
+	// shape should look like, not the real mesh it stands in for.
+	vec3 shaded = compute_lighting(normal, hit_point, hit_proxy.color, PROXY_SPECULAR_STRENGTH, PROXY_SHININESS, vec3(0.0));
+	// shadow_factor dims the WHOLE result, ambient included, rather than
+	// only the direct-light terms — not physically exact (ambient models
+	// indirect light, which a single shadow ray doesn't actually occlude),
+	// but compute_lighting doesn't expose its ambient/direct split
+	// separately, and splitting it just for this bonus feature isn't
+	// warranted (CLAUDE.md §6.2 calls the shadow ray a bonus, "only if
+	// cheap" — this is the cheap version).
+	return shaded * shadow_factor;
+}
+
 void main() {
 	// --- Roadmap step 8: back-face classification, done once per fragment
 	// here, shared by MANUAL culling's discard, the backface-debug tint,
@@ -697,6 +985,45 @@ void main() {
 		// at every fragment — current behaviour from before this session,
 		// unchanged.
 		result = compute_lighting(normal, v_WorldPosition, u_BaseColor, u_SpecularStrength, u_Shininess, u_EmissionColor);
+	}
+
+	// Roadmap step 11: cast the SECONDARY (reflection) ray only for
+	// fragments actually ON a reflective surface, and only while the R key
+	// hasn't turned it off (Source/Main.odin) — R OFF shows this exact
+	// surface's plain raster-only glass shading (the `result` just
+	// computed above, untouched) for direct on/off comparison.
+	if (u_IsReflectiveSurface && u_RayTracedReflectionEnabled) {
+		// The incident ray (eye -> surface) reflected about the surface
+		// normal, GLSL's own reflect(I, N) — I must point INTO the
+		// surface, hence the negation (view_direction-style vectors in
+		// this file point surface -> eye, the opposite convention).
+		vec3 incident = normalize(v_WorldPosition - u_ViewPosition);
+		vec3 reflect_direction = reflect(incident, normal);
+		// A small bias along the normal so the reflection ray's own origin
+		// doesn't immediately re-intersect the reflective surface's own
+		// proxy (e.g. the jeep windshield against the jeep body proxy) at
+		// t~=0 — the standard ray-tracing "shadow acne" fix, applied here
+		// to reflection self-intersection instead.
+		vec3 reflect_origin = v_WorldPosition + normal * 0.02;
+		vec3 reflected_color = trace_reflection(reflect_origin, reflect_direction);
+
+		// Fresnel-like blend (Schlick's approximation): glancing angles
+		// (surface nearly edge-on to the eye) reflect MORE, straight-on
+		// viewing reflects less and shows more of the surface's own
+		// colour — the classic "why a lake looks like a mirror far away
+		// but see-through right at your feet" effect, here applied to a
+		// small pane of glass instead.
+		// 0.05 (real glass's actual near-normal Fresnel reflectance) made
+		// the effect nearly imperceptible in a still screenshot even at a
+		// deliberately grazing demo angle — bumped to a still-plausible but
+		// more demo-visible value, a legitimate stylistic exaggeration in
+		// the same spirit as this project's other "readable over physically
+		// exact" choices (CLAUDE.md's low-poly/faceted look, §2 item 8).
+		float base_reflectance = 0.15;
+		float grazing = pow(1.0 - max(dot(normal, -incident), 0.0), 5.0);
+		float fresnel = base_reflectance + (1.0 - base_reflectance) * grazing;
+
+		result = mix(result, reflected_color, fresnel);
 	}
 
 	if (u_BackfaceDebug && is_back_facing) {

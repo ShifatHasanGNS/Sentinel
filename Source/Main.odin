@@ -352,6 +352,12 @@ GROUND_GRID_HIGH_RESOLUTION :: 24
 // base amounts this scales.
 DEFAULT_EDIT_STEP_SCALE :: f32(1.0)
 
+// Roadmap step 11 (CLAUDE.md §6.2, Prompts.md Session 14) — the ray-traced
+// reflection starts ON, matching every other "the new interesting
+// behaviour is visible by default" toggle in this project (e.g.
+// DEFAULT_CULL_MODE is GL, not OFF).
+DEFAULT_RAY_TRACED_REFLECTION_ENABLED :: true
+
 main :: proc() {
 	capture_frames, capture_path, do_capture := parse_capture_flag(os.args[1:])
 	start_projection := parse_projection_flag(os.args[1:])
@@ -369,6 +375,7 @@ main :: proc() {
 	animation_speed_scale = parse_patrol_speed_flag(os.args[1:])
 	test_inspection_prefix, run_inspection_test := parse_test_inspection_flag(os.args[1:])
 	edit_step_scale = DEFAULT_EDIT_STEP_SCALE
+	ray_traced_reflection_enabled = parse_reflection_flag(os.args[1:])
 
 	if !glfw.Init() {
 		fmt.eprintln("Failed to initialize GLFW")
@@ -547,6 +554,25 @@ main :: proc() {
 	selected_node_name = scene.Nodes[selectable_nodes[selected_index]].Name
 	fmt.printfln("Inspection: %d selectable objects, starting selection %q ([/] to cycle, H for full controls)", len(selectable_nodes), selected_node_name)
 	Print_Controls()
+
+	// Roadmap step 11 (CLAUDE.md §6.2, Prompts.md Session 14): mark every
+	// glass surface's already-built Material as reflective — see Scene.
+	// Material.Reflective's own comment for why this is set here, by name,
+	// rather than in Library/Scene/Objects.odin at build time. Then resolve
+	// the proxy shape list's node names ONCE — Build_Proxies (main loop,
+	// below) re-derives every proxy's actual transform from this list
+	// EVERY frame, never caching a proxy's position/orientation itself.
+	reflective_count := 0
+	for name in REFLECTIVE_NODE_NAMES {
+		index := scenepkg.Find_Node(&scene, name)
+		if index == scenepkg.NO_PARENT {
+			panic(fmt.tprintf("Source/Main.odin: no Scene node named %q for the ray-traced reflection — Objects.odin and REFLECTIVE_NODE_NAMES have drifted out of sync", name))
+		}
+		scene.Nodes[index].Material.Reflective = true
+		reflective_count += 1
+	}
+	proxy_defs := Build_Proxy_Defs(&scene)
+	fmt.printfln("Reflection: %d reflective surfaces, %d proxy shapes (R to toggle)", reflective_count, len(proxy_defs))
 
 	gizmo_meshes := lightspkg.Build_Gizmo_Meshes()
 	defer lightspkg.Destroy_Gizmo_Meshes(&gizmo_meshes)
@@ -879,6 +905,21 @@ main :: proc() {
 		sd.SetUniform(&shader, "u_Near", camera.near)
 		sd.SetUniform(&shader, "u_Far", camera.far)
 
+		// Roadmap step 11 (CLAUDE.md §6.2, Prompts.md Session 14): the
+		// proxy array is rebuilt from THIS frame's `world_matrices` —
+		// already computed above, never cached — so a reflection updates
+		// the instant an object moves, whether that's Patrol's own
+		// animation or a live Inspection-Mode edit (this session's task:
+		// "the reflection must update when the instructor moves the
+		// reflected objects").
+		frame_proxies := Build_Proxies(proxy_defs[:], world_matrices[:])
+		Upload_Proxies(&shader, frame_proxies[:])
+		delete(frame_proxies)
+		reflection_enabled_value: i32 = 0
+		if ray_traced_reflection_enabled do reflection_enabled_value = 1
+		sd.SetUniform(&shader, "u_RayTracedReflectionEnabled", reflection_enabled_value)
+		sd.SetUniform(&shader, "u_SkyColor", CLEAR_COLOR.x, CLEAR_COLOR.y, CLEAR_COLOR.z)
+
 		scenepkg.Draw_Node(&shader, view, projection, ground_model, &ground_mesh, ground_material)
 
 		// Roadmap step 10 (this session's task: "highlighted (tint...drawn
@@ -997,6 +1038,11 @@ pending_rotate_delta: la.Vector3f32
 edit_step_scale: f32
 reset_selected_requested: bool
 reset_all_requested: bool
+
+// Roadmap step 11 (CLAUDE.md §6.2, Prompts.md Session 14) — R toggles the
+// ray-traced reflection, same "callback sets the var directly" pattern as
+// every other simple toggle above.
+ray_traced_reflection_enabled: bool
 
 key_callback :: proc "c" (window: glfw.WindowHandle, key, scancode, action, mods: i32) {
 	// "c" calling convention procs get no implicit Odin context (unlike an
@@ -1179,6 +1225,13 @@ key_callback :: proc "c" (window: glfw.WindowHandle, key, scancode, action, mods
 	if key == glfw.KEY_H && action == glfw.PRESS {
 		Print_Controls()
 	}
+	// Roadmap step 11 (CLAUDE.md §6.2, Prompts.md Session 14): R toggles
+	// the ray-traced reflection — works in either mode, same as every
+	// other debug/comparison toggle (C/Z/X/F/B) above.
+	if key == glfw.KEY_R && action == glfw.PRESS {
+		ray_traced_reflection_enabled = !ray_traced_reflection_enabled
+		glfw.SetWindowTitle(window, build_window_title())
+	}
 }
 
 // mouse_button_callback only ever handles the LEFT button — see Screen_
@@ -1207,6 +1260,7 @@ build_window_title :: proc() -> cstring {
 	wireframe_state := "On" if wireframe_enabled else "Off"
 	backface_debug_state := "On" if backface_debug_enabled else "Off"
 	depth_visualization_state := "On" if depth_visualization_enabled else "Off"
+	reflection_state := "On" if ray_traced_reflection_enabled else "Off"
 	// Roadmap step 9: shown as a bracketed suffix only while actually
 	// paused, rather than an always-on "Paused:Off" chunk — the title is
 	// already six toggles long, and Off is the overwhelmingly common case.
@@ -1220,7 +1274,7 @@ build_window_title :: proc() -> cstring {
 	selection_suffix := fmt.tprintf(" Sel:%s", selected_node_name) if current_mode == .Inspection else ""
 
 	return fmt.ctprintf(
-		"SENTINEL - %s - %s%s | Speed:%.2fx Cull:%s Depth:%s Wire:%s BFDbg:%s DepthVis:%s%s",
+		"SENTINEL - %s - %s%s | Speed:%.2fx Cull:%s Depth:%s Wire:%s BFDbg:%s DepthVis:%s Refl:%s%s",
 		MODE_NAME[current_mode],
 		SHADING_MODE_NAME[shading_mode],
 		paused_suffix,
@@ -1230,6 +1284,7 @@ build_window_title :: proc() -> cstring {
 		wireframe_state,
 		backface_debug_state,
 		depth_visualization_state,
+		reflection_state,
 		selection_suffix,
 	)
 }
@@ -1705,6 +1760,34 @@ parse_patrol_speed_flag :: proc(args: []string) -> f32 {
 	}
 
 	return DEFAULT_ANIMATION_SPEED_SCALE
+}
+
+// parse_reflection_flag looks for "--reflection <on|off>" anywhere in argv
+// — the non-interactive way to pick a starting ray-traced-reflection state
+// for a --capture run (the R key is skipped during --capture, same as
+// every other live input). Defaults to DEFAULT_RAY_TRACED_REFLECTION_
+// ENABLED (on).
+parse_reflection_flag :: proc(args: []string) -> bool {
+	for i := 0; i < len(args); i += 1 {
+		if args[i] != "--reflection" do continue
+
+		if i + 1 >= len(args) {
+			fmt.eprintln("--reflection requires one argument: <on|off>")
+			os.exit(1)
+		}
+
+		switch args[i + 1] {
+		case "on":
+			return true
+		case "off":
+			return false
+		case:
+			fmt.eprintfln("--reflection: expected 'on' or 'off', got '%s'", args[i + 1])
+			os.exit(1)
+		}
+	}
+
+	return DEFAULT_RAY_TRACED_REFLECTION_ENABLED
 }
 
 // parse_test_inspection_flag looks for "--test-inspection <path-prefix>"

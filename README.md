@@ -204,6 +204,7 @@ selection/editing keys.
 | `X`               | Toggle grayscale linearised-depth visualisation               |
 | `F`               | Toggle wireframe (`glPolygonMode`)                            |
 | `B`               | Toggle a magenta tint on back-facing fragments (debug aid — see below) |
+| `R`               | Toggle ray-traced reflection on the 5 glass surfaces (see below) |
 | `Esc`             | Quit                                                         |
 
 Mode, selected-object name (Inspection only), shading mode, animation pause
@@ -232,6 +233,7 @@ CLI flags for `--capture` runs (see `Debug/README.md`):
 | `--wireframe`                 | Start with wireframe on                                                |
 | `--backface-debug`            | Start with the magenta back-face tint on                               |
 | `--depth-visualization`       | Start with the grayscale depth view on                                 |
+| `--reflection <on\|off>`      | Starting ray-traced reflection state (default `on`)                    |
 
 Interactive input (`Tab`, `Space`, `,`/`.`, mouse look, WASD/QE movement,
 `P`, scroll, `L`, `+`/`-`, `N`, `1`/`2`/`3`, `G`, `C`/`Z`/`X`/`F`/`B`, and
@@ -348,6 +350,55 @@ default view (`session11_default.png`), Manual vs. GL culling
 visualisation (`session11_depth_vis.png`), wireframe
 (`session11_wireframe.png`), and the crate close-up sequence described
 above.
+
+## Ray-traced reflection (roadmap step 11)
+
+Five glass surfaces in the scene — the jeep windshield, the tank
+periscope, and all 3 barracks windows — are genuinely ray-traced, not
+faked with a reflection cubemap or screen-space trick, toggleable live
+with `R` (or `--reflection on|off`, default on).
+
+Every frame, `Source/Reflection.odin` rebuilds a compact array of up to 11
+proxy shapes (spheres, boxes, capped cylinders) approximating the scene's
+other 8 objects, fresh from their live world transforms — never cached, so
+a proxy always tracks wherever its real object currently is, whether
+that's a static placement, an ongoing Patrol animation, or a mid-demo
+Inspection-Mode edit. For a fragment on one of the 5 reflective surfaces,
+`Shaders/Scene.glsl` casts the classic ray-tracing pipeline explicitly:
+
+- **Primary ray** — implicit; the fragment being shaded IS a rasterized
+  primary ray's hit point.
+- **Secondary (reflection) ray** — cast explicitly via GLSL's `reflect()`
+  around the surface normal.
+- **Intersection tests** — analytic (closed-form) ray-sphere, ray-box
+  (slab method, in the proxy's own local space), and ray-capped-cylinder
+  tests against every proxy; the nearest hit wins. No acceleration
+  structure needed at this object count (~11 proxies, a plain loop).
+- **Shading at the hit** — the hit point is shaded with the exact same
+  lighting function every rasterized fragment already uses, not a
+  separate reflection-only model.
+- **Bonus: a hard shadow ray** from the hit point toward the moonlight,
+  against the same proxy array — free reuse of the same intersection
+  routines, darkening a reflection that's itself in shadow.
+
+A miss (or nothing within range) returns a flat night-sky colour. The
+result is blended against the surface's own rasterized colour with a
+Fresnel-Schlick approximation — more reflective at a grazing viewing
+angle, less reflective straight-on, the same effect that makes a lake look
+like a mirror far away but see-through right at your feet.
+
+**Scope note:** originally planned as a single surface (CLAUDE.md §6.2),
+extended to all 5 glass surfaces by explicit user decision this session —
+see `PROGRESS.md`'s Session 14 entry for the reasoning. The effect is
+verified correct (proxy data, intersection math, and the per-frame
+tracking are each independently checked — see `Source/Reflection_test.odin`
+and PROGRESS.md) but is visually subtle in places: the windshield's and
+periscope's own outward-facing orientation means their reflection rays
+often miss the proxy cluster entirely, and the barracks windows' warm
+emissive glow (they're also §6.3 area lights) tends to outweigh the
+blended reflection. `Debug/Captures/session14_reflection_on.png` vs.
+`session14_reflection_off.png` (a grazing angle on the barracks windows)
+shows a real, measurable difference.
 
 ## Syllabus coverage
 
