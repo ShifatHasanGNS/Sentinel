@@ -306,7 +306,7 @@ Figure~\ref{fig:architecture} shows the dependency structure.
 \node[stage, below=of source] (camera) {\textbf{Camera}\\(view/projection,\\patrol path)};
 \node[stage, below right=of source] (engine) {\textbf{Engine}\\(shader, buffers,\\VAO, GL errors)};
 \node[stage, below=of scene] (geometry) {\textbf{Geometry}\\(3 primitives +\\composition)};
-\node[stage, below=26mm of camera, text width=7.6cm] (linalg) {\texttt{core:math/linalg}\\(vectors and matrices --- used directly by every package above)};
+\node[stage, below=36mm of camera, text width=7.6cm] (linalg) {\texttt{core:math/linalg}\\(vectors and matrices --- used directly by every package above)};
 
 \draw[pipearrow] (source) -- (scene);
 \draw[pipearrow] (source) -- (camera);
