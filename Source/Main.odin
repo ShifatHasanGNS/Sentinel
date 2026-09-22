@@ -273,24 +273,21 @@ AMBIENT_STRENGTH :: 0.18
 GROUND_SIZE :: 60.0
 GROUND_Y :: 0.0
 
-// Session 8 (roadmap step 5) TEMPORARY demo animation — proves lights
-// actually follow their parent nodes (a light's own Position/Direction is
-// invisible in a static capture; something has to move for that to show).
-// NOT roadmap step 9's real Patrol Mode: driven by a synthetic frame-count
-// clock (DEMO_time below), not a scripted patrol path/sweep, and applied
-// unconditionally rather than gated by a Patrol/Inspection mode that
-// doesn't exist yet. Deliberately kept small and isolated here so step 9
-// can replace it wholesale rather than untangle it from real logic.
-DEMO_TANK_HULL_SPIN_RATE :: 0.3 // rad/s
-// Opposite sign AND a different rate from the hull — makes the turret's
-// rotation visibly INDEPENDENT rather than just "along for the ride",
-// which is the whole point of this demo per the task's own wording
-// ("rotate the tank hull, then rotate the turret independently").
-DEMO_TANK_TURRET_SPIN_RATE :: -0.7 // rad/s
-DEMO_FLOODLIGHT_SWEEP_RATE :: 0.5 // rad/s, argument to sin() below
-DEMO_FLOODLIGHT_SWEEP_AMPLITUDE :: math.PI * 50.0 / 180.0 // +-50 degrees
-DEMO_JEEP_DRIFT_RATE :: 0.4 // rad/s, argument to sin() below
-DEMO_JEEP_DRIFT_AMPLITUDE :: 2.5 // world units along Z
+// Roadmap step 9 (Patrol Mode, Prompts.md Session 12): Session 8's
+// TEMPORARY demo animation (DEMO_TANK_HULL_SPIN_RATE and friends, driven by
+// a synthetic frame-count clock with no Mode gating) is DELETED — that
+// session's own PROGRESS.md entry said exactly this would happen. Real
+// Patrol Mode replaces it below: an app-level Mode enum + the shared
+// animation clock (Source/Patrol.odin), the camera PATH itself in
+// Library/Camera/Camera.odin (Patrol_Camera_Pose), and Tab/Space/`,`/`.`
+// controls (mode switch, pause, speed) alongside the projection/shading/
+// etc. toggles already here. See this file's own "Session 12 status"
+// header note above for the full design.
+DEFAULT_MODE :: Mode.Patrol
+
+// The shared animation clock's own speed multiplier (this session's task:
+// "speed keys"), starting value — 1.0 unless overridden by --patrol-speed.
+DEFAULT_ANIMATION_SPEED_SCALE :: f32(1.0)
 
 // Roadmap step 6 (CLAUDE.md §6.3) starting sample count for the barracks
 // windows' area-light averaging (Shaders/Scene.glsl's
@@ -362,6 +359,8 @@ main :: proc() {
 	wireframe_enabled = parse_wireframe_flag(os.args[1:])
 	backface_debug_enabled = parse_backface_debug_flag(os.args[1:])
 	depth_visualization_enabled = parse_depth_visualization_flag(os.args[1:])
+	current_mode = parse_mode_flag(os.args[1:])
+	animation_speed_scale = parse_patrol_speed_flag(os.args[1:])
 
 	if !glfw.Init() {
 		fmt.eprintln("Failed to initialize GLFW")
@@ -488,13 +487,28 @@ main :: proc() {
 		)
 	}
 
-	// Session 8 demo-animation node indices, looked up ONCE (which array
-	// index a name maps to never changes after Build_Scene) — see the
-	// DEMO_* block in the main loop below for what actually moves.
-	demo_tank_hull := scenepkg.Find_Node(&scene, "Tank Hull")
-	demo_tank_turret := scenepkg.Find_Node(&scene, "Tank Turret")
-	demo_floodlight_head := scenepkg.Find_Node(&scene, "Watchtower Floodlight Head")
-	demo_jeep := scenepkg.Find_Node(&scene, "Jeep")
+	// Roadmap step 9 (Patrol Mode) node/light lookups, looked up ONCE
+	// (indices never change after Build_Scene/Build_Rig) — see Source/
+	// Patrol.odin for the formulas that drive these, and the main loop
+	// below for where they're applied. The tank HULL and the jeep ROOT are
+	// deliberately NOT looked up here — this session's task explicitly
+	// keeps them static in Patrol, unlike Session 8's temporary demo (now
+	// deleted) which spun the hull too.
+	floodlight_head_node := scenepkg.Find_Node(&scene, "Watchtower Floodlight Head")
+	radar_dish_node := scenepkg.Find_Node(&scene, "Radar Dish")
+	tank_turret_node := scenepkg.Find_Node(&scene, "Tank Turret")
+	jeep_headlight_left_node := scenepkg.Find_Node(&scene, "Jeep Headlight Left")
+	jeep_headlight_right_node := scenepkg.Find_Node(&scene, "Jeep Headlight Right")
+
+	// Locate the two lights Patrol Mode animates the INTENSITY of, by which
+	// SCENE NODE they're parented to (find_light_by_parent, below) rather
+	// than a hardcoded index into Library/Lights.Build_Rig's internal
+	// append order — that order is Build_Rig's own implementation detail,
+	// not something this file should have to know or keep in sync by hand.
+	radar_beacon_node := scenepkg.Find_Node(&scene, "Radar Beacon")
+	beacon_light_index := find_light_by_parent(light_rig[:], radar_beacon_node)
+	fence_node := scenepkg.Find_Node(&scene, "Perimeter Fence")
+	fence_flicker_light_index := find_light_by_parent(light_rig[:], fence_node)
 
 	gizmo_meshes := lightspkg.Build_Gizmo_Meshes()
 	defer lightspkg.Destroy_Gizmo_Meshes(&gizmo_meshes)
@@ -540,16 +554,31 @@ main :: proc() {
 		last_frame_time = current_time
 
 		if !do_capture {
+			// Cursor delta is READ every frame regardless of mode, so
+			// last_cursor_x/y never go stale — staling it while in Patrol
+			// would otherwise cause one big mouse-look jump the instant the
+			// user switches back to Inspection. It's only APPLIED to the
+			// camera while actually in Inspection: Patrol's own camera is
+			// fully formula-driven below (Library/Camera.Patrol_Camera_Pose)
+			// and would just have any WASD/mouse-look input overwritten
+			// next frame anyway, so polling it in Patrol would only make
+			// the controls feel broken, not do anything useful.
 			cursor_x, cursor_y := glfw.GetCursorPos(window)
-			cam.Apply_Look_Delta(&camera, f32(cursor_x - last_cursor_x), f32(cursor_y - last_cursor_y))
+			if current_mode == .Inspection {
+				cam.Apply_Look_Delta(&camera, f32(cursor_x - last_cursor_x), f32(cursor_y - last_cursor_y))
+
+				move_forward := key_axis(window, glfw.KEY_W, glfw.KEY_S)
+				move_right := key_axis(window, glfw.KEY_D, glfw.KEY_A)
+				move_up := key_axis(window, glfw.KEY_E, glfw.KEY_Q)
+				sprint := glfw.GetKey(window, glfw.KEY_LEFT_SHIFT) == glfw.PRESS || glfw.GetKey(window, glfw.KEY_RIGHT_SHIFT) == glfw.PRESS
+				cam.Apply_Move(&camera, move_forward, move_right, move_up, dt_seconds, sprint)
+			}
 			last_cursor_x, last_cursor_y = cursor_x, cursor_y
 
-			move_forward := key_axis(window, glfw.KEY_W, glfw.KEY_S)
-			move_right := key_axis(window, glfw.KEY_D, glfw.KEY_A)
-			move_up := key_axis(window, glfw.KEY_E, glfw.KEY_Q)
-			sprint := glfw.GetKey(window, glfw.KEY_LEFT_SHIFT) == glfw.PRESS || glfw.GetKey(window, glfw.KEY_RIGHT_SHIFT) == glfw.PRESS
-			cam.Apply_Move(&camera, move_forward, move_right, move_up, dt_seconds, sprint)
-
+			// P (projection) and scroll-zoom stay available in BOTH modes —
+			// neither fights against Patrol's own position/yaw/pitch
+			// formula the way WASD/mouse-look would, so there's no reason
+			// to gate them to Inspection only.
 			if projection_toggle_requested {
 				cam.Toggle_Projection(&camera, SCENE_FOCUS)
 				projection_toggle_requested = false
@@ -559,6 +588,32 @@ main :: proc() {
 				cam.Zoom_Ortho(&camera, scroll_delta_y)
 			}
 			scroll_delta_y = 0
+
+			// Roadmap step 9 (Tab, this session's task): "switching Patrol
+			// -> Inspection keeps the current camera pose" is NOT a special
+			// case below — `camera` already holds whatever pose Patrol's
+			// own per-frame update (further down this loop) last computed
+			// it to, so Inspection's free-fly simply continues from there
+			// once current_mode flips, with nothing to copy. "Inspection ->
+			// Patrol resumes... from the nearest path point" DOES need real
+			// work: patrol_time_offset is solved here so that
+			// Patrol_Camera_Pose's very next call lands exactly on the path
+			// point nearest wherever the free camera currently is (see
+			// Library/Camera.Patrol_Nearest_Angle's own comment for why
+			// this is exact, not approximate, for this project's circular
+			// path).
+			if mode_switch_requested {
+				if current_mode == .Inspection {
+					desired_angle := cam.Patrol_Nearest_Angle(camera.position)
+					base_angle := animation_time * cam.PATROL_ANGULAR_SPEED
+					patrol_time_offset = (desired_angle - base_angle) / cam.PATROL_ANGULAR_SPEED
+					current_mode = .Patrol
+				} else {
+					current_mode = .Inspection
+				}
+				glfw.SetWindowTitle(window, build_window_title())
+				mode_switch_requested = false
+			}
 		}
 
 		// Ground grid resolution changed (key G) — rebuild the mesh's CPU
@@ -576,24 +631,63 @@ main :: proc() {
 			ground_resolution_toggle_requested = false
 		}
 
-		// A synthetic frame-based clock, not glfw.GetTime(): --capture's
-		// reproducibility (CLAUDE.md §1.2 — same command, same output every
-		// run) depends on frame N always landing at the same pose, which
-		// real elapsed wall-clock time can't guarantee (render speed
-		// varies run to run; frame count doesn't). The nominal 60 is a
-		// pacing constant only, not a claim about the real refresh rate.
-		demo_time := f32(frame_count) / 60.0
-		if demo_tank_hull != scenepkg.NO_PARENT {
-			scene.Nodes[demo_tank_hull].Local.Rotation.y = demo_time * DEMO_TANK_HULL_SPIN_RATE
+		// Roadmap step 9's shared animation clock ("All animation uses a
+		// shared time source", this session's task) — advanced once here,
+		// read by the Patrol camera pose AND every Patrol node/light
+		// formula below, so they're all guaranteed to agree on "now". A
+		// FIXED nominal step during --capture (matching Session 8's
+		// deleted demo_time's own reproducibility reasoning: --capture's
+		// CLAUDE.md §1.2 promise depends on frame N always landing at the
+		// same pose, which real elapsed wall-clock time can't guarantee),
+		// vs. real dt_seconds during an interactive run so playback speed
+		// feels natural. Space (animation_paused) freezes it; `,`/`.`
+		// (animation_speed_scale) rescale it — both work in EITHER mode,
+		// a general "pause/speed the world" control, not Patrol-specific.
+		frame_dt := dt_seconds
+		if do_capture {
+			frame_dt = 1.0 / 60.0
 		}
-		if demo_tank_turret != scenepkg.NO_PARENT {
-			scene.Nodes[demo_tank_turret].Local.Rotation.y = demo_time * DEMO_TANK_TURRET_SPIN_RATE
+		if !animation_paused {
+			animation_time += frame_dt * animation_speed_scale
 		}
-		if demo_floodlight_head != scenepkg.NO_PARENT {
-			scene.Nodes[demo_floodlight_head].Local.Rotation.y = math.sin(demo_time * DEMO_FLOODLIGHT_SWEEP_RATE) * DEMO_FLOODLIGHT_SWEEP_AMPLITUDE
-		}
-		if demo_jeep != scenepkg.NO_PARENT {
-			scene.Nodes[demo_jeep].Local.Position = scenepkg.JEEP_POSITION + la.Vector3f32{0, 0, math.sin(demo_time * DEMO_JEEP_DRIFT_RATE) * DEMO_JEEP_DRIFT_AMPLITUDE}
+
+		// Roadmap step 9: "only the drivers of the camera and node
+		// transforms differ" between modes (this session's task, verbatim)
+		// — so every Patrol-specific driver below, camera included, is
+		// gated to current_mode == .Patrol. Switching to Inspection simply
+		// STOPS writing these (not resets them), the same "freeze at the
+		// last value, don't reset to a rest pose" choice, since nothing
+		// asked for a rest-pose reset and roadmap step 10 (next session)
+		// will give Inspection its own real node-manipulation drivers.
+		if current_mode == .Patrol {
+			camera_path_time := animation_time + patrol_time_offset
+			camera.position, camera.yaw, camera.pitch = cam.Patrol_Camera_Pose(camera_path_time)
+
+			if floodlight_head_node != scenepkg.NO_PARENT {
+				scene.Nodes[floodlight_head_node].Local.Rotation.y = Patrol_Floodlight_Sweep_Angle(animation_time)
+			}
+			if radar_dish_node != scenepkg.NO_PARENT {
+				scene.Nodes[radar_dish_node].Local.Rotation.y = Patrol_Radar_Spin_Angle(animation_time)
+			}
+			if beacon_light_index >= 0 {
+				light_rig[beacon_light_index].Intensity = lightspkg.BEACON_INTENSITY * Patrol_Beacon_Intensity_Factor(animation_time)
+			}
+
+			// Optional life touches (this session's task marks these
+			// optional and explicitly keeps the tank hull/jeep root
+			// static — only the turret and the headlight NODES move).
+			if tank_turret_node != scenepkg.NO_PARENT {
+				scene.Nodes[tank_turret_node].Local.Rotation.y = Patrol_Turret_Scan_Angle(animation_time)
+			}
+			if jeep_headlight_left_node != scenepkg.NO_PARENT {
+				scene.Nodes[jeep_headlight_left_node].Local.Rotation.x = Patrol_Jeep_Dip_Angle(animation_time)
+			}
+			if jeep_headlight_right_node != scenepkg.NO_PARENT {
+				scene.Nodes[jeep_headlight_right_node].Local.Rotation.x = Patrol_Jeep_Dip_Angle(animation_time)
+			}
+			if fence_flicker_light_index >= 0 {
+				light_rig[fence_flicker_light_index].Intensity = lightspkg.FENCE_LAMP_INTENSITY * Patrol_Fence_Flicker_Factor(animation_time)
+			}
 		}
 
 		// Push this frame's cull/depth-test/wireframe toggles to GL — see
@@ -741,6 +835,21 @@ depth_visualization_enabled: bool
 wireframe_enabled: bool
 backface_debug_enabled: bool
 
+// Roadmap step 9 (CLAUDE.md §7/§9, Prompts.md Session 12) Patrol Mode
+// state. current_mode/animation_paused are flipped directly in
+// key_callback (Tab/Space), same simple-bool pattern as gizmos_visible;
+// mode_switch_requested is a deferred flag (like projection_toggle_
+// requested) because handling a mode switch needs read/write access to
+// `camera`/`animation_time` — real work the main loop does, not a "c"
+// callback. patrol_time_offset is written ONCE per Inspection->Patrol
+// switch (see the main loop) and read every Patrol frame afterward.
+current_mode: Mode
+mode_switch_requested: bool
+animation_time: f32
+animation_paused: bool
+animation_speed_scale: f32
+patrol_time_offset: f32
+
 key_callback :: proc "c" (window: glfw.WindowHandle, key, scancode, action, mods: i32) {
 	// "c" calling convention procs get no implicit Odin context (unlike an
 	// ordinary proc) — build_window_title below needs one (it calls
@@ -812,6 +921,30 @@ key_callback :: proc "c" (window: glfw.WindowHandle, key, scancode, action, mods
 		backface_debug_enabled = !backface_debug_enabled
 		glfw.SetWindowTitle(window, build_window_title())
 	}
+	// Roadmap step 9 (CLAUDE.md §7/§9, Prompts.md Session 12): Tab is a
+	// deferred request (see mode_switch_requested's own comment for why —
+	// unlike Space/`,`/`.` below, handling it needs `camera`/
+	// `animation_time`, not just a bool flip). Space pauses the SHARED
+	// animation clock (works in either mode, a general "pause the world"
+	// control, not Patrol-specific — this session's task: "a pause key
+	// (Space) and speed keys"). `,`/`.` rescale it multiplicatively
+	// (PATROL_SPEED_STEP_FACTOR per press), clamped to [PATROL_MIN_SPEED_
+	// SCALE, PATROL_MAX_SPEED_SCALE].
+	if key == glfw.KEY_TAB && action == glfw.PRESS {
+		mode_switch_requested = true
+	}
+	if key == glfw.KEY_SPACE && action == glfw.PRESS {
+		animation_paused = !animation_paused
+		glfw.SetWindowTitle(window, build_window_title())
+	}
+	if key == glfw.KEY_PERIOD && action == glfw.PRESS {
+		animation_speed_scale = min(animation_speed_scale*PATROL_SPEED_STEP_FACTOR, f32(PATROL_MAX_SPEED_SCALE))
+		glfw.SetWindowTitle(window, build_window_title())
+	}
+	if key == glfw.KEY_COMMA && action == glfw.PRESS {
+		animation_speed_scale = max(animation_speed_scale/PATROL_SPEED_STEP_FACTOR, f32(PATROL_MIN_SPEED_SCALE))
+		glfw.SetWindowTitle(window, build_window_title())
+	}
 }
 
 // build_window_title reads every render-toggle package var (shading_mode,
@@ -828,10 +961,17 @@ build_window_title :: proc() -> cstring {
 	wireframe_state := "On" if wireframe_enabled else "Off"
 	backface_debug_state := "On" if backface_debug_enabled else "Off"
 	depth_visualization_state := "On" if depth_visualization_enabled else "Off"
+	// Roadmap step 9: shown as a bracketed suffix only while actually
+	// paused, rather than an always-on "Paused:Off" chunk — the title is
+	// already six toggles long, and Off is the overwhelmingly common case.
+	paused_suffix := " [Paused]" if animation_paused else ""
 
 	return fmt.ctprintf(
-		"SENTINEL - %s | Cull:%s Depth:%s Wire:%s BFDbg:%s DepthVis:%s",
+		"SENTINEL - %s - %s%s | Speed:%.2fx Cull:%s Depth:%s Wire:%s BFDbg:%s DepthVis:%s",
+		MODE_NAME[current_mode],
 		SHADING_MODE_NAME[shading_mode],
+		paused_suffix,
+		animation_speed_scale,
 		CULL_MODE_NAME[cull_mode],
 		depth_state,
 		wireframe_state,
@@ -917,6 +1057,21 @@ count_back_facing_triangles :: proc(mesh: ^geo.Mesh, normal_matrix: la.Matrix3f3
 		if la.dot(world_normal, view_direction) < 0 do count += 1
 	}
 	return count
+}
+
+// find_light_by_parent returns the index of the FIRST light in `lights`
+// whose ParentNode matches `node`, or -1 if none does. Used once at
+// startup (not per-frame) to locate the specific lights Patrol Mode
+// animates (the radar beacon, one fence lamp) by the SCENE NODE they're
+// attached to, rather than a hardcoded array index into Library/Lights.
+// Build_Rig's internal append order — that order is Build_Rig's own
+// implementation detail, not something this file should have to know or
+// keep in sync by hand.
+find_light_by_parent :: proc(lights: []lightspkg.Light, node: int) -> int {
+	for light, i in lights {
+		if light.ParentNode == node do return i
+	}
+	return -1
 }
 
 // build_ground_mesh builds and uploads the ground plane's LOCAL-space mesh
@@ -1239,4 +1394,61 @@ parse_depth_visualization_flag :: proc(args: []string) -> bool {
 		if arg == "--depth-visualization" do return true
 	}
 	return false
+}
+
+// parse_mode_flag looks for "--mode <patrol|inspection>" anywhere in argv —
+// the non-interactive way to pick a starting Mode for a --capture run (Tab
+// is skipped during --capture, same as every other live input). Defaults
+// to Patrol — CLAUDE.md §7's own framing ("Zero input required... intended
+// as a hands-off showcase"), so a plain `./Sentinel` with no flags now
+// shows the automatic patrol immediately instead of a static free camera.
+parse_mode_flag :: proc(args: []string) -> Mode {
+	for i := 0; i < len(args); i += 1 {
+		if args[i] != "--mode" do continue
+
+		if i + 1 >= len(args) {
+			fmt.eprintln("--mode requires one argument: <patrol|inspection>")
+			os.exit(1)
+		}
+
+		switch args[i + 1] {
+		case "patrol":
+			return .Patrol
+		case "inspection":
+			return .Inspection
+		case:
+			fmt.eprintfln("--mode: expected 'patrol' or 'inspection', got '%s'", args[i + 1])
+			os.exit(1)
+		}
+	}
+
+	return DEFAULT_MODE
+}
+
+// parse_patrol_speed_flag looks for "--patrol-speed <scale>" anywhere in
+// argv — the non-interactive way to pick a starting animation_speed_scale
+// for a --capture run (the `,`/`.` keys are skipped during --capture).
+// Defaults to DEFAULT_ANIMATION_SPEED_SCALE. Exits on a non-positive value
+// (a zero or negative scale would either silently freeze animation or run
+// it backwards, neither of which this flag is meant to express — omit it,
+// or use --mode inspection, for "nothing moving").
+parse_patrol_speed_flag :: proc(args: []string) -> f32 {
+	for i := 0; i < len(args); i += 1 {
+		if args[i] != "--patrol-speed" do continue
+
+		if i + 1 >= len(args) {
+			fmt.eprintln("--patrol-speed requires one argument: <scale>")
+			os.exit(1)
+		}
+
+		parsed, ok := strconv.parse_f32(args[i + 1])
+		if !ok || parsed <= 0 {
+			fmt.eprintfln("--patrol-speed: expected a positive number, got '%s'", args[i + 1])
+			os.exit(1)
+		}
+
+		return parsed
+	}
+
+	return DEFAULT_ANIMATION_SPEED_SCALE
 }

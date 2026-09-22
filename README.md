@@ -74,22 +74,54 @@ odin run Source -out:Sentinel -- --capture 5 Debug/Captures/session0.bmp
 `--capture <frames> <path>` renders that many frames, saves a screenshot,
 and exits — see `Debug/README.md`.
 
+## Modes (roadmap step 9)
+
+SENTINEL starts in **Patrol Mode** — a fully hands-off, formula-driven tour
+(CLAUDE.md §7's "zero input required" framing) — and `Tab` switches to
+**Inspection Mode** (free-fly camera; object select/translate/rotate arrives
+in roadmap step 10). Both modes draw through the exact same render path
+(CLAUDE.md §2 item 9); only the camera and a handful of node/light
+transforms are driven differently:
+
+- **Patrol**: the camera flies a smooth circular path around the outside of
+  the perimeter fence (with a gentle height bob), always looking toward a
+  slowly drifting point near the base centre. The watchtower floodlight
+  sweeps, the radar dish spins continuously, the beacon blinks, and three
+  optional "life touches" run: the tank turret slowly scans, the jeep's
+  headlights dip, and one fence lamp flickers. The tank hull and jeep root
+  stay static, as asked.
+- **Inspection**: the current free-fly camera (WASD/mouse/QE/Shift, `P`,
+  scroll-zoom) — unchanged from roadmap step 2.
+- Switching **Patrol -> Inspection** keeps the camera exactly where Patrol
+  left it (both modes share one Camera value, so there's nothing to hand
+  off). Switching **Inspection -> Patrol** solves a phase offset so the
+  path "resumes from the nearest point" to wherever the free camera was,
+  instead of jumping to wherever the shared clock's raw angle happens to be
+  (`Library/Camera.Patrol_Nearest_Angle` — exact for this project's
+  circular path, not an approximation).
+- `Space` pauses the shared animation clock that drives every Patrol
+  animation (works in either mode); `,`/`.` rescale its speed
+  multiplicatively (x0.8 / x1.25 per press, clamped to [0.1x, 8x]).
+
 ## Controls
 
-Free-fly camera controls (roadmap step 2) plus the debug/comparison toggles
-added through roadmap step 8. Object selection/translate/rotate and the
-remaining Inspection Mode state machine arrive in roadmap step 10 and will
-be added to this table then, not replace it.
+Free-fly camera controls (roadmap step 2), Patrol/Inspection mode controls
+(roadmap step 9), and the debug/comparison toggles added through roadmap
+step 8. Object selection/translate/rotate is roadmap step 10 and will be
+added to this table then, not replace it.
 
 | Key / input      | Action                                                    |
 | ---------------- | ---------------------------------------------------------- |
-| `W` / `S`        | Move forward / backward (along the camera's full look direction, including pitch) |
-| `A` / `D`        | Strafe left / right                                        |
-| `Q` / `E`        | Move down / up (world space, independent of look direction) |
-| Mouse             | Look (cursor is captured — move the mouse to turn/pitch)    |
-| `Shift` (either)  | Sprint (multiplies move speed)                              |
-| `P`               | Toggle perspective / orthographic projection                |
-| Scroll wheel      | Zoom the orthographic volume (only while in orthographic projection) |
+| `Tab`             | Switch Patrol <-> Inspection Mode                           |
+| `Space`           | Pause / resume the shared animation clock (either mode)      |
+| `,` / `.`         | Slow down / speed up the shared animation clock (x0.8 / x1.25 per press) |
+| `W` / `S`        | (Inspection) Move forward / backward (along the camera's full look direction, including pitch) |
+| `A` / `D`        | (Inspection) Strafe left / right                            |
+| `Q` / `E`        | (Inspection) Move down / up (world space, independent of look direction) |
+| Mouse             | (Inspection) Look (cursor is captured — move the mouse to turn/pitch) |
+| `Shift` (either)  | (Inspection) Sprint (multiplies move speed)                  |
+| `P`               | Toggle perspective / orthographic projection (either mode)   |
+| Scroll wheel      | Zoom the orthographic volume (only while in orthographic projection; either mode) |
 | `L`               | Toggle light gizmos (type-coded markers + aim lines for every active light) |
 | `+` / `-` (or numpad `+`/`-`) | Increase / decrease barracks-window area-light sample count (1-8) |
 | `J`               | Toggle per-pixel jitter on area-light sampling               |
@@ -102,9 +134,9 @@ be added to this table then, not replace it.
 | `B`               | Toggle a magenta tint on back-facing fragments (debug aid — see below) |
 | `Esc`             | Quit                                                         |
 
-All 6 toggles above (shading mode, cull mode, depth test, depth
-visualisation, wireframe, backface-debug tint) are shown together in the
-window title, e.g. `SENTINEL - Phong | Cull:GL Depth:On Wire:Off BFDbg:Off
+Mode, shading mode, animation pause state/speed, and all 5 roadmap-step-8
+toggles are shown together in the window title, e.g. `SENTINEL - Patrol -
+Phong [Paused] | Speed:1.25x Cull:GL Depth:On Wire:Off BFDbg:Off
 DepthVis:Off` — this project has no on-screen text-rendering pipeline, so
 the title bar is the readout.
 
@@ -113,6 +145,8 @@ CLI flags for `--capture` runs (see `Debug/README.md`):
 | Flag                         | Effect                                                                 |
 | ----------------------------- | ----------------------------------------------------------------------- |
 | `--capture <frames> <path>`   | Render `frames` frames, save a screenshot to `path`, then exit          |
+| `--mode <patrol\|inspection>` | Starting Mode (default `patrol`)                                        |
+| `--patrol-speed <scale>`      | Starting animation clock speed multiplier (default `1.0`)               |
 | `--projection <perspective\|orthographic>` | Starting projection mode (default `perspective`) |
 | `--gizmos`                    | Start with light gizmos visible                                        |
 | `--area-samples <N>`          | Starting barracks-window area-light sample count, 1-8 (default 4)      |
@@ -125,11 +159,12 @@ CLI flags for `--capture` runs (see `Debug/README.md`):
 | `--backface-debug`            | Start with the magenta back-face tint on                               |
 | `--depth-visualization`       | Start with the grayscale depth view on                                 |
 
-Interactive input (mouse look, WASD/QE movement, `P`, scroll, `L`, `+`/`-`,
-`J`, `1`/`2`/`3`, `G`, `C`/`Z`/`X`/`F`/`B`) is intentionally disabled during
-a `--capture` run so captured frames stay reproducible regardless of the
-real system cursor/keyboard state — the CLI flags above are the supported
-way to change what a capture run looks like instead.
+Interactive input (`Tab`, `Space`, `,`/`.`, mouse look, WASD/QE movement,
+`P`, scroll, `L`, `+`/`-`, `J`, `1`/`2`/`3`, `G`, `C`/`Z`/`X`/`F`/`B`) is
+intentionally disabled during a `--capture` run so captured frames stay
+reproducible regardless of the real system cursor/keyboard state — the CLI
+flags above are the supported way to change what a capture run looks like
+instead.
 
 ## Back-face culling and hidden-surface removal (roadmap step 8)
 

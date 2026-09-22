@@ -186,12 +186,22 @@ Default_Camera :: proc(position: la.Vector3f32) -> Camera {
 // test scene without hand-picking yaw/pitch by trial and error.
 Camera_Looking_At :: proc(position, target: la.Vector3f32) -> Camera {
 	cam := Default_Camera(position)
-
-	direction := la.normalize(target - position)
-	cam.pitch = math.asin(clamp(direction.y, -1, 1))
-	cam.yaw = math.atan2(-direction.x, -direction.z)
-
+	cam.yaw, cam.pitch = yaw_pitch_looking_at(position, target)
 	return cam
+}
+
+// yaw_pitch_looking_at solves yaw/pitch so Forward points from `position`
+// toward `target` — the closed-form inverse of Forward's own formula
+// (see Camera_Looking_At's original header note, moved here). Factored out
+// (roadmap step 9, Prompts.md Session 12) so Camera_Looking_At and the new
+// Patrol_Camera_Pose below share the ONE derivation instead of two copies
+// of the same formula drifting apart.
+@(private = "file")
+yaw_pitch_looking_at :: proc(position, target: la.Vector3f32) -> (yaw, pitch: f32) {
+	direction := la.normalize(target - position)
+	pitch = math.asin(clamp(direction.y, -1, 1))
+	yaw = math.atan2(-direction.x, -direction.z)
+	return
 }
 
 // Forward returns the camera's unit-length look direction. Closed form
@@ -316,4 +326,128 @@ Toggle_Projection :: proc(cam: ^Camera, focus: la.Vector3f32) {
 Zoom_Ortho :: proc(cam: ^Camera, scroll_delta_y: f32) {
 	cam.ortho_half_height *= math.pow(f32(ORTHO_ZOOM_FACTOR_PER_SCROLL_STEP), scroll_delta_y)
 	cam.ortho_half_height = max(cam.ortho_half_height, MIN_ORTHO_HALF_HEIGHT)
+}
+
+// -----------------------------------------------------------------------
+// Patrol Mode (roadmap step 9, CLAUDE.md §7/§9; Prompts.md Session 12): the
+// camera flies a closed, formula-driven path around the OUTSIDE of the
+// perimeter fence instead of following WASD/mouse input — this was already
+// anticipated at the top of this file (Session 2's own header note) as a
+// `Patrol_Camera_At`-shaped addition reusing this same Camera struct and
+// View_Matrix/Projection_Matrix, which is exactly what's below. This
+// section only knows the PATH's shape and where the camera looks — nothing
+// about GLFW, a Mode enum, the shared animation clock, or which Scene
+// nodes exist, all of which stay in Source/Patrol.odin and Source/
+// Main.odin (the same GLFW-agnostic split this file's header already
+// established for free-fly).
+// -----------------------------------------------------------------------
+
+// PATROL_RADIUS must clear the perimeter fence's own footprint
+// (Library/Scene/Objects.odin's FENCE_HALF_WIDTH/DEPTH = 14, a 28x28
+// square) with real margin, at EVERY angle — a circle's distance from its
+// own centre is constant, so unlike a shape that bulges outward toward the
+// corners, the worst case here is the fence's own CORNER distance
+// (14*sqrt(2) ~= 19.8, not just its flat-side distance of 14). 24 clears
+// that corner by a comfortable ~4.2 units on every side, not just the
+// axis-aligned ones.
+//
+// A superellipse ("squircle") was tried first, to hug the square fence's
+// own shape more closely than a circle — but the standard parametrization
+// (x = R*sign(cos)*|cos|^(2/n), z = R*sign(sin)*|sin|^(2/n)) has an
+// INFINITE derivative in the parameter itself at each of the 4 axis
+// crossings whenever n > 2 (confirmed empirically: Camera_test.odin's
+// first attempt at an axis-point test failed by ~0.004 units, not from
+// float rounding, but from sqrt's derivative blowing up right at the
+// crossing where cos or sin passes through exactly zero). Mathematically
+// the underlying CURVE is smooth — only this specific PARAMETRIZATION
+// isn't — but a camera whose angle advances linearly in time would still
+// visibly "snap" through those 4 points on screen, directly contradicting
+// this session's own "smooth closed path" requirement. A plain circle
+// (this project's fence footprint is a perfect square, so equal radii on
+// both axes) has no such artifact, is simpler, and is explicitly one of
+// the task's own suggested shapes ("e.g. ellipse/superellipse") — not a
+// downgrade, the right choice once the superellipse's real cost was found.
+PATROL_RADIUS :: 24.0
+
+PATROL_HEIGHT :: 9.0
+PATROL_HEIGHT_BOB_AMPLITUDE :: 1.2
+PATROL_HEIGHT_BOB_RATE :: 0.3 // rad/s, argument to sin()
+
+// A full 2*PI loop takes ~90 seconds at this rate — slow and majestic, but
+// still completes more than one full lap within the "2-minute hands-off
+// demo" this session's task asks to verify looks good, rather than
+// crawling through less than one lap or looping so fast it feels dizzying.
+PATROL_ANGULAR_SPEED :: 0.0698 // rad/s (2*PI / 90s)
+
+// The look target drifts slowly near the base centre rather than staying
+// perfectly fixed at the origin — a small extra bit of "life" (still a
+// pure formula, CLAUDE.md §2 item 5) so the camera's aim isn't perfectly
+// rigid relative to its own position on the path. The two rates are a
+// non-integer ratio (0.11 : 0.077) specifically so the drift's own path
+// never closes on itself on any timescale a viewer would notice, unlike
+// using the same rate on both axes (which would just be a shrunk copy of
+// an ellipse).
+PATROL_LOOK_TARGET_DRIFT_RADIUS :: 2.5
+PATROL_LOOK_TARGET_DRIFT_RATE_X :: 0.11
+PATROL_LOOK_TARGET_DRIFT_RATE_Z :: 0.077
+
+// Patrol_Path_Position returns the camera's XZ position on the closed path
+// for a given ANGLE (not time — Patrol_Camera_Pose below converts time to
+// angle once, and Source/Main.odin's Inspection->Patrol handover
+// separately needs "the path position at THIS angle" without going
+// through time at all, see Patrol_Nearest_Angle). A plain circle of radius
+// PATROL_RADIUS — see that constant's own comment for why (a superellipse
+// was tried and rejected: it isn't actually smooth in this parameter, and
+// this project's square fence footprint has equal clearance on both axes
+// anyway, so a circle loses nothing by being simpler).
+Patrol_Path_Position :: proc(angle: f32) -> la.Vector3f32 {
+	return la.Vector3f32{PATROL_RADIUS * math.cos(angle), 0, PATROL_RADIUS * math.sin(angle)}
+}
+
+// Patrol_Look_Target returns the slowly-drifting point the patrol camera
+// aims at, in world space, near the base centre (CLAUDE.md §7's "always
+// looking toward the base centre or a slowly drifting target" — this picks
+// the second, slightly livelier option).
+Patrol_Look_Target :: proc(time_seconds: f32) -> la.Vector3f32 {
+	return la.Vector3f32{
+		math.cos(time_seconds * PATROL_LOOK_TARGET_DRIFT_RATE_X) * PATROL_LOOK_TARGET_DRIFT_RADIUS,
+		0,
+		math.sin(time_seconds * PATROL_LOOK_TARGET_DRIFT_RATE_Z) * PATROL_LOOK_TARGET_DRIFT_RADIUS,
+	}
+}
+
+// Patrol_Camera_Pose returns only the THREE fields Patrol Mode actually
+// drives (position, yaw, pitch) for the given TIME — deliberately not a
+// full Camera, so a caller can never accidentally overwrite the live
+// Camera's projection/lens/move-speed fields by assigning a freshly built
+// struct over them (Source/Main.odin copies these three fields into the
+// one shared `camera` every Patrol frame, which is exactly what keeps a
+// live `P` projection toggle intact while patrolling). `time_seconds` is
+// usually the shared animation clock, but Source/Main.odin's
+// Inspection->Patrol handover passes that clock PLUS a phase offset
+// instead, to resume from the nearest path point rather than jumping to
+// wherever the raw clock's angle happens to be.
+Patrol_Camera_Pose :: proc(time_seconds: f32) -> (position: la.Vector3f32, yaw, pitch: f32) {
+	angle := time_seconds * PATROL_ANGULAR_SPEED
+	path_position := Patrol_Path_Position(angle)
+	height := PATROL_HEIGHT + math.sin(time_seconds*PATROL_HEIGHT_BOB_RATE)*PATROL_HEIGHT_BOB_AMPLITUDE
+	position = la.Vector3f32{path_position.x, height, path_position.z}
+	yaw, pitch = yaw_pitch_looking_at(position, Patrol_Look_Target(time_seconds))
+	return
+}
+
+// Patrol_Nearest_Angle finds which angle on the closed path sits nearest a
+// given WORLD position — used once, at the moment of an Inspection ->
+// Patrol switch, to compute a phase offset so the patrol camera "restarts
+// from the nearest path point" (this session's task, CLAUDE.md §7) instead
+// of teleporting to wherever the shared clock's raw angle happens to be.
+// EXACT, not an approximation, because Patrol_Path_Position is a plain
+// circle centred on the origin: for a circle, the nearest point to ANY
+// external position lies exactly along the ray from the centre through
+// that position, so that ray's own polar angle IS the nearest angle — a
+// basic geometric fact, not a heuristic (confirmed for the axis case by
+// Camera_test.odin; true at every angle by the same argument, not just
+// those four points, unlike the rejected superellipse attempt).
+Patrol_Nearest_Angle :: proc(world_position: la.Vector3f32) -> f32 {
+	return math.atan2(world_position.z, world_position.x)
 }

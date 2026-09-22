@@ -244,6 +244,76 @@ test_zoom_ortho_scales_and_clamps_to_minimum :: proc(t: ^testing.T) {
 	testing.expectf(t, cam.ortho_half_height >= MIN_ORTHO_HALF_HEIGHT, "expected clamp to >= %v, got %v", MIN_ORTHO_HALF_HEIGHT, cam.ortho_half_height)
 }
 
+// ---------------------------------------------------------------------------
+// Roadmap step 9 (Patrol Mode) tests.
+// ---------------------------------------------------------------------------
+
+// Patrol_Path_Position must land exactly PATROL_RADIUS from the origin at
+// every angle (it's a plain circle, Camera.odin's own comment on why) —
+// checked at the 4 axis-aligned angles plus one arbitrary angle, since a
+// circle-vs-ellipse mistake (unequal x/z scale) would only show up off the
+// axes.
+@(test)
+test_patrol_path_position_is_always_at_radius :: proc(t: ^testing.T) {
+	expect_vector3_near(t, Patrol_Path_Position(0), la.Vector3f32{PATROL_RADIUS, 0, 0})
+	expect_vector3_near(t, Patrol_Path_Position(math.PI * 0.5), la.Vector3f32{0, 0, PATROL_RADIUS})
+	expect_vector3_near(t, Patrol_Path_Position(math.PI), la.Vector3f32{-PATROL_RADIUS, 0, 0})
+	expect_vector3_near(t, Patrol_Path_Position(math.PI * 1.5), la.Vector3f32{0, 0, -PATROL_RADIUS})
+
+	arbitrary := Patrol_Path_Position(0.83)
+	testing.expectf(t, math.abs(la.length(arbitrary)-PATROL_RADIUS) <= EPSILON, "expected distance ~= PATROL_RADIUS at an arbitrary angle, got %v", la.length(arbitrary))
+}
+
+// Patrol_Nearest_Angle is EXACT for this circular path (its own comment) —
+// checked by round-tripping THROUGH Patrol_Path_Position at an arbitrary
+// (non-axis-aligned) angle: the nearest angle to a point already ON the
+// circle must be that same angle, confirming the general claim, not just
+// the axis-aligned special case.
+@(test)
+test_patrol_nearest_angle_round_trips_through_path_position :: proc(t: ^testing.T) {
+	original_angle: f32 = 0.83
+	position := Patrol_Path_Position(original_angle)
+	recovered_angle := Patrol_Nearest_Angle(position)
+	testing.expectf(t, math.abs(recovered_angle-original_angle) <= EPSILON, "expected angle ~= %v, got %v", original_angle, recovered_angle)
+}
+
+// Patrol_Camera_Pose's height at t=0 must be exactly PATROL_HEIGHT (the
+// bob term is sin(0*rate) = 0), and at every t it must stay within the
+// documented bob amplitude — a coarse sanity check that height bobbing is
+// wired to the right term and bounded, not a full waveform check.
+@(test)
+test_patrol_camera_pose_height_bob_is_bounded :: proc(t: ^testing.T) {
+	position_at_zero, _, _ := Patrol_Camera_Pose(0)
+	testing.expectf(t, math.abs(position_at_zero.y-PATROL_HEIGHT) <= EPSILON, "expected height ~= PATROL_HEIGHT at t=0, got %v", position_at_zero.y)
+
+	position_later, _, _ := Patrol_Camera_Pose(37.0)
+	testing.expectf(
+		t,
+		math.abs(position_later.y-PATROL_HEIGHT) <= PATROL_HEIGHT_BOB_AMPLITUDE+EPSILON,
+		"expected height within PATROL_HEIGHT +/- bob amplitude, got %v",
+		position_later.y,
+	)
+}
+
+// Patrol_Camera_Pose's yaw/pitch must actually aim at Patrol_Look_Target,
+// not just be "some" angle — reconstructs Forward from the returned yaw/
+// pitch (the same formula View_Matrix relies on) and confirms it points
+// the same direction as (target - position), the definition of "looking
+// at" this project already uses elsewhere (Camera_Looking_At).
+@(test)
+test_patrol_camera_pose_looks_at_target :: proc(t: ^testing.T) {
+	time_seconds: f32 = 12.5
+	position, yaw, pitch := Patrol_Camera_Pose(time_seconds)
+
+	cam := Default_Camera(position)
+	cam.yaw = yaw
+	cam.pitch = pitch
+	forward := Forward(&cam)
+
+	expected_direction := la.normalize(Patrol_Look_Target(time_seconds) - position)
+	expect_vector3_near(t, forward, expected_direction)
+}
+
 // project_and_divide applies a clip-space transform and performs the
 // perspective divide (w-divide), returning NDC coordinates. Orthographic
 // matrices always have w = 1, so this is a correct no-op divide for them
