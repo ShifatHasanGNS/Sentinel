@@ -649,8 +649,16 @@ void main() {
 	// mode, ray-traced reflection, ground/fog/vignette/sky/tonemap) ever
 	// runs while this is on, which is the whole point — a flat, unlit view
 	// of whatever geometry/transforms the rest of the pipeline produced.
+	// u_EmissionColor is added in too: it's not a computed illumination
+	// term (no light struct, no diffuse/specular/ambient equation reads
+	// it here), just each material's own flat colour constant — same
+	// category as u_BaseColor, still fully "unlit". Skipping it would
+	// silently break Inspection Mode's selection highlight, which is
+	// implemented as an EmissionColor bump in Source/Inspection.odin's
+	// draw_scene_nodes and has no other way to reach the screen while
+	// this mode is on.
 	if (u_ObjectsOnlyMode) {
-		FragColor = vec4(u_BaseColor, 1.0);
+		FragColor = vec4(u_BaseColor + u_EmissionColor, 1.0);
 		return;
 	}
 
