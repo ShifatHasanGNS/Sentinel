@@ -186,20 +186,12 @@ Print_Controls :: proc() {
 	fmt.println("  ; / '        (Inspection) Decrease / increase translate+rotate step size")
 	fmt.println("  0            (Inspection) Reset selected object to its original transform")
 	fmt.println("  Shift+0      (Inspection) Reset ALL objects to their original transforms")
-	// [PROGRESS-DEMO] Branch-only: light-gizmo/area-light control lines
-	// removed — see PROGRESS-DEMO notes in Source/Main.odin.
-	fmt.println("  1 / 2 / 3    Shading mode: Flat / Gouraud / Phong")
-	fmt.println("  G            Toggle ground-grid resolution")
-	fmt.println("  C            Cycle back-face culling: Off -> Manual -> GL")
-	fmt.println("  Z            Toggle the depth test")
-	fmt.println("  X            Toggle depth visualisation")
+	// [PROGRESS-DEMO] Branch-only: light-gizmo/area-light/shading-mode/
+	// culling/depth-test/depth-visualisation/back-face-debug/polish-pass
+	// control lines removed — see Source/Main.odin's key_callback for why
+	// (every one was either about a "planned, not yet done" syllabus
+	// topic, or already a silent no-op under u_ObjectsOnlyMode).
 	fmt.println("  F            Toggle wireframe")
-	fmt.println("  B            Toggle back-face debug tint")
-	fmt.println("  M            Toggle tonemapping + gamma correction")
-	fmt.println("  V            Toggle vignette")
-	fmt.println("  Y            Toggle night fog/haze")
-	fmt.println("  T            Toggle ground procedural detail (dirt/gravel)")
-	fmt.println("  /            Toggle sky gradient + procedural stars")
 	fmt.println("  H            Print this list again")
 	fmt.println("  Esc          Quit")
 }

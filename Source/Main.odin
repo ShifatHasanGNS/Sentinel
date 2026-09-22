@@ -621,42 +621,26 @@ key_callback :: proc "c" (window: glfw.WindowHandle, key, scancode, action, mods
 	if key == glfw.KEY_P && action == glfw.PRESS {
 		projection_toggle_requested = true
 	}
-	// [PROGRESS-DEMO] Branch-only: light-gizmo toggle (L) and area-light
-	// sample-count/jitter controls (+/-/N) removed — see PROGRESS-DEMO
-	// notes throughout this file.
-	if key == glfw.KEY_1 && action == glfw.PRESS {
-		shading_mode = SHADING_FLAT
-		glfw.SetWindowTitle(window, build_window_title())
-	}
-	if key == glfw.KEY_2 && action == glfw.PRESS {
-		shading_mode = SHADING_GOURAUD
-		glfw.SetWindowTitle(window, build_window_title())
-	}
-	if key == glfw.KEY_3 && action == glfw.PRESS {
-		shading_mode = SHADING_PHONG
-		glfw.SetWindowTitle(window, build_window_title())
-	}
-	if key == glfw.KEY_G && action == glfw.PRESS {
-		ground_resolution_toggle_requested = true
-	}
-	if key == glfw.KEY_C && action == glfw.PRESS {
-		cull_mode = (cull_mode + 1) % 3
-		glfw.SetWindowTitle(window, build_window_title())
-	}
-	if key == glfw.KEY_Z && action == glfw.PRESS {
-		depth_test_enabled = !depth_test_enabled
-		glfw.SetWindowTitle(window, build_window_title())
-	}
-	if key == glfw.KEY_X && action == glfw.PRESS {
-		depth_visualization_enabled = !depth_visualization_enabled
-		glfw.SetWindowTitle(window, build_window_title())
-	}
+	// [PROGRESS-DEMO] Branch-only: light-gizmo toggle (L), area-light
+	// sample-count/jitter controls (+/-/N), shading-mode selection
+	// (1/2/3), ground-grid resolution (G), back-face culling (C), depth
+	// test (Z), depth visualisation (X), back-face debug tint (B), and
+	// the polish-pass toggles (M/V/Y/T/`/`) are all removed here. Every
+	// one of them either controls a syllabus topic this milestone
+	// explicitly scopes as "planned, not yet done" (shading, culling,
+	// hidden-surface removal — see Docs/report), or was already a
+	// silent no-op on this branch: Shaders/Scene.glsl's u_ObjectsOnlyMode
+	// early-return is the very first statement in the fragment shader's
+	// main(), before any of that code ever runs, so pressing these keys
+	// previously retitled the window (implying something changed) with
+	// zero visible effect — exactly the kind of input-system
+	// inconsistency this pass removes. Wireframe (F, below) is kept: it
+	// is a plain mesh-inspection tool (GL_LINE polygon mode is real GL
+	// state, independent of the shader) that directly supports this
+	// milestone's own "these are real procedural triangle meshes" story,
+	// not a lighting/shading/culling concept.
 	if key == glfw.KEY_F && action == glfw.PRESS {
 		wireframe_enabled = !wireframe_enabled
-		glfw.SetWindowTitle(window, build_window_title())
-	}
-	if key == glfw.KEY_B && action == glfw.PRESS {
-		backface_debug_enabled = !backface_debug_enabled
 		glfw.SetWindowTitle(window, build_window_title())
 	}
 	if key == glfw.KEY_TAB && action == glfw.PRESS {
@@ -737,28 +721,11 @@ key_callback :: proc "c" (window: glfw.WindowHandle, key, scancode, action, mods
 	if key == glfw.KEY_H && action == glfw.PRESS {
 		Print_Controls()
 	}
-	// [PROGRESS-DEMO] Branch-only: R (ray-traced reflection toggle)
-	// removed — see PROGRESS-DEMO notes throughout this file.
-	if key == glfw.KEY_M && action == glfw.PRESS {
-		tonemapping_enabled = !tonemapping_enabled
-		glfw.SetWindowTitle(window, build_window_title())
-	}
-	if key == glfw.KEY_V && action == glfw.PRESS {
-		vignette_enabled = !vignette_enabled
-		glfw.SetWindowTitle(window, build_window_title())
-	}
-	if key == glfw.KEY_Y && action == glfw.PRESS {
-		fog_enabled = !fog_enabled
-		glfw.SetWindowTitle(window, build_window_title())
-	}
-	if key == glfw.KEY_T && action == glfw.PRESS {
-		ground_detail_enabled = !ground_detail_enabled
-		glfw.SetWindowTitle(window, build_window_title())
-	}
-	if key == glfw.KEY_SLASH && action == glfw.PRESS {
-		sky_enabled = !sky_enabled
-		glfw.SetWindowTitle(window, build_window_title())
-	}
+	// [PROGRESS-DEMO] Branch-only: R (ray-traced reflection toggle) and
+	// M/V/Y/T/`/` (the polish-pass toggles: tonemapping, vignette, fog,
+	// ground detail, sky) removed — see this proc's own comment above
+	// for why (every one was already a silent no-op under
+	// u_ObjectsOnlyMode).
 }
 
 mouse_button_callback :: proc "c" (window: glfw.WindowHandle, button, action, mods: i32) {
@@ -767,37 +734,24 @@ mouse_button_callback :: proc "c" (window: glfw.WindowHandle, button, action, mo
 	}
 }
 
+// [PROGRESS-DEMO] Branch-only: dropped every toggle segment that no
+// longer has a live key to change it (shading mode, cull, depth test,
+// back-face debug, depth visualisation, tonemapping, vignette, fog,
+// ground detail, sky — see key_callback's own comment) — showing a
+// fixed value with no way to change it would just be more of the same
+// title-bar-implies-something-you-can't-actually-do inconsistency this
+// pass removes. Wire stays: F still genuinely toggles it.
 build_window_title :: proc() -> cstring {
-	depth_state := "On" if depth_test_enabled else "Off"
 	wireframe_state := "On" if wireframe_enabled else "Off"
-	backface_debug_state := "On" if backface_debug_enabled else "Off"
-	depth_visualization_state := "On" if depth_visualization_enabled else "Off"
-	// [PROGRESS-DEMO] Branch-only: reflection_state removed from the
-	// title — see PROGRESS-DEMO notes throughout this file.
-	tonemapping_state := "On" if tonemapping_enabled else "Off"
-	vignette_state := "On" if vignette_enabled else "Off"
-	fog_state := "On" if fog_enabled else "Off"
-	ground_detail_state := "On" if ground_detail_enabled else "Off"
-	sky_state := "On" if sky_enabled else "Off"
 	paused_suffix := " [Paused]" if animation_paused else ""
 	selection_suffix := fmt.tprintf(" Sel:%s", selected_node_name) if current_mode == .Inspection else ""
 
 	return fmt.ctprintf(
-		"SENTINEL - %s - %s%s | Speed:%.2fx Cull:%s Depth:%s Wire:%s BFDbg:%s DepthVis:%s Tone:%s Vig:%s Fog:%s Grnd:%s Sky:%s FPS:%.0f%s",
+		"SENTINEL - %s%s | Speed:%.2fx Wire:%s FPS:%.0f%s",
 		MODE_NAME[current_mode],
-		SHADING_MODE_NAME[shading_mode],
 		paused_suffix,
 		animation_speed_scale,
-		CULL_MODE_NAME[cull_mode],
-		depth_state,
 		wireframe_state,
-		backface_debug_state,
-		depth_visualization_state,
-		tonemapping_state,
-		vignette_state,
-		fog_state,
-		ground_detail_state,
-		sky_state,
 		fps_display_value,
 		selection_suffix,
 	)

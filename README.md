@@ -39,7 +39,9 @@ odin build Source -out:Sentinel
 | Left click | Pick the object at the screen centre |
 | `I`/`K`, `J`/`L`, `U`/`O` | Translate selected object (local Z, X, Y) |
 | `4`–`9` | Rotate selected object (yaw, pitch, roll) |
+| `;` / `'` | Decrease / increase the translate+rotate step size |
 | `0` / `Shift`+`0` | Reset selected / reset all objects |
+| `F` | Toggle wireframe |
 | `H` | Print the full control list |
 | `Esc` | Quit |
 
