@@ -146,6 +146,31 @@
 // can't look any different from Flat on this project's otherwise-faceted
 // geometry, since every vertex of one face already shares one normal.
 //
+// Session 11 status (roadmap step 8, Shaders/Scene.glsl +
+// Source/Main.odin): back-face culling and hidden-surface removal are now
+// demonstrable, not just "on since Session 3 with no way to compare."
+// `C` cycles cull_mode through OFF -> MANUAL (a per-fragment dot(normal,
+// direction-to-eye) test in the shader, see u_CullMode's own comment in
+// Scene.glsl for why it reaches the same image as hardware culling without
+// its performance saving) -> GL (gl.Enable(gl.CULL_FACE), this project's
+// behaviour every session before this one). `Z` toggles the depth test;
+// `X` toggles a grayscale linearised-depth visualisation (hand-derived in
+// the fragment shader, not sampled from a second depth-texture pass); `F`
+// toggles wireframe (gl.PolygonMode); `B` toggles a magenta tint on
+// back-facing fragments specifically so culling OFF + depth test OFF (the
+// "visibly wrong in a teachable way" state this session's task asks for)
+// has a way to show WHICH geometry culling would normally have hidden.
+// All five states are re-applied to GL every frame (apply_render_state,
+// called from the main loop, not from key_callback — same "callback flips
+// a package var, the main loop does the actual work" separation this file
+// already uses for shading_mode/gizmos_visible) and shown together in the
+// window title (build_window_title), the only on-screen readout this
+// project has (no text-rendering pipeline exists — same reasoning Session
+// 10's shading-mode title already established). A one-time startup print
+// logs the whole scene's submitted triangle count against one object's
+// (the watchtower's) CPU-estimated back-facing count from the starting
+// camera pose, to put a concrete number on "culling saves roughly half."
+//
 // Source/Input.odin (added once Inspection Mode exists, roadmap step 10):
 // GLFW key/mouse callbacks, object selection, and the remaining interactive
 // controls this session doesn't need yet (CLAUDE.md §7's suggested key
@@ -170,6 +195,7 @@ import "core:math"
 import la "core:math/linalg"
 import "core:os"
 import "core:strconv"
+import "base:runtime"
 
 import "vendor:glfw"
 import gl "vendor:OpenGL"
@@ -284,11 +310,34 @@ SHADING_GOURAUD :: i32(1)
 SHADING_PHONG :: i32(2)
 DEFAULT_SHADING_MODE :: SHADING_PHONG
 
-// Window titles per shading mode (key_callback sets one of these on every
-// 1/2/3 press) — the task's own "show the current mode on screen or in the
-// window title" ask, done via the title since this project has no text-
-// rendering infrastructure to draw an on-screen label with.
-SHADING_MODE_TITLE := [3]cstring{"SENTINEL - Flat", "SENTINEL - Gouraud", "SENTINEL - Phong"}
+// Display name per shading mode, read by build_window_title below — the
+// task's own "show the current mode on screen or in the window title" ask,
+// done via the title since this project has no text-rendering
+// infrastructure to draw an on-screen label with. (Session 11 replaced the
+// old SHADING_MODE_TITLE array of whole title strings with this array of
+// just the mode name, now that the title has more than one toggle to show —
+// see build_window_title.)
+SHADING_MODE_NAME := [3]string{"Flat", "Gouraud", "Phong"}
+
+// Roadmap step 8 (CLAUDE.md §4/§9, Prompts.md Session 11) cull-mode values
+// — match Shaders/Scene.glsl's CULL_OFF/CULL_MANUAL/CULL_GL #defines
+// exactly (kept in sync by hand, same cross-language situation as
+// SHADING_FLAT/GOURAUD/PHONG above and Scene.glsl's own MAX_LIGHTS note).
+// GL matches every prior session's behaviour (back-face culling has been
+// unconditionally on since Session 3), so a plain `./Sentinel` with no
+// flags looks exactly the same as it always has.
+CULL_OFF :: i32(0)
+CULL_MANUAL :: i32(1)
+CULL_GL :: i32(2)
+DEFAULT_CULL_MODE :: CULL_GL
+CULL_MODE_NAME := [3]string{"Off", "Manual", "GL"}
+
+// The watchtower is this session's demo object for the CPU-side back-facing
+// triangle estimate (task item 6) — a single, mostly-convex root object
+// (legs + platform + roof), not one of the thin/open-ring "cylinder"
+// composites (fence lamps' posts, the radar dish) where "back-facing from
+// this one view" is a less intuitive concept to show in a startup log line.
+TRIANGLE_COUNT_DEMO_OBJECT :: "Watchtower"
 
 // Ground grid resolution (roadmap step 7's own task text: "subdivide the
 // ground into a grid mesh... with a resolution toggle"). LOW matches the
@@ -308,6 +357,11 @@ main :: proc() {
 	area_light_jitter = parse_area_jitter_flag(os.args[1:])
 	shading_mode = parse_shading_flag(os.args[1:])
 	ground_resolution = parse_ground_resolution_flag(os.args[1:])
+	cull_mode = parse_cull_flag(os.args[1:])
+	depth_test_enabled = parse_depth_test_flag(os.args[1:])
+	wireframe_enabled = parse_wireframe_flag(os.args[1:])
+	backface_debug_enabled = parse_backface_debug_flag(os.args[1:])
+	depth_visualization_enabled = parse_depth_visualization_flag(os.args[1:])
 
 	if !glfw.Init() {
 		fmt.eprintln("Failed to initialize GLFW")
@@ -324,7 +378,11 @@ main :: proc() {
 	// on-screen flash for a run that closes itself after N frames.
 	glfw.WindowHint(glfw.VISIBLE, !do_capture)
 
-	window := glfw.CreateWindow(DEFAULT_WINDOW_WIDTH, DEFAULT_WINDOW_HEIGHT, SHADING_MODE_TITLE[shading_mode], nil, nil)
+	// All 6 toggles build_window_title reads are already parsed above, so
+	// the FIRST title the window ever shows already reflects any --cull/
+	// --depth-test/--wireframe/etc. flags, rather than starting generic and
+	// waiting for the first keypress to correct it.
+	window := glfw.CreateWindow(DEFAULT_WINDOW_WIDTH, DEFAULT_WINDOW_HEIGHT, build_window_title(), nil, nil)
 	if window == nil {
 		fmt.eprintln("Failed to create GLFW window")
 		os.exit(1)
@@ -347,16 +405,14 @@ main :: proc() {
 	fb_width, fb_height := glfw.GetFramebufferSize(window)
 	gl.Viewport(0, 0, fb_width, fb_height); dbg.GL_Check()
 
-	gl.Enable(gl.DEPTH_TEST); dbg.GL_Check()
-
-	// Self-verification aid for this session (see the file header's
-	// "Session 3 status" for why this isn't yet roadmap step 8's
-	// toggleable culling feature): CCW-wound front faces, back faces
-	// culled — a winding bug in any Geometry generator shows up as a
-	// missing face in a capture rather than silently going unnoticed.
-	gl.Enable(gl.CULL_FACE); dbg.GL_Check()
-	gl.CullFace(gl.BACK); dbg.GL_Check()
-	gl.FrontFace(gl.CCW); dbg.GL_Check()
+	// Depth test / culling / wireframe are now all toggleable (roadmap step
+	// 8, Session 11) — apply_render_state pushes the current cull_mode/
+	// depth_test_enabled/wireframe_enabled package vars to GL every frame
+	// in the main loop below, so nothing needs to be set once here anymore.
+	// Their startup values already come from the --cull/--depth-test/
+	// --wireframe flags parsed above (or DEFAULT_CULL_MODE/true/false),
+	// matching every prior session's always-on culling/depth-test
+	// behaviour by default.
 
 	scene := scenepkg.Build_Scene()
 	defer scenepkg.Destroy(&scene)
@@ -369,7 +425,7 @@ main :: proc() {
 
 	ground_mesh := build_ground_mesh(ground_resolution)
 	defer geo.Destroy(&ground_mesh)
-	fmt.printfln("Ground grid: %dx%d cells (G to toggle), shading mode: %s", ground_resolution, ground_resolution, SHADING_MODE_TITLE[shading_mode])
+	fmt.printfln("Ground grid: %dx%d cells (G to toggle), shading mode: %s", ground_resolution, ground_resolution, SHADING_MODE_NAME[shading_mode])
 	ground_material := scenepkg.Default_Material(la.Vector3f32{0.05, 0.05, 0.06})
 	// Fixed once, not recomputed per frame: unlike the 9 real objects and
 	// every light (both required to recompute every frame — CLAUDE.md §2
@@ -390,6 +446,47 @@ main :: proc() {
 		active_light_count > object_count,
 	)
 	fmt.printfln("Area light samples: %d (+/- to change, J to toggle jitter, currently %v)", area_light_sample_count, area_light_jitter)
+
+	fmt.printfln(
+		"Render toggles: Cull=%s (C), Depth test=%v (Z), Depth visualization=%v (X), Wireframe=%v (F), Backface debug=%v (B)",
+		CULL_MODE_NAME[cull_mode], depth_test_enabled, depth_visualization_enabled, wireframe_enabled, backface_debug_enabled,
+	)
+
+	// Task item 6: log total submitted triangles against ONE object's
+	// CPU-estimated back-facing count from the starting camera pose, to put
+	// a concrete number on "culling saves roughly half" rather than just
+	// asserting it. A one-time startup diagnostic (like the object/light
+	// counts above), not a per-frame log — the estimate is only ever as
+	// fresh as the camera pose it was computed from, which is fine for a
+	// demo number, not fine for anything the renderer actually depends on.
+	total_triangle_count := count_total_triangles(&scene, &ground_mesh)
+	demo_node_index := scenepkg.Find_Node(&scene, TRIANGLE_COUNT_DEMO_OBJECT)
+	if demo_node_index != scenepkg.NO_PARENT {
+		startup_world_matrices := scenepkg.Compute_World_Matrices(&scene)
+		demo_world_matrix := startup_world_matrices[demo_node_index]
+		demo_normal_matrix := scenepkg.Normal_Matrix(demo_world_matrix)
+		// One constant view direction for the whole object (its own world
+		// position to the starting eye), not a per-triangle one — the same
+		// simplification the ORTHOGRAPHIC branch of Scene.glsl's manual
+		// culling test always uses exactly, and a reasonable one here too
+		// since the watchtower is small relative to its distance from
+		// CAMERA_START_EYE. This is exactly why the log below calls it an
+		// ESTIMATE, not an exact count.
+		demo_view_direction := la.normalize(CAMERA_START_EYE - scenepkg.World_Position(demo_world_matrix))
+		delete(startup_world_matrices)
+
+		demo_mesh := &scene.Nodes[demo_node_index].Mesh
+		demo_triangle_count := len(demo_mesh.Indices) / 3
+		demo_back_facing_count := count_back_facing_triangles(demo_mesh, demo_normal_matrix, demo_view_direction)
+		fmt.printfln(
+			"Triangles: %d submitted across the whole scene; %s alone has %d, ~%d (%.0f%%) estimated back-facing from the starting view (roughly the saving GL cull mode would give on it)",
+			total_triangle_count,
+			TRIANGLE_COUNT_DEMO_OBJECT,
+			demo_triangle_count,
+			demo_back_facing_count,
+			100.0 * f32(demo_back_facing_count) / f32(demo_triangle_count),
+		)
+	}
 
 	// Session 8 demo-animation node indices, looked up ONCE (which array
 	// index a name maps to never changes after Build_Scene) — see the
@@ -499,6 +596,11 @@ main :: proc() {
 			scene.Nodes[demo_jeep].Local.Position = scenepkg.JEEP_POSITION + la.Vector3f32{0, 0, math.sin(demo_time * DEMO_JEEP_DRIFT_RATE) * DEMO_JEEP_DRIFT_AMPLITUDE}
 		}
 
+		// Push this frame's cull/depth-test/wireframe toggles to GL — see
+		// apply_render_state's own comment for why this runs every frame
+		// rather than only right after a C/Z/F keypress.
+		apply_render_state()
+
 		gl.ClearColor(CLEAR_COLOR.x, CLEAR_COLOR.y, CLEAR_COLOR.z, CLEAR_COLOR.w); dbg.GL_Check()
 		gl.Clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT); dbg.GL_Check()
 
@@ -536,6 +638,28 @@ main :: proc() {
 		if area_light_jitter do jitter_value = 1
 		sd.SetUniform(&shader, "u_AreaLightJitter", jitter_value)
 		sd.SetUniform(&shader, "u_ShadingMode", shading_mode)
+
+		// Roadmap step 8 (CLAUDE.md §4/§9): culling/depth-visualization
+		// uniforms Shaders/Scene.glsl's fragment stage reads — see
+		// u_CullMode/u_ViewDirection/u_IsOrthographic's own comments there
+		// for what each does and why direction-to-eye needs a different
+		// formula per projection. Forward(cam) and camera.projection are
+		// read fresh every frame, never cached, so this stays correct
+		// across a live projection toggle (key P) or free-fly movement.
+		sd.SetUniform(&shader, "u_CullMode", cull_mode)
+		view_direction := cam.Forward(&camera)
+		sd.SetUniform(&shader, "u_ViewDirection", view_direction.x, view_direction.y, view_direction.z)
+		is_orthographic_value: i32 = 0
+		if camera.projection == .Orthographic do is_orthographic_value = 1
+		sd.SetUniform(&shader, "u_IsOrthographic", is_orthographic_value)
+		backface_debug_value: i32 = 0
+		if backface_debug_enabled do backface_debug_value = 1
+		sd.SetUniform(&shader, "u_BackfaceDebug", backface_debug_value)
+		depth_visualization_value: i32 = 0
+		if depth_visualization_enabled do depth_visualization_value = 1
+		sd.SetUniform(&shader, "u_DepthVisualization", depth_visualization_value)
+		sd.SetUniform(&shader, "u_Near", camera.near)
+		sd.SetUniform(&shader, "u_Far", camera.far)
 
 		scenepkg.Draw_Node(&shader, view, projection, ground_model, &ground_mesh, ground_material)
 
@@ -604,7 +728,28 @@ shading_mode: i32
 ground_resolution: int
 ground_resolution_toggle_requested: bool
 
+// Roadmap step 8 (CLAUDE.md §4/§9, Prompts.md Session 11) toggle state —
+// same "callback sets the var directly, the main loop applies/uploads it"
+// pattern shading_mode/gizmos_visible/area_light_jitter already use above.
+// No separate "_requested" flag is needed here the way ground_resolution's
+// mesh rebuild needed one: applying these is just a handful of gl.Enable/
+// Disable/PolygonMode calls (apply_render_state, called from the main
+// loop), not a GPU buffer rebuild.
+cull_mode: i32
+depth_test_enabled: bool
+depth_visualization_enabled: bool
+wireframe_enabled: bool
+backface_debug_enabled: bool
+
 key_callback :: proc "c" (window: glfw.WindowHandle, key, scancode, action, mods: i32) {
+	// "c" calling convention procs get no implicit Odin context (unlike an
+	// ordinary proc) — build_window_title below needs one (it calls
+	// fmt.ctprintf, which allocates from context.temp_allocator), so every
+	// other GLFW "c" callback in this file that only touches plain package
+	// vars never needed this, but this one does the moment it also builds a
+	// title string.
+	context = runtime.default_context()
+
 	if key == glfw.KEY_ESCAPE && action == glfw.PRESS {
 		glfw.SetWindowShouldClose(window, true)
 	}
@@ -629,19 +774,149 @@ key_callback :: proc "c" (window: glfw.WindowHandle, key, scancode, action, mods
 	}
 	if key == glfw.KEY_1 && action == glfw.PRESS {
 		shading_mode = SHADING_FLAT
-		glfw.SetWindowTitle(window, SHADING_MODE_TITLE[shading_mode])
+		glfw.SetWindowTitle(window, build_window_title())
 	}
 	if key == glfw.KEY_2 && action == glfw.PRESS {
 		shading_mode = SHADING_GOURAUD
-		glfw.SetWindowTitle(window, SHADING_MODE_TITLE[shading_mode])
+		glfw.SetWindowTitle(window, build_window_title())
 	}
 	if key == glfw.KEY_3 && action == glfw.PRESS {
 		shading_mode = SHADING_PHONG
-		glfw.SetWindowTitle(window, SHADING_MODE_TITLE[shading_mode])
+		glfw.SetWindowTitle(window, build_window_title())
 	}
 	if key == glfw.KEY_G && action == glfw.PRESS {
 		ground_resolution_toggle_requested = true
 	}
+	// Roadmap step 8 (CLAUDE.md §4/§9, Prompts.md Session 11): C cycles
+	// OFF -> MANUAL -> GL (the exact order the task asks for), Z/X/F/B each
+	// flip one independent bool. Every branch also refreshes the window
+	// title (item 5's "show current toggle states" ask) the same way the
+	// 1/2/3 branches above already do for shading_mode.
+	if key == glfw.KEY_C && action == glfw.PRESS {
+		cull_mode = (cull_mode + 1) % 3
+		glfw.SetWindowTitle(window, build_window_title())
+	}
+	if key == glfw.KEY_Z && action == glfw.PRESS {
+		depth_test_enabled = !depth_test_enabled
+		glfw.SetWindowTitle(window, build_window_title())
+	}
+	if key == glfw.KEY_X && action == glfw.PRESS {
+		depth_visualization_enabled = !depth_visualization_enabled
+		glfw.SetWindowTitle(window, build_window_title())
+	}
+	if key == glfw.KEY_F && action == glfw.PRESS {
+		wireframe_enabled = !wireframe_enabled
+		glfw.SetWindowTitle(window, build_window_title())
+	}
+	if key == glfw.KEY_B && action == glfw.PRESS {
+		backface_debug_enabled = !backface_debug_enabled
+		glfw.SetWindowTitle(window, build_window_title())
+	}
+}
+
+// build_window_title reads every render-toggle package var (shading_mode,
+// cull_mode, depth_test_enabled, wireframe_enabled, backface_debug_enabled,
+// depth_visualization_enabled) and formats them into one title string —
+// task item 5's "show current toggle states in the window title" ask, now
+// covering 6 toggles instead of Session 10's original 1 (shading mode
+// alone). Called both to build the INITIAL window title (before the window
+// even exists — glfw.CreateWindow just wants a cstring, no window handle
+// needed to build one) and again after every keypress above that changes
+// one of these vars.
+build_window_title :: proc() -> cstring {
+	depth_state := "On" if depth_test_enabled else "Off"
+	wireframe_state := "On" if wireframe_enabled else "Off"
+	backface_debug_state := "On" if backface_debug_enabled else "Off"
+	depth_visualization_state := "On" if depth_visualization_enabled else "Off"
+
+	return fmt.ctprintf(
+		"SENTINEL - %s | Cull:%s Depth:%s Wire:%s BFDbg:%s DepthVis:%s",
+		SHADING_MODE_NAME[shading_mode],
+		CULL_MODE_NAME[cull_mode],
+		depth_state,
+		wireframe_state,
+		backface_debug_state,
+		depth_visualization_state,
+	)
+}
+
+// apply_render_state pushes this frame's cull_mode/depth_test_enabled/
+// wireframe_enabled package vars to actual GL state — called every frame
+// from the main loop (not from key_callback) rather than only right after a
+// C/Z/F keypress, the same "state mutation centralized in the main loop,
+// not scattered into a callback" choice this file already makes for every
+// other per-frame GL/uniform update (e.g. gl.ClearColor is re-issued every
+// frame too, not just when CLEAR_COLOR "changes" — it never does, but the
+// pattern is the same: read state, push it, every frame, exactly once).
+apply_render_state :: proc() {
+	switch cull_mode {
+	case CULL_OFF:
+		gl.Disable(gl.CULL_FACE)
+	case CULL_MANUAL:
+		// The rasterizer still draws every triangle; Shaders/Scene.glsl's
+		// manual back-face test in the fragment stage does the discarding
+		// instead — see that shader's u_CullMode comment for why this
+		// reaches the SAME image as CULL_GL but without CULL_GL's actual
+		// performance saving.
+		gl.Disable(gl.CULL_FACE)
+	case CULL_GL:
+		// Hardware culling: a winding-order test in the rasterizer, before
+		// any fragment shader invocation — where the real saving over
+		// MANUAL comes from (see the triangle-count log printed at
+		// startup). CCW front faces, matching every Geometry generator's
+		// documented winding convention (Library/Geometry/Geometry.odin's
+		// header).
+		gl.Enable(gl.CULL_FACE)
+		gl.CullFace(gl.BACK)
+		gl.FrontFace(gl.CCW)
+	}
+	dbg.GL_Check()
+
+	if depth_test_enabled {
+		gl.Enable(gl.DEPTH_TEST)
+	} else {
+		gl.Disable(gl.DEPTH_TEST)
+	}
+	dbg.GL_Check()
+
+	if wireframe_enabled {
+		gl.PolygonMode(gl.FRONT_AND_BACK, gl.LINE)
+	} else {
+		gl.PolygonMode(gl.FRONT_AND_BACK, gl.FILL)
+	}
+	dbg.GL_Check()
+}
+
+// count_total_triangles sums len(Indices)/3 across every drawn mesh in the
+// scene (the 9 objects' own hierarchy plus the ground plane, which — like
+// Source/Main.odin's other ground-plane handling — sits outside the
+// Hierarchy and so isn't counted by Scene.Build_Scene's own object count).
+// Task item 6's "total submitted" half of the triangle-count log.
+count_total_triangles :: proc(scene: ^scenepkg.Hierarchy, ground_mesh: ^geo.Mesh) -> int {
+	total := len(ground_mesh.Indices) / 3
+	for node in scene.Nodes {
+		total += len(node.Mesh.Indices) / 3
+	}
+	return total
+}
+
+// count_back_facing_triangles is a CPU-side ESTIMATE, for ONE mesh, of how
+// many of its triangles face away from a given (constant, per-object, not
+// per-triangle) view direction — task item 6's own wording: "estimated
+// back-facing (optional counter computed CPU-side for one object as a
+// demo)". Reuses each triangle's first vertex's own stored Normal rather
+// than recomputing cross(edge1, edge2): every Geometry generator already
+// duplicates vertices per face (Geometry.odin's own header), so a
+// triangle's 3 indices already share one Normal — the local-space face
+// normal, already sitting right there in Mesh.Vertices.
+count_back_facing_triangles :: proc(mesh: ^geo.Mesh, normal_matrix: la.Matrix3f32, view_direction: la.Vector3f32) -> int {
+	count := 0
+	for i := 0; i < len(mesh.Indices); i += 3 {
+		local_normal := mesh.Vertices[mesh.Indices[i]].Normal
+		world_normal := la.normalize(la.mul(normal_matrix, local_normal))
+		if la.dot(world_normal, view_direction) < 0 do count += 1
+	}
+	return count
 }
 
 // build_ground_mesh builds and uploads the ground plane's LOCAL-space mesh
@@ -869,4 +1144,99 @@ parse_ground_resolution_flag :: proc(args: []string) -> int {
 	}
 
 	return GROUND_GRID_LOW_RESOLUTION
+}
+
+// parse_cull_flag looks for "--cull <off|manual|gl>" anywhere in argv — the
+// non-interactive way to pick a starting cull mode for a --capture run (the
+// C key is skipped during --capture, same as every other live input),
+// specifically so the OFF-vs-MANUAL-vs-GL comparison this session's task
+// asks to "verify... give the same image" doesn't depend on live key-press
+// timing. Defaults to DEFAULT_CULL_MODE (GL), matching every prior
+// session's always-on culling behaviour.
+parse_cull_flag :: proc(args: []string) -> i32 {
+	for i := 0; i < len(args); i += 1 {
+		if args[i] != "--cull" do continue
+
+		if i + 1 >= len(args) {
+			fmt.eprintln("--cull requires one argument: <off|manual|gl>")
+			os.exit(1)
+		}
+
+		switch args[i + 1] {
+		case "off":
+			return CULL_OFF
+		case "manual":
+			return CULL_MANUAL
+		case "gl":
+			return CULL_GL
+		case:
+			fmt.eprintfln("--cull: expected 'off', 'manual', or 'gl', got '%s'", args[i + 1])
+			os.exit(1)
+		}
+	}
+
+	return DEFAULT_CULL_MODE
+}
+
+// parse_depth_test_flag looks for "--depth-test <on|off>" anywhere in argv
+// — the non-interactive way to pick a starting depth-test state for a
+// --capture run (the Z key is skipped during --capture). A value-taking
+// flag rather than a bare one (unlike --wireframe/--gizmos/etc. below)
+// because the DEFAULT is "on", so a bare "--depth-test" flag would be
+// ambiguous about which state it's requesting.
+parse_depth_test_flag :: proc(args: []string) -> bool {
+	for i := 0; i < len(args); i += 1 {
+		if args[i] != "--depth-test" do continue
+
+		if i + 1 >= len(args) {
+			fmt.eprintln("--depth-test requires one argument: <on|off>")
+			os.exit(1)
+		}
+
+		switch args[i + 1] {
+		case "on":
+			return true
+		case "off":
+			return false
+		case:
+			fmt.eprintfln("--depth-test: expected 'on' or 'off', got '%s'", args[i + 1])
+			os.exit(1)
+		}
+	}
+
+	return true
+}
+
+// parse_wireframe_flag looks for a bare "--wireframe" flag anywhere in
+// argv, the non-interactive way to force wireframe mode on for a --capture
+// run (the F key is skipped during --capture) — same reasoning as
+// parse_gizmos_flag above. Defaults to off, matching wireframe_enabled's
+// zero value for a normal interactive run before the first F press.
+parse_wireframe_flag :: proc(args: []string) -> bool {
+	for arg in args {
+		if arg == "--wireframe" do return true
+	}
+	return false
+}
+
+// parse_backface_debug_flag looks for a bare "--backface-debug" flag
+// anywhere in argv, the non-interactive way to force the magenta back-face
+// tint on for a --capture run (the B key is skipped during --capture) —
+// same reasoning as parse_gizmos_flag above.
+parse_backface_debug_flag :: proc(args: []string) -> bool {
+	for arg in args {
+		if arg == "--backface-debug" do return true
+	}
+	return false
+}
+
+// parse_depth_visualization_flag looks for a bare "--depth-visualization"
+// flag anywhere in argv, the non-interactive way to force the grayscale
+// linearised-depth view on for a --capture run (the X key is skipped during
+// --capture) — same reasoning as parse_gizmos_flag above.
+parse_depth_visualization_flag :: proc(args: []string) -> bool {
+	for arg in args {
+		if arg == "--depth-visualization" do return true
+	}
+	return false
 }

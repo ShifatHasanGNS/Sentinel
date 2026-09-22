@@ -288,16 +288,15 @@ void main() {
 
 #shader fragment
 
-// Fragment stage. Remaining planned responsibilities (CLAUDE.md §6, §9;
-// Plan.md §5, §9; Prompts.md Sessions 11-14):
-//   - Session 11: manual back-face culling test (dot(normal, view dir)) as
-//     an alternative to GL_CULL_FACE, toggleable and compared; a debug mode
-//     that colours back faces to make the effect visible; a hand-written
-//     depth-buffer linearisation for a depth-visualisation toggle.
-//   - Session 14: the one genuinely ray-traced surface (tank periscope or
-//     jeep windshield) — reflection ray against uniform proxy shapes
-//     rebuilt each frame from live object transforms, analytic
-//     intersection, shade the hit with compute_lighting below.
+// Fragment stage. Roadmap step 8 (CLAUDE.md §4/§9, Prompts.md Session 11)
+// is implemented below: manual back-face culling, a back-face debug tint,
+// and a hand-linearised depth-buffer visualisation — see the "Roadmap step
+// 8" block further down for all of it and why it's fragment-stage-only.
+// Remaining planned responsibility (CLAUDE.md §6.2; Plan.md §5.2; Prompts.md
+// Session 14): the one genuinely ray-traced surface (tank periscope or jeep
+// windshield) — reflection ray against uniform proxy shapes rebuilt each
+// frame from live object transforms, analytic intersection, shade the hit
+// with compute_lighting below.
 in vec3 v_WorldPosition;
 in vec3 v_WorldNormal;
 flat in vec3 v_FlatColor;
@@ -334,6 +333,81 @@ uniform vec3 u_ViewPosition;
 // AMBIENT_STRENGTH.
 uniform vec3 u_AmbientColor;
 uniform float u_AmbientStrength;
+
+// ---------------------------------------------------------------------------
+// Roadmap step 8 (Prompts.md Session 11, CLAUDE.md §4/§9): back-face culling
+// and hidden-surface-removal demonstrations. All of this lives in the
+// FRAGMENT stage only, unlike compute_lighting above (genuinely shared by
+// both stages) — classifying ONE fragment as front- or back-facing needs
+// the interpolated per-fragment normal/position that only exists here.
+// ---------------------------------------------------------------------------
+
+#define CULL_OFF 0
+#define CULL_MANUAL 1
+#define CULL_GL 2
+// u_CullMode's three states, in plain language (what problem each solves,
+// how, and its cost):
+//   OFF    — draws every triangle, front AND back. Nothing removes a back
+//            face at all; deliberately left this way so item 2 below (the
+//            backface-debug tint) has something to demonstrate.
+//   MANUAL — this shader decides, PER FRAGMENT, whether the triangle it
+//            belongs to faces the eye or away from it (is_back_facing
+//            below) and discards the ones that face away — reaching the
+//            SAME final image as hardware culling. Cost: the rasterizer and
+//            this fragment shader still RUN for every back-facing fragment
+//            before discarding it, so none of hardware culling's actual
+//            performance saving applies here — it exists to prove the two
+//            methods agree, not to be faster (Source/Main.odin's triangle-
+//            count log talks about the real saving GL mode gets instead).
+//   GL     — Source/Main.odin calls gl.Enable(gl.CULL_FACE)/gl.CullFace
+//            instead of setting this to MANUAL. The GPU's rasterizer
+//            throws a back-facing triangle away, by its winding order,
+//            BEFORE this fragment shader ever runs for it — this is where
+//            the real ~50% saving in fragment-shader invocations for a
+//            closed, roughly-convex object comes from. This shader's own
+//            is_back_facing test still runs in this mode too (cheap, and
+//            needed for the backface-debug tint below regardless of
+//            u_CullMode), but the MANUAL discard branch is simply never hit
+//            here: a back-facing fragment never arrives at all.
+uniform int u_CullMode;
+
+// Direction to the eye is NOT the same formula in both projections — this
+// session's own explicit ask ("handle orthographic mode correctly"). In
+// PERSPECTIVE, the eye is a single point (u_ViewPosition) a FINITE distance
+// away, so every fragment's ray toward it points a slightly different way:
+// normalize(u_ViewPosition - world_position), recomputed per fragment
+// (compute_lighting's own view_direction, below, already does exactly
+// this). In ORTHOGRAPHIC, the eye is conceptually infinitely far away along
+// the camera's own forward axis, so every view ray is PARALLEL — direction
+// to the eye is the SAME constant vector everywhere on screen (the negated
+// camera forward), independent of world_position entirely. u_ViewDirection
+// is that camera-forward vector (Library/Camera.Forward), uploaded once per
+// frame from Source/Main.odin; u_IsOrthographic picks which formula below
+// applies, and stays correct across a live projection toggle (key P)
+// because both uniforms are re-uploaded fresh every frame, never cached.
+uniform vec3 u_ViewDirection;
+uniform bool u_IsOrthographic;
+
+// Item 2's teaching aid: this fragment's colour becomes magenta instead of
+// its normal shaded colour when it belongs to a back-facing triangle —
+// independent of u_CullMode's own discard behaviour, so it can be turned on
+// together with culling OFF and the depth test OFF (Source/Main.odin's Z
+// key) to make an otherwise ambiguous jumble of overlapping front/back
+// faces legible: every magenta triangle is exactly the geometry that either
+// culling mode would normally have hidden.
+uniform bool u_BackfaceDebug;
+
+// Item 3: replaces this fragment's colour with a grayscale visualisation of
+// its OWN depth-buffer value instead of its lit colour — see main() below
+// for the hand-derived linearisation and why perspective/orthographic need
+// different formulas. u_Near/u_Far mirror the Camera's own near/far planes
+// (Library/Camera.Camera.near/far), uploaded once per frame — needed
+// because gl_FragCoord.z alone is either a non-linear (perspective) or an
+// already-linear-but-oddly-scaled (orthographic) value, not a plain world-
+// space distance a grayscale image can show directly.
+uniform bool u_DepthVisualization;
+uniform float u_Near;
+uniform float u_Far;
 
 // ---------------------------------------------------------------------------
 // Shared lighting code — FRAGMENT STAGE COPY. See this file's header
@@ -546,11 +620,66 @@ vec3 compute_lighting(vec3 normal, vec3 world_position, vec3 base_color, float s
 }
 
 void main() {
+	// --- Roadmap step 8: back-face classification, done once per fragment
+	// here, shared by MANUAL culling's discard, the backface-debug tint,
+	// and (implicitly) GL_CULL_FACE mode — see u_CullMode's own comment for
+	// why a back-facing fragment simply never reaches this shader at all in
+	// that last mode.
+	vec3 normal = normalize(v_WorldNormal);
+	vec3 direction_to_eye = u_IsOrthographic
+		? -normalize(u_ViewDirection)
+		: normalize(u_ViewPosition - v_WorldPosition);
+	bool is_back_facing = dot(normal, direction_to_eye) < 0.0;
+
+	if (u_CullMode == CULL_MANUAL && is_back_facing) {
+		// Same final IMAGE as GL_CULL_FACE (this fragment never appears in
+		// the framebuffer) but not the same performance cost — see
+		// u_CullMode's own comment above.
+		discard;
+	}
+
+	// Item 3: an alternate full-screen debug view — grayscale linearised
+	// depth instead of lit colour, for every fragment that reaches this
+	// point (i.e. survived the MANUAL discard above, same as any other
+	// mode would draw).
+	if (u_DepthVisualization) {
+		// gl_FragCoord.z is WINDOW-space depth, always in [0, 1] regardless
+		// of the clip-space convention the projection matrix itself uses
+		// (OpenGL's default glDepthRange maps NDC z in [-1, 1] to window
+		// depth in [0, 1] linearly) — undo that mapping first to recover
+		// the NDC z this project's own convention actually produces
+		// (Library/Camera/Camera.odin's header comment: near -> -1,
+		// far -> +1).
+		float depth_ndc = gl_FragCoord.z * 2.0 - 1.0;
+
+		float linear_depth;
+		if (u_IsOrthographic) {
+			// Orthographic projection has NO perspective divide, so NDC z
+			// is ALREADY linear in view-space distance — "linearising" it
+			// here is just an affine remap back to [near, far], not the
+			// perspective un-projection below.
+			linear_depth = u_Near + (depth_ndc + 1.0) * 0.5 * (u_Far - u_Near);
+		} else {
+			// The textbook perspective depth-linearisation formula: NDC z
+			// is a HYPERBOLIC function of view-space distance (the
+			// projection matrix divides by w = -view_z), so this inverts
+			// that specific hyperbola by hand rather than sampling a
+			// second depth-texture pass — gl_FragCoord.z already IS this
+			// fragment's own depth-buffer value.
+			linear_depth = (2.0 * u_Near * u_Far) / (u_Far + u_Near - depth_ndc * (u_Far - u_Near));
+		}
+
+		float normalized_depth = clamp((linear_depth - u_Near) / (u_Far - u_Near), 0.0, 1.0);
+		FragColor = vec4(vec3(normalized_depth), 1.0);
+		return;
+	}
+
+	vec3 result;
 	if (u_ShadingMode == SHADING_FLAT) {
 		// v_FlatColor already IS the final colour (computed once per
 		// triangle in the vertex stage, taken from the provoking vertex by
 		// the `flat` qualifier) — nothing left to do per fragment.
-		FragColor = vec4(v_FlatColor, 1.0);
+		result = v_FlatColor;
 	} else if (u_ShadingMode == SHADING_GOURAUD) {
 		// v_GouraudColor is the smooth INTERPOLATION of the 3 vertices'
 		// already-computed colours — also nothing left to do per fragment.
@@ -560,15 +689,23 @@ void main() {
 		// between 3 dim corner values can never reconstruct a bright spot
 		// in the middle — see Source/Main.odin's ground-grid resolution
 		// toggle (key G), built specifically to demonstrate this.
-		FragColor = vec4(v_GouraudColor, 1.0);
+		result = v_GouraudColor;
 	} else {
 		// PHONG: interpolate the NORMAL (smooth `in vec3 v_WorldNormal`
 		// above already did that, automatically, just by being a
 		// non-flat varying) and evaluate the full lighting equation fresh
 		// at every fragment — current behaviour from before this session,
 		// unchanged.
-		vec3 normal = normalize(v_WorldNormal);
-		vec3 result = compute_lighting(normal, v_WorldPosition, u_BaseColor, u_SpecularStrength, u_Shininess, u_EmissionColor);
-		FragColor = vec4(result, 1.0);
+		result = compute_lighting(normal, v_WorldPosition, u_BaseColor, u_SpecularStrength, u_Shininess, u_EmissionColor);
 	}
+
+	if (u_BackfaceDebug && is_back_facing) {
+		// Overrides whatever shading mode just computed — see
+		// u_BackfaceDebug's own comment above for when this is actually
+		// visible (culling OFF; MANUAL already discarded these fragments
+		// above, and GL mode never delivers them to this shader at all).
+		result = vec3(1.0, 0.0, 1.0); // magenta
+	}
+
+	FragColor = vec4(result, 1.0);
 }
