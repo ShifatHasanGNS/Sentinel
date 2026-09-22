@@ -146,7 +146,6 @@ main :: proc() {
 	glfw.SwapInterval(0 if do_benchmark else 1)
 	glfw.SetFramebufferSizeCallback(window, framebuffer_size_callback)
 	glfw.SetKeyCallback(window, key_callback)
-	glfw.SetMouseButtonCallback(window, mouse_button_callback)
 	glfw.SetScrollCallback(window, scroll_callback)
 
 	gl.load_up_to(GL_VERSION_MAJOR, GL_VERSION_MINOR, glfw.gl_set_proc_address)
@@ -333,15 +332,24 @@ main :: proc() {
 			}
 
 			if current_mode == .Inspection {
+				// Both flags MUST reset after use, same as every other
+				// "_requested" flag below (reset_selected_requested,
+				// reset_all_requested, pick_requested) — leaving either
+				// one true after applying it meant a single `[`/`]` press
+				// re-cycled the selection every subsequent frame forever
+				// (dozens of times a second), racing through every
+				// selectable object with no way to land on one.
 				if select_prev_requested {
 					selected_index = (selected_index - 1 + len(selectable_nodes)) % len(selectable_nodes)
 					selected_node_name = scene.Nodes[selectable_nodes[selected_index]].Name
 					glfw.SetWindowTitle(window, build_window_title())
+					select_prev_requested = false
 				}
 				if select_next_requested {
 					selected_index = (selected_index + 1) % len(selectable_nodes)
 					selected_node_name = scene.Nodes[selectable_nodes[selected_index]].Name
 					glfw.SetWindowTitle(window, build_window_title())
+					select_next_requested = false
 				}
 
 				selected_scene_node := selectable_nodes[selected_index]
@@ -665,6 +673,16 @@ key_callback :: proc "c" (window: glfw.WindowHandle, key, scancode, action, mods
 	if key == glfw.KEY_RIGHT_BRACKET && action == glfw.PRESS {
 		select_next_requested = true
 	}
+	// Shift+C, not a bare click: picking used to be mouse-only
+	// (mouse_button_callback, now removed), which meant a mode this
+	// project otherwise drives entirely from the keyboard needed the
+	// mouse for exactly one action. C alone is free on this branch (the
+	// cull-mode toggle that owned it is gone — see this proc's own
+	// comment above), so Shift+C reuses the same screen-centre-crosshair
+	// raycast Pick_Node already does, just from a key instead of a click.
+	if key == glfw.KEY_C && action == glfw.PRESS && mods & glfw.MOD_SHIFT != 0 {
+		pick_requested = true
+	}
 	if key == glfw.KEY_J && (action == glfw.PRESS || action == glfw.REPEAT) {
 		pending_translate_delta.x -= BASE_TRANSLATE_STEP * edit_step_scale
 	}
@@ -706,10 +724,12 @@ key_callback :: proc "c" (window: glfw.WindowHandle, key, scancode, action, mods
 	if key == glfw.KEY_APOSTROPHE && action == glfw.PRESS {
 		edit_step_scale = min(edit_step_scale*EDIT_STEP_FACTOR, f32(EDIT_STEP_MAX_SCALE))
 		fmt.printfln("Edit step scale: %.2fx", edit_step_scale)
+		glfw.SetWindowTitle(window, build_window_title())
 	}
 	if key == glfw.KEY_SEMICOLON && action == glfw.PRESS {
 		edit_step_scale = max(edit_step_scale/EDIT_STEP_FACTOR, f32(EDIT_STEP_MIN_SCALE))
 		fmt.printfln("Edit step scale: %.2fx", edit_step_scale)
+		glfw.SetWindowTitle(window, build_window_title())
 	}
 	if key == glfw.KEY_0 && action == glfw.PRESS {
 		if mods & glfw.MOD_SHIFT != 0 {
@@ -728,12 +748,6 @@ key_callback :: proc "c" (window: glfw.WindowHandle, key, scancode, action, mods
 	// u_ObjectsOnlyMode).
 }
 
-mouse_button_callback :: proc "c" (window: glfw.WindowHandle, button, action, mods: i32) {
-	if button == glfw.MOUSE_BUTTON_LEFT && action == glfw.PRESS {
-		pick_requested = true
-	}
-}
-
 // [PROGRESS-DEMO] Branch-only: dropped every toggle segment that no
 // longer has a live key to change it (shading mode, cull, depth test,
 // back-face debug, depth visualisation, tonemapping, vignette, fog,
@@ -744,7 +758,13 @@ mouse_button_callback :: proc "c" (window: glfw.WindowHandle, button, action, mo
 build_window_title :: proc() -> cstring {
 	wireframe_state := "On" if wireframe_enabled else "Off"
 	paused_suffix := " [Paused]" if animation_paused else ""
-	selection_suffix := fmt.tprintf(" Sel:%s", selected_node_name) if current_mode == .Inspection else ""
+	// Sel:/Step: only mean anything in Inspection Mode (they're both
+	// selected-object state), same conditional pattern. edit_step_scale
+	// previously had no on-screen readout at all — `;`/`'` had a real
+	// effect (console-only, via fmt.printfln) but nothing else confirmed
+	// it, which reads as "the key does nothing" the same way an
+	// un-retitled toggle would.
+	selection_suffix := fmt.tprintf(" Sel:%s Step:%.2fx", selected_node_name, edit_step_scale) if current_mode == .Inspection else ""
 
 	return fmt.ctprintf(
 		"SENTINEL - %s%s | Speed:%.2fx Wire:%s FPS:%.0f%s",

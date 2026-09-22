@@ -176,7 +176,7 @@ Print_Controls :: proc() {
 	fmt.println("  P            Toggle perspective / orthographic")
 	fmt.println("  Scroll       Zoom the orthographic volume")
 	fmt.println("  [ / ]        (Inspection) Select previous / next object")
-	fmt.println("  Left click   (Inspection) Pick the object at the screen centre")
+	fmt.println("  Shift+C      (Inspection) Pick the object at the screen centre")
 	fmt.println("  I / K        (Inspection) Translate selected object: local Z-/Z+")
 	fmt.println("  J / L        (Inspection) Translate selected object: local X-/X+")
 	fmt.println("  U / O        (Inspection) Translate selected object: local Y-/Y+")

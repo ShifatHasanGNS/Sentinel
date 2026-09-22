@@ -36,7 +36,7 @@ odin build Source -out:Sentinel
 | `Shift` | Sprint |
 | `P` | Toggle perspective / orthographic |
 | `[` / `]` | Select previous / next object |
-| Left click | Pick the object at the screen centre |
+| `Shift`+`C` | Pick the object at the screen centre |
 | `I`/`K`, `J`/`L`, `U`/`O` | Translate selected object (local Z, X, Y) |
 | `4`–`9` | Rotate selected object (yaw, pitch, roll) |
 | `;` / `'` | Decrease / increase the translate+rotate step size |

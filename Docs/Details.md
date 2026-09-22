@@ -42,7 +42,7 @@ folder) for the complete session history.
    title; `glfw.MakeContextCurrent`; `SwapInterval(0 if do_benchmark else 1)`
    (vsync off only for a true unthrottled `--benchmark` run).
 4. Register GLFW callbacks: `framebuffer_size_callback`, `key_callback`,
-   `mouse_button_callback`, `scroll_callback`.
+   `scroll_callback`.
 5. `gl.load_up_to(3, 3, ...)`; enable `GL_MULTISAMPLE` if MSAA was
    requested; print GPU vendor/renderer/GL/GLSL version strings.
 6. Set the GL viewport from the framebuffer size.
@@ -763,14 +763,17 @@ one either controlled a syllabus topic this milestone scopes as
 | Space         | Pause/resume animation clock                              |
 | , / .         | Slow/speed animation clock                                |
 | [ / ]         | Select prev/next (Inspection)                             |
+| Shift+C       | Pick the object at the screen centre (Inspection)         |
 | J/L, I/K, U/O | Translate local X-/X+, Z-/Z+, Y+/Y- (Inspection)          |
 | 4/5, 6/7, 8/9 | Rotate yaw-/yaw+, pitch-/pitch+, roll-/roll+ (Inspection) |
 | ' / ;         | Increase/decrease edit step scale                         |
 | 0 / Shift+0   | Reset selected / reset all                                |
 | H             | Print controls                                            |
 
-`mouse_button_callback` sets `pick_requested` on left-click;
-`scroll_callback` accumulates `scroll_delta_y`.
+`scroll_callback` accumulates `scroll_delta_y`. Picking used to be a
+left-click via `mouse_button_callback`; that callback is gone and
+Shift+C sets `pick_requested` from `key_callback` instead, so Inspection
+Mode's object controls are fully keyboard-driven.
 
 ### 6.3 CLI flags
 
