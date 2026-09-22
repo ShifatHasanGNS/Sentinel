@@ -293,7 +293,7 @@ Print_Controls :: proc() {
 	fmt.println("  ; / '        (Inspection) Decrease / increase translate+rotate step size")
 	fmt.println("  0            (Inspection) Reset selected object to its original transform")
 	fmt.println("  Shift+0      (Inspection) Reset ALL objects to their original transforms")
-	fmt.println("  L            Toggle light gizmos")
+	fmt.println("  `            Toggle light gizmos")
 	fmt.println("  + / -        Increase / decrease area-light sample count")
 	fmt.println("  N            Toggle area-light per-pixel jitter")
 	fmt.println("  1 / 2 / 3    Shading mode: Flat / Gouraud / Phong")

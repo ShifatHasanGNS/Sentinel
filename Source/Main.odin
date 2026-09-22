@@ -90,8 +90,8 @@
 // real multi-light array — Library/Lights.Light (directional/point/spot),
 // a TEMPORARY formula-placed rig (Library/Lights.Build_Temporary_Rig; real
 // hierarchical attachment is roadmap step 5), and a debug gizmo overlay (key
-// L) drawing a marker at every light. `u_Color`/per-node colour uniforms are
-// unchanged from Session 5 — only the shader's LIGHTING got real, not the
+// GRAVE_ACCENT) drawing a marker at every light. `u_Color`/per-node colour
+// uniforms are unchanged from Session 5 — only the shader's LIGHTING got real, not the
 // material system. Two new things this file now draws through
 // Scene.Draw_Node (factored out of this file's old per-node loop body, now
 // shared by real scene nodes, the ground plane below, and light gizmos):
@@ -102,8 +102,8 @@
 //     cone hitting the ground," and no ground existed before this session
 //     (Session 2's ground GRID was deleted at roadmap step 3 along with the
 //     rest of that session's temporary smoke-test scene).
-//   - Light gizmos (Library/Lights.Draw_Gizmos), toggled live by `L` or
-//     forced on for a --capture run via --gizmos.
+//   - Light gizmos (Library/Lights.Draw_Gizmos), toggled live by
+//     GRAVE_ACCENT or forced on for a --capture run via --gizmos.
 //
 // Session 8 status (roadmap step 5, Library/Lights + Library/Scene/
 // Transform.odin): `Build_Temporary_Rig` is GONE, replaced by `Build_Rig`
@@ -1151,15 +1151,15 @@ framebuffer_size_callback :: proc "c" (window: glfw.WindowHandle, width, height:
 projection_toggle_requested: bool
 scroll_delta_y: f32
 
-// gizmos_visible toggles Library/Lights.Draw_Gizmos (key L). Starts from
-// parse_gizmos_flag's result (set once in main() before the loop begins),
-// then flips on each L press exactly like projection_toggle_requested
-// flips the projection above.
+// gizmos_visible toggles Library/Lights.Draw_Gizmos (key GRAVE_ACCENT).
+// Starts from parse_gizmos_flag's result (set once in main() before the
+// loop begins), then flips on each press exactly like
+// projection_toggle_requested flips the projection above.
 gizmos_visible: bool
 
 // area_light_sample_count/area_light_jitter (roadmap step 6, CLAUDE.md
 // §6.3) drive Shaders/Scene.glsl's u_AreaLightSampleCount/u_AreaLightJitter
-// — +/- and J below, or --area-samples/--area-jitter for a --capture run.
+// — +/- and N below, or --area-samples/--area-jitter for a --capture run.
 // Both start from their parse_*_flag result in main(), same pattern as
 // gizmos_visible above.
 area_light_sample_count: int
@@ -1265,7 +1265,14 @@ key_callback :: proc "c" (window: glfw.WindowHandle, key, scancode, action, mods
 	if key == glfw.KEY_P && action == glfw.PRESS {
 		projection_toggle_requested = true
 	}
-	if key == glfw.KEY_L && action == glfw.PRESS {
+	// GRAVE_ACCENT, not L: L was already claimed by Inspection Mode's IJKL
+	// translate cluster below (local X+), so both bindings fired on every L
+	// press regardless of mode — an unwanted gizmo-visibility side effect
+	// every time an object was translated along local X+ in Inspection
+	// Mode. Moved to the conventional "toggle debug overlay" key instead of
+	// reassigning the IJKL cluster, since IJKL's own layout is the
+	// documented, muscle-memory-relevant control (README/Print_Controls).
+	if key == glfw.KEY_GRAVE_ACCENT && action == glfw.PRESS {
 		gizmos_visible = !gizmos_visible
 	}
 	// EQUAL/KP_ADD share the same "+/-" pairing on most keyboards ('+' is

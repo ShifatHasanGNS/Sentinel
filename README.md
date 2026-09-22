@@ -245,7 +245,7 @@ selection/editing keys.
 | `Shift` (either)  | (Inspection) Sprint (multiplies move speed)                  |
 | `P`               | Toggle perspective / orthographic projection (either mode)   |
 | Scroll wheel      | Zoom the orthographic volume (only while in orthographic projection; either mode) |
-| `L`               | Toggle light gizmos (type-coded markers + aim lines for every active light) |
+| `` ` ``           | Toggle light gizmos (type-coded markers + aim lines for every active light) |
 | `+` / `-` (or numpad `+`/`-`) | Increase / decrease barracks-window area-light sample count (1-8) |
 | `N`               | Toggle per-pixel jitter on area-light sampling (moved from `J`, see above) |
 | `1` / `2` / `3`   | Shading mode: Flat / Gouraud / Phong                        |
@@ -301,7 +301,7 @@ CLI flags for `--capture` runs (see `Debug/README.md`):
 | `--msaa <N>`                  | Requests an N-sample multisampled framebuffer (e.g. `--msaa 4`) — START-ONLY, no live key; see Polish pass below for why |
 
 Interactive input (`Tab`, `Space`, `,`/`.`, mouse look, WASD/QE movement,
-`P`, scroll, `L`, `+`/`-`, `N`, `1`/`2`/`3`, `G`, `C`/`Z`/`X`/`F`/`B`, `R`,
+`P`, scroll, `` ` ``, `+`/`-`, `N`, `1`/`2`/`3`, `G`, `C`/`Z`/`X`/`F`/`B`, `R`,
 `M`/`V`/`Y`/`T`/`/`, and every Inspection selection/editing key) is
 intentionally disabled during a
 `--capture` run so captured frames stay reproducible regardless of the real
