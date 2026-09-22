@@ -812,15 +812,28 @@ main :: proc() {
 			// `[` pressed mid-Patrol, then a mode switch to Inspection a
 			// minute later, should not suddenly replay a stale cycle.
 			if current_mode == .Inspection {
+				// Both flags MUST reset after use, same as every other
+				// "_requested" flag below (reset_selected_requested,
+				// reset_all_requested) — leaving either one true after
+				// applying it meant a single `[`/`]` press re-cycled the
+				// selection every subsequent frame forever (dozens of
+				// times a second) for as long as Inspection Mode stayed
+				// active, racing through every selectable object with no
+				// way to land on one. The `else` branch below already
+				// reset these, but only ever ran once Inspection Mode was
+				// LEFT — it never helped while still inside it, which is
+				// exactly where the bug bit.
 				if select_prev_requested {
 					selected_index = (selected_index - 1 + len(selectable_nodes)) % len(selectable_nodes)
 					selected_node_name = scene.Nodes[selectable_nodes[selected_index]].Name
 					glfw.SetWindowTitle(window, build_window_title())
+					select_prev_requested = false
 				}
 				if select_next_requested {
 					selected_index = (selected_index + 1) % len(selectable_nodes)
 					selected_node_name = scene.Nodes[selectable_nodes[selected_index]].Name
 					glfw.SetWindowTitle(window, build_window_title())
+					select_next_requested = false
 				}
 
 				selected_scene_node := selectable_nodes[selected_index]
@@ -1421,10 +1434,12 @@ key_callback :: proc "c" (window: glfw.WindowHandle, key, scancode, action, mods
 	if key == glfw.KEY_APOSTROPHE && action == glfw.PRESS {
 		edit_step_scale = min(edit_step_scale*EDIT_STEP_FACTOR, f32(EDIT_STEP_MAX_SCALE))
 		fmt.printfln("Edit step scale: %.2fx", edit_step_scale)
+		glfw.SetWindowTitle(window, build_window_title())
 	}
 	if key == glfw.KEY_SEMICOLON && action == glfw.PRESS {
 		edit_step_scale = max(edit_step_scale/EDIT_STEP_FACTOR, f32(EDIT_STEP_MIN_SCALE))
 		fmt.printfln("Edit step scale: %.2fx", edit_step_scale)
+		glfw.SetWindowTitle(window, build_window_title())
 	}
 	// 0 resets the SELECTED node; Shift+0 resets ALL nodes — one key, mods
 	// distinguishes them, rather than needing a second dedicated key.
@@ -1517,7 +1532,11 @@ build_window_title :: proc() -> cstring {
 	// asked for it to reset), but showing "Sel:X" while hands-off Patrol is
 	// running would read as if the instructor could edit something they
 	// currently can't.
-	selection_suffix := fmt.tprintf(" Sel:%s", selected_node_name) if current_mode == .Inspection else ""
+	// Step: rides along with Sel: for the same reason — edit_step_scale
+	// (`;`/`'`) had a real effect (console-only, via fmt.printfln) but no
+	// on-screen confirmation at all, which reads as "the key does
+	// nothing" the same way an un-retitled toggle would.
+	selection_suffix := fmt.tprintf(" Sel:%s Step:%.2fx", selected_node_name, edit_step_scale) if current_mode == .Inspection else ""
 
 	return fmt.ctprintf(
 		"SENTINEL - %s - %s%s | Speed:%.2fx Cull:%s Depth:%s Wire:%s BFDbg:%s DepthVis:%s Refl:%s Tone:%s Vig:%s Fog:%s Grnd:%s Sky:%s FPS:%.0f%s",

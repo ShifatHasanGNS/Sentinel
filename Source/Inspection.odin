@@ -116,7 +116,11 @@ BASE_ROTATE_STEP_DEGREES :: 5.0 // degrees per key press, before edit_step_scale
 
 EDIT_STEP_MIN_SCALE :: 0.2
 EDIT_STEP_MAX_SCALE :: 5.0
-EDIT_STEP_FACTOR :: 1.25 // multiplicative per `;`/`'` press, same convention Patrol's speed keys use
+// 1.5x, not 1.25x: against a 0.25-unit/5-degree base step, a 25% change per
+// press was too subtle to feel in a single translate/rotate press. 1.5x
+// still reaches both EDIT_STEP_MIN/MAX_SCALE (same range as before), just in
+// 4 presses each way instead of 8, with each press actually moving the needle.
+EDIT_STEP_FACTOR :: 1.5 // multiplicative per `;`/`'` press, same convention Patrol's speed keys use
 
 Apply_Translate :: proc(scene: ^scenepkg.Hierarchy, node_index: int, local_delta: la.Vector3f32) {
 	scene.Nodes[node_index].Local.Position += local_delta
