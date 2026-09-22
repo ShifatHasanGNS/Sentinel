@@ -300,29 +300,29 @@ Figure~\ref{fig:architecture} shows the dependency structure.
 
 \begin{figure}[H]
 \centering
-\begin{tikzpicture}[node distance=10mm and 12mm]
+\begin{tikzpicture}[node distance=14mm and 18mm]
 \node[accentstage] (source) {\textbf{Source}\\(application entry point,\\main loop, input)};
-\node[stage, below left=14mm and 6mm of source] (scene) {\textbf{Scene}\\(hierarchy,\\9 objects)};
-\node[stage, below=14mm of source] (camera) {\textbf{Camera}\\(view/projection,\\patrol path)};
-\node[stage, below right=14mm and 6mm of source] (engine) {\textbf{Engine}\\(shader, buffers,\\VAO, GL errors)};
-\node[stage, below=14mm of scene] (geometry) {\textbf{Geometry}\\(3 primitives +\\composition)};
-\node[stage, below=14mm of camera, xshift=0mm] (linalg) {\texttt{core:math/linalg}\\(vectors, matrices)};
+\node[stage, below left=of source] (scene) {\textbf{Scene}\\(hierarchy,\\9 objects)};
+\node[stage, below=of source] (camera) {\textbf{Camera}\\(view/projection,\\patrol path)};
+\node[stage, below right=of source] (engine) {\textbf{Engine}\\(shader, buffers,\\VAO, GL errors)};
+\node[stage, below=of scene] (geometry) {\textbf{Geometry}\\(3 primitives +\\composition)};
+\node[stage, below=26mm of camera, text width=7.6cm] (linalg) {\texttt{core:math/linalg}\\(vectors and matrices --- used directly by every package above)};
 
 \draw[pipearrow] (source) -- (scene);
 \draw[pipearrow] (source) -- (camera);
 \draw[pipearrow] (source) -- (engine);
 \draw[pipearrow] (scene) -- (geometry);
-\draw[pipearrow] (scene) -- (engine);
-\draw[pipearrow] (geometry) -- (engine);
-\draw[pipearrow] (camera) -- (linalg);
-\draw[pipearrow] (scene) -- (linalg);
-\draw[pipearrow] (geometry) -- (linalg);
-\draw[pipearrow] (engine) -- (linalg);
+\draw[pipearrow] (geometry) -- (linalg.north west);
+\draw[pipearrow] (camera) -- (linalg.north);
+\draw[pipearrow] (engine) -- (linalg.north east);
 \end{tikzpicture}
 \caption{Package dependency structure. \texttt{Engine} and
 \texttt{Geometry} are theme-agnostic and know nothing about SENTINEL's
 own objects; \texttt{Scene} and \texttt{Camera} sit above them, and the
-\texttt{Source} application ties everything together.}
+\texttt{Source} application ties everything together. Two minor edges
+are omitted for readability: \texttt{Geometry} also depends on
+\texttt{Engine} for its GPU buffer types, and \texttt{Scene} depends on
+\texttt{core:math/linalg} directly in addition to via \texttt{Geometry}.}
 \label{fig:architecture}
 \end{figure}
 
