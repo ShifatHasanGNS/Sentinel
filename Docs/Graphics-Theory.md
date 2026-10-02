@@ -80,3 +80,6 @@ Direct light is exact (sun with cascaded shadows, point and spot lamps with shad
 
 ## Aerial perspective
 Light from a surface at distance d is attenuated by Beer-Lambert, T = exp(-k d), while the air in front adds in-scattered sky light: color = mix(haze, lit, T). The haze is the atmosphere's radiance toward the horizon (so it matches the sky), k = 0.00035 per meter (about 3 km visibility).
+
+## Soft shadow filtering
+The cascade lookup averages 12 depth comparisons over a disk of 1.6 texels (plus 0.6 per cascade, since farther cascades cover more world per texel). Taps follow a Vogel spiral: tap i sits at radius sqrt((i+0.5)/N) and angle i * 2.39996 rad (the golden angle), giving equal area per tap with no clumping. The spiral is rotated per world position by a hash, turning banding into fine noise that is stable when the camera moves.
