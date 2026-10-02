@@ -51,6 +51,8 @@ Showroom_Render :: proc(showroom: ^Showroom, window: Platform.Window) {
 		local_lights = showroom.local_lights[:],
 		sky = dusk_sky(showroom.sun),
 		materials = &showroom.materials,
+		sun_shadows = true,
+		shadow_distance_meters = 70,
 		exposure = 1,
 		vignette_strength = 0.35,
 	}

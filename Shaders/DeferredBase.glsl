@@ -5,11 +5,14 @@
 #include "GbufferRead.glsl"
 #include "Sky.glsl"
 #include "Ambient.glsl"
+#include "Shadow.glsl"
 #include "Fullscreen.glsl"
 #stage fragment
 in vec2 v_uv;
 out vec4 color;
 uniform Light u_Sun;
+uniform vec3 u_CameraForward;
+uniform bool u_SunShadows;
 
 // Fullscreen pass: sky where nothing was drawn, otherwise sun + sky ambient + emission.
 void main() {
@@ -20,6 +23,7 @@ void main() {
 	}
 	vec3 view = normalize(u_CameraPosition - surface.position);
 	vec3 sun = shade_light(u_Sun, surface.model, surface.position, surface.normal, view, surface.albedo, surface.roughness, surface.metallic);
+	if (u_SunShadows) sun *= shadow_factor(surface.position, surface.normal, -u_Sun.direction, u_CameraPosition, u_CameraForward);
 	vec3 ambient = ambient_light(surface.albedo, surface.roughness, surface.metallic, surface.normal, view, surface.ambient_occlusion);
 	color = vec4(sun + ambient + surface.emission, 1.0);
 }

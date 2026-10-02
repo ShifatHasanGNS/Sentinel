@@ -28,6 +28,8 @@ Frame :: struct {
 	local_lights:      []Light, // Point, spot and area lights.
 	sky:               Sky,
 	materials:         ^Procedural.Texture_Set,
+	sun_shadows:       bool,
+	shadow_distance_meters: f32,
 	exposure:          f32,
 	vignette_strength: f32,
 }

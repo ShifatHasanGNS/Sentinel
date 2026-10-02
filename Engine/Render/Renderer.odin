@@ -8,6 +8,8 @@ import gl "vendor:OpenGL"
 TRIPLANAR_TILES_PER_METER :: 0.5
 LIGHT_VOLUME_SEGMENTS :: 24
 LIGHT_VOLUME_RINGS :: 12
+SHADOW_MAP_SIZE :: 2048
+CASCADE_SPLIT_LAMBDA :: 0.75
 
 Renderer :: struct {
 	gbuffer:         GPU.Framebuffer, // albedo + model, normal + roughness + metallic, emission + occlusion, depth
@@ -20,11 +22,13 @@ Renderer :: struct {
 	fxaa:            GPU.Shader,
 	fullscreen:      GPU.Fullscreen_Pass,
 	light_volume:    Mesh,
+	shadows:         Shadow_Map,
+	cascades:        Cascade_Set, // Fitted for the current frame.
 }
 
 Renderer_Create :: proc(width, height: i32) -> (renderer: Renderer, ok: bool) {
 	renderer.geometry = GPU.Shader_Create("Shaders/Geometry.glsl", nil, true) or_return
-	renderer.base_lighting = GPU.Shader_Create("Shaders/DeferredBase.glsl", nil, true) or_return
+	renderer.base_lighting = GPU.Shader_Create("Shaders/DeferredBase.glsl", {"CASCADE_COUNT 3"}, true) or_return
 	renderer.volume_lighting = GPU.Shader_Create("Shaders/DeferredLight.glsl", nil, true) or_return
 	renderer.tonemap = GPU.Shader_Create("Shaders/PostTonemap.glsl", nil, true) or_return
 	renderer.fxaa = GPU.Shader_Create("Shaders/PostFxaa.glsl", nil, true) or_return
@@ -32,6 +36,7 @@ Renderer_Create :: proc(width, height: i32) -> (renderer: Renderer, ok: bool) {
 	renderer.hdr = GPU.Framebuffer_Create({width, height, {.RGBA16F}, .None})
 	renderer.ldr = GPU.Framebuffer_Create({width, height, {.RGBA8}, .None})
 	renderer.fullscreen = GPU.Fullscreen_Pass_Create()
+	renderer.shadows = Shadow_Map_Create(SHADOW_MAP_SIZE) or_return
 	sphere := Procedural.Sphere_Create(1, LIGHT_VOLUME_SEGMENTS, LIGHT_VOLUME_RINGS)
 	defer Procedural.Mesh_Destroy(&sphere)
 	renderer.light_volume = Mesh_Upload(sphere)
@@ -39,6 +44,7 @@ Renderer_Create :: proc(width, height: i32) -> (renderer: Renderer, ok: bool) {
 }
 
 Renderer_Destroy :: proc(renderer: ^Renderer) {
+	Shadow_Map_Destroy(&renderer.shadows)
 	Mesh_Destroy(&renderer.light_volume)
 	GPU.Fullscreen_Pass_Destroy(&renderer.fullscreen)
 	GPU.Framebuffer_Destroy(&renderer.ldr)
@@ -55,9 +61,16 @@ Renderer_Render :: proc(renderer: ^Renderer, frame: Frame, width, height: i32) {
 	GPU.Framebuffer_Resize(&renderer.gbuffer, width, height)
 	GPU.Framebuffer_Resize(&renderer.hdr, width, height)
 	GPU.Framebuffer_Resize(&renderer.ldr, width, height)
+	if frame.sun_shadows do shadow_pass(renderer, frame)
 	geometry_pass(renderer, frame)
 	lighting_pass(renderer, frame)
 	post_pass(renderer, frame, width, height)
+}
+
+@(private = "file")
+shadow_pass :: proc(renderer: ^Renderer, frame: Frame) {
+	renderer.cascades = Shadow_Cascades_Fit(frame.camera, frame.sun.direction, frame.shadow_distance_meters, CASCADE_SPLIT_LAMBDA, SHADOW_MAP_SIZE)
+	Shadow_Map_Render(&renderer.shadows, renderer.cascades, frame.items)
 }
 
 @(private = "file")
@@ -117,6 +130,9 @@ light_base :: proc(renderer: ^Renderer, frame: Frame) {
 	GPU.Shader_Set(shader, "u_SunColor", frame.sky.sun_color)
 	GPU.Shader_Set(shader, "u_ToSun", frame.sky.to_sun)
 	Light_Set_Uniforms(shader, "u_Sun", frame.sun)
+	GPU.Shader_Set(shader, "u_CameraForward", frame.camera.forward)
+	GPU.Shader_Set(shader, "u_SunShadows", i32(frame.sun_shadows))
+	if frame.sun_shadows do Shadow_Map_Bind(shader, &renderer.shadows, renderer.cascades)
 	GPU.Fullscreen_Pass_Draw(&renderer.fullscreen)
 }
 

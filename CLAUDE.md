@@ -29,15 +29,15 @@ Folders and files are PascalCase. One package per folder. One feature per file, 
 ## Commands
 
 - Build/run: `odin run Source -out:Sentinel`
-- Pure tests: `odin test Engine/GPU` and `odin test Engine/Procedural`, run from the repo root (fixtures use root-relative paths)
-- GL checks (need a window, main thread): `odin run Tests/GpuCheck -out:GpuCheck`, `odin run Tests/TextureCheck -out:TextureCheck`
+- Pure tests: `odin test Engine/GPU`, `odin test Engine/Procedural`, `odin test Engine/Render`, run from the repo root (fixtures use root-relative paths)
+- GL checks (need a window, main thread): `odin run Tests/GpuCheck -out:GpuCheck`, `odin run Tests/TextureCheck -out:TextureCheck`, `odin run Tests/RenderCheck -out:RenderCheck`
 - Screenshot self-check: `odin run Source -out:SentinelDebug -- --capture <frames> Captures/x.bmp`, then `Tools/ToPng.sh Captures/x.bmp` and view the PNG.
 
 ## Adding things
 
 - New material: `Shaders/Recipes/<Name>.glsl` (define `recipe_surface`, include `BakeMain.glsl` last), one `Surface_Material` entry and one table row in `Game/Materials/Materials.odin`, plus a Showroom sphere (automatic). `TextureCheck` then verifies it tiles.
 - New object or character: a `Part` table in `Game/...`, plus a Showroom cell and a `World-Design.md` row.
-- New light type or illumination model: `Shaders/Include/Lighting.glsl` / `Brdf.glsl`, plus a Showroom cell.
+- New light type or illumination model: `Shaders/Include/Lighting.glsl` / `Brdf.glsl`, the matching enum in `Engine/Render`, a probe check in `Tests/RenderCheck`, plus a Showroom cell.
 
 ## Status and history
 

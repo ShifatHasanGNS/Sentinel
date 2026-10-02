@@ -34,6 +34,22 @@
 | Triplanar sampling + normal blend (GLSL) | `Shaders/Include/Triplanar.glsl` |
 | Material list + recipe table (concrete, camo, rust, sand, canvas, grass, dirt, rock) | `Game/Materials/Materials.odin` : `Materials_Bake` |
 | One recipe per material | `Shaders/Recipes/*.glsl` |
-| Placeholder lit shader (normal map, roughness/metal) | `Shaders/Lit.glsl` (replaced by deferred in M4) |
+| Octahedral normal encoding (G-buffer) | `Shaders/Include/Gbuffer.glsl` : `oct_encode`, `oct_decode` |
+| Read the G-buffer, rebuild position from depth | `Shaders/Include/GbufferRead.glsl` : `gbuffer_read` |
+| Illumination models: Lambert, Phong, Blinn-Phong, Oren-Nayar, Cook-Torrance GGX, subsurface | `Shaders/Include/Brdf.glsl` : `brdf_evaluate`, `light_cosine`; `Engine/Render/Illumination.odin` |
+| Light sources: directional, point, spot, area (sampled rectangle) | `Shaders/Include/Lighting.glsl` : `shade_light`; `Engine/Render/Light.odin` |
+| Sky gradient + sun disc, sky ambient | `Shaders/Include/Sky.glsl` |
+| Image-based ambient (split-sum environment BRDF) | `Shaders/Include/Ambient.glsl` : `ambient_light` |
+| ACES tonemap, vignette, sRGB | `Shaders/Include/Tonemap.glsl`, `Shaders/PostTonemap.glsl` |
+| FXAA | `Shaders/PostFxaa.glsl` |
+| Camera, frustum slices | `Engine/Render/Camera.odin`, `Engine/Render/Shadows.odin` : `Frustum_Slice_Corners` |
+| Cascade splits + fit (sphere bound, texel snapping) | `Engine/Render/Shadows.odin` : `Cascade_Splits`, `Shadow_Cascades_Fit` |
+| Shadow map pass + uniforms | `Engine/Render/ShadowMap.odin` : `Shadow_Map_Render`, `Shadow_Map_Bind` |
+| Shadow lookup (cascade pick, normal offset, PCF) | `Shaders/Include/Shadow.glsl` : `shadow_factor` |
+| Deferred frame: shadow, geometry, lighting, post | `Engine/Render/Renderer.odin` : `Renderer_Render` |
+| Geometry pass (writes the G-buffer) | `Shaders/Geometry.glsl` |
+| Sun + ambient + sky fullscreen pass | `Shaders/DeferredBase.glsl` |
+| Local lights as additive proxy volumes | `Shaders/DeferredLight.glsl` |
+| Depth-only render into an array layer | `Engine/GPU/Framebuffer.odin` : `Framebuffer_Set_Depth_Layer` |
 | Showroom (materials on primitives, deformed shapes, material spheres) | `Game/Showroom/Showroom.odin`, `Game/Showroom/Gallery.odin` |
 | Gallery of primitives, plain and deformed | `Game/Showroom/Gallery.odin` : `Gallery_Create` |
