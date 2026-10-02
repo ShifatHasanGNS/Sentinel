@@ -246,6 +246,8 @@ draw_mission_complete :: proc(hud: ^Render.Hud, mission: ^Mission_Play, width, h
 	Render.Hud_Text(hud, (width - Render.Hud_Text_Width(title, scale * 3)) / 2, height * 0.38, title, scale * 3, {0.5, 1, 0.6, 1})
 	line := fmt.tprintf("TIME %d:%02d", seconds / 60, seconds % 60)
 	Render.Hud_Text(hud, (width - Render.Hud_Text_Width(line, scale * 1.5)) / 2, height * 0.5, line, scale * 1.5, {1, 1, 1, 0.95})
+	hint := "PRESS R TO PLAY AGAIN    ESC TO QUIT"
+	Render.Hud_Text(hud, (width - Render.Hud_Text_Width(hint, scale * 1.1)) / 2, height * 0.6, hint, scale * 1.1, {1, 1, 1, 0.85})
 }
 
 // Whether to hold the world still: the briefing is up and nothing has begun.
@@ -267,4 +269,9 @@ mission_items :: proc(play: ^Play, items: ^[dynamic]Render.Draw_Item, lights: ^[
 		flicker := 0.7 + 0.3 * math.sin(play.demo_seconds * 13)
 		append(lights, Render.Light_Point(mission.radar_dish + {0, 1, 0}, {1, 0.5, 0.2}, 260 * flicker, 22))
 	}
+}
+
+// After the mission ends the world keeps running (soldiers, effects) but the player can only restart or quit.
+mission_check_restart :: proc(play: ^Play, input: ^Platform.Input) {
+	if play.mission.state.status == .Complete && Platform.Input_Key_Down(input, .R) do play.restart_requested = true
 }

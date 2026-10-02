@@ -320,3 +320,7 @@ Sandbox_Report :: proc(sandbox: ^Sandbox) {
 	}
 	fmt.printfln("  %-18s %6.2f ms", "GPU total", total)
 }
+
+Sandbox_Restart_Requested :: proc(sandbox: ^Sandbox) -> bool {
+	return sandbox.play.restart_requested
+}

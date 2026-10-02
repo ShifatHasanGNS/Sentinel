@@ -11,7 +11,7 @@ main :: proc() {
 	benchmarking := config.benchmark_frames > 0
 	width: i32 = 1920 if benchmarking else 1280
 	height: i32 = 1080 if benchmarking else 720
-	window, window_ok := Platform.Window_Create("Sentinel", width, height, interactive, !benchmarking)
+	window, window_ok := Platform.Window_Create("Sentinel", width, height, interactive, !benchmarking, interactive && !benchmarking && config.windowed == false)
 	if !window_ok do os.exit(1)
 	defer Platform.Window_Destroy(&window)
 	input := Platform.Input_Create(&window)
@@ -27,6 +27,14 @@ main :: proc() {
 }
 
 run_sandbox :: proc(window: ^Platform.Window, input: ^Platform.Input, config: Config) {
+	for !Platform.Window_Should_Close(window) {
+		restart := play_sandbox_once(window, input, config)
+		if !restart do break
+	}
+}
+
+// One playthrough; returns true when the player asked to play again.
+play_sandbox_once :: proc(window: ^Platform.Window, input: ^Platform.Input, config: Config) -> (restart: bool) {
 	sandbox, ok := Sandbox.Sandbox_Create(window.framebuffer_width, window.framebuffer_height, config.time_hours, config.view, config.demo, config.drive, config.overlay, (config.capture_frames == 0 && config.benchmark_frames == 0) || config.briefing)
 	if !ok do os.exit(1)
 	defer Sandbox.Sandbox_Destroy(&sandbox)
@@ -41,7 +49,11 @@ run_sandbox :: proc(window: ^Platform.Window, input: ^Platform.Input, config: Co
 		report = proc(user: rawptr) {
 			Sandbox.Sandbox_Report((^Sandbox.Sandbox)(user))
 		},
+		finished = proc(user: rawptr) -> bool {
+			return Sandbox.Sandbox_Restart_Requested((^Sandbox.Sandbox)(user))
+		},
 	})
+	return Sandbox.Sandbox_Restart_Requested(&sandbox)
 }
 
 run_showroom :: proc(window: ^Platform.Window, input: ^Platform.Input, config: Config) {

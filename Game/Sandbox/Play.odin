@@ -70,6 +70,7 @@ Play :: struct {
 	view_was_down: bool,
 	mouse_idle_seconds: f32,
 	demo_seconds:  f32,
+	restart_requested: bool,
 	boardable:     Maybe(int), // The vehicle in reach on foot, for the prompt.
 	interact_was_down: bool,
 	body:          Characters.Character, // The player's own body, seen when looking down and in shadows.
@@ -183,6 +184,7 @@ spawn_garrison :: proc(battle: ^Gameplay.Battle, terrain: ^Procedural.Terrain) {
 // Tab flips between playing and the free debug camera; then the simulation advances one frame.
 play_update :: proc(sandbox: ^Sandbox, input: ^Platform.Input, delta_seconds: f32) {
 	play := &sandbox.play
+	mission_check_restart(play, input)
 	if mission_pauses(play) {
 		mission_check_start(play, input)
 		return

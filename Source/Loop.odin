@@ -14,6 +14,7 @@ Scene :: struct {
 	update: proc(user: rawptr, clock: Platform.Clock, input: ^Platform.Input, scripted_seconds: f32),
 	render: proc(user: rawptr, window: Platform.Window),
 	report: proc(user: rawptr), // Optional; called when a benchmark ends.
+	finished: proc(user: rawptr) -> bool, // Optional; the loop ends when this returns true (the scene wants to be recreated).
 }
 
 Run_Loop :: proc(window: ^Platform.Window, input: ^Platform.Input, config: Config, scene: Scene) {
@@ -27,6 +28,7 @@ Run_Loop :: proc(window: ^Platform.Window, input: ^Platform.Input, config: Confi
 		scripted_seconds: f32 = f32(frame) * BENCHMARK_FRAME_SECONDS if config.benchmark_frames > 0 else -1
 		scene.update(scene.user, clock, input, scripted_seconds)
 		scene.render(scene.user, window^)
+		if scene.finished != nil && scene.finished(scene.user) do break
 		if frame > BENCHMARK_WARMUP_FRAMES && config.benchmark_frames > 0 do append(&frame_milliseconds, clock.delta_seconds * 1000)
 		if frame == config.capture_frames {
 			GPU.Screenshot_Save(config.capture_path, int(window.framebuffer_width), int(window.framebuffer_height))

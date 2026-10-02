@@ -14,7 +14,7 @@ Window :: struct {
 }
 
 // retina = false keeps one framebuffer pixel per window pixel on high-DPI displays (for benchmarks at a known resolution).
-Window_Create :: proc(title: cstring, width, height: i32, visible: bool, retina := true) -> (window: Window, ok: bool) {
+Window_Create :: proc(title: cstring, width, height: i32, visible: bool, retina := true, fullscreen := false) -> (window: Window, ok: bool) {
 	if !glfw.Init() {
 		fmt.eprintln("glfw.Init failed")
 		return {}, false
@@ -26,7 +26,15 @@ Window_Create :: proc(title: cstring, width, height: i32, visible: bool, retina 
 	glfw.WindowHint(glfw.VISIBLE, b32(visible))
 	glfw.WindowHint(glfw.COCOA_RETINA_FRAMEBUFFER, b32(retina))
 
-	window.handle = glfw.CreateWindow(width, height, title, nil, nil)
+	// Fullscreen takes the primary monitor at its current video mode: no title bar to grab, so the window cannot be dragged,
+	// minimised or resized with the mouse while it is captured.
+	monitor: glfw.MonitorHandle
+	width, height := width, height
+	if fullscreen {
+		monitor = glfw.GetPrimaryMonitor()
+		if mode := glfw.GetVideoMode(monitor); mode != nil do width, height = mode.width, mode.height
+	}
+	window.handle = glfw.CreateWindow(width, height, title, monitor, nil)
 	if window.handle == nil {
 		fmt.eprintln("glfw.CreateWindow failed")
 		glfw.Terminate()
