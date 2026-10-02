@@ -60,6 +60,14 @@ Enemy_Ai_Kill :: proc(ai: ^Enemy_Ai) {
 	ai.state = .Dead
 }
 
+// Something at `position` just hurt or startled the enemy: an unaware one turns to it; one already fighting keeps fighting.
+Enemy_Ai_Notice :: proc(ai: ^Enemy_Ai, position: [3]f32) {
+	if ai.state != .Patrol && ai.state != .Search do return
+	ai.last_known = position
+	ai.state = .Alert
+	ai.state_seconds = 0
+}
+
 // The geometric part of sight: within range, within the cone about the facing direction, and nothing in the way.
 Can_See :: proc(eye, forward, target: [3]f32, line_is_clear: bool) -> bool {
 	to_target := target - eye
