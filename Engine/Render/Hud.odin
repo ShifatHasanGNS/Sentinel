@@ -48,6 +48,12 @@ Hud_Rect :: proc(hud: ^Hud, x, y, width, height: f32, color: [4]f32) {
 	for index in ([6]int{0, 1, 2, 0, 2, 3}) do append(&hud.vertices, Hud_Vertex{corners[index], color})
 }
 
+// Any four-corner shape (corners in order around it): a rotated building footprint on the map, a triangle by repeating a corner.
+Hud_Quad :: proc(hud: ^Hud, corners: [4][2]f32, color: [4]f32) {
+	if len(hud.vertices) + 6 > HUD_VERTICES_MAX do return
+	for index in ([6]int{0, 1, 2, 0, 2, 3}) do append(&hud.vertices, Hud_Vertex{corners[index], color})
+}
+
 Hud_Text :: proc(hud: ^Hud, x, y: f32, text: string, scale: f32, color: [4]f32) {
 	quads: [512]easy_font.Quad
 	packed := easy_font.Color{u8(color.r * 255), u8(color.g * 255), u8(color.b * 255), u8(color.a * 255)}

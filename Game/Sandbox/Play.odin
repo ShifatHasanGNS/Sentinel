@@ -80,6 +80,10 @@ Play :: struct {
 	mode:          Control_Mode,
 	tab_was_down:  bool,
 	flashlight_on: bool,
+	binoculars:    bool,
+	binoculars_was_down: bool,
+	map_open:      bool,
+	map_was_down:  bool,
 	flashlight_was_down: bool,
 	demo:          bool,
 	recoil:        f32,
@@ -90,7 +94,7 @@ terrain_height :: proc(data: rawptr, x, z: f32) -> f32 {
 	return Procedural.Terrain_Height((^Procedural.Terrain)(data)^, x, z)
 }
 
-play_create :: proc(sandbox: ^Sandbox, demo: bool, fly: bool, drive: string, interactive: bool) -> (ok: bool) {
+play_create :: proc(sandbox: ^Sandbox, demo: bool, fly: bool, drive: string, overlay: string, interactive: bool) -> (ok: bool) {
 	play := &sandbox.play
 	base_height := sandbox.terrain.base_height_meters
 	boxes := Base.Layout_Solids(sandbox.base.layout, base_height)
@@ -121,6 +125,7 @@ play_create :: proc(sandbox: ^Sandbox, demo: bool, fly: bool, drive: string, int
 	play.flashlight_on = demo
 	play.mode = .Fly if fly else .Play
 	if drive != "" do board_named_vehicle(play, drive)
+	play.map_open, play.binoculars = overlay == "map", overlay == "binoculars"
 	return true
 }
 
@@ -187,6 +192,7 @@ play_update :: proc(sandbox: ^Sandbox, input: ^Platform.Input, delta_seconds: f3
 	play.interact_was_down = interact_down
 	if play.mode == .Play && play.driving == nil do interact_on_foot(play, interact_pressed)
 	Base.Doors_Update(play.doors[:], &play.battle.collision, delta_seconds)
+	update_optics_keys(play, input)
 	flashlight_down := Platform.Input_Key_Down(input, .F)
 	if flashlight_down && !play.flashlight_was_down do play.flashlight_on = !play.flashlight_on
 	play.flashlight_was_down = flashlight_down
@@ -201,6 +207,8 @@ play_update :: proc(sandbox: ^Sandbox, input: ^Platform.Input, delta_seconds: f3
 			drive_vehicle(sandbox, input, interact_pressed, delta_seconds)
 		} else {
 			player_input := demo_input(play.battle, delta_seconds) if play.demo else collect_input(input)
+			player_input.look *= binocular_look_scale(play)
+			if play.binoculars do player_input.fire = false
 			Gameplay.Battle_Update(&play.battle, player_input, delta_seconds)
 			sync_camera_to_player(sandbox)
 			animate_body(play, delta_seconds)
@@ -403,7 +411,8 @@ add_held_weapon :: proc(play: ^Play, items: ^[dynamic]Render.Draw_Item) {
 
 play_camera :: proc(sandbox: ^Sandbox, aspect: f32) -> Render.Camera {
 	if sandbox.play.mode == .Play {
-		return Render.Camera_Look_At(sandbox.camera.position, sandbox.camera.position + Fly_Camera_Forward(sandbox.camera), PLAY_FIELD_OF_VIEW_DEGREES, aspect, PLAY_NEAR_PLANE_METERS, 1200)
+		fov: f32 = BINOCULAR_FIELD_OF_VIEW_DEGREES if sandbox.play.binoculars else PLAY_FIELD_OF_VIEW_DEGREES
+		return Render.Camera_Look_At(sandbox.camera.position, sandbox.camera.position + Fly_Camera_Forward(sandbox.camera), fov, aspect, PLAY_NEAR_PLANE_METERS, 1200)
 	}
 	return Render.Camera_Look_At(sandbox.camera.position, sandbox.camera.position + Fly_Camera_Forward(sandbox.camera), FIELD_OF_VIEW_DEGREES, aspect, 0.3, 1200)
 }
@@ -429,6 +438,8 @@ play_draw_hud :: proc(sandbox: ^Sandbox, width, height: i32) {
 	else if play.mode == .Play && play.door_in_reach && !Gameplay.Health_Is_Dead(player.health) do Render.Hud_Text(hud, (w - Render.Hud_Text_Width("E  OPEN / CLOSE", scale)) / 2, h * 0.62, "E  OPEN / CLOSE", scale, {1, 1, 1, 0.9})
 	if Gameplay.Health_Is_Dead(player.health) do draw_death_screen(hud, w, h, scale)
 	cameras_draw_hud(play, w, scale)
+	binoculars_draw_hud(play, w, h, scale)
+	map_draw_hud(sandbox, w, h, scale)
 	mission_draw_hud(play, w, h, scale)
 	Render.Hud_Flush(hud, width, height)
 }

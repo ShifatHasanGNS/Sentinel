@@ -48,7 +48,7 @@ Sandbox :: struct {
 }
 
 // hours < 0 starts the day cycle at 9:00 and lets it run; otherwise time is fixed at the given hour.
-Sandbox_Create :: proc(width, height: i32, hours: f32, view: string, demo: bool, drive: string, interactive: bool) -> (sandbox: Sandbox, ok: bool) {
+Sandbox_Create :: proc(width, height: i32, hours: f32, view: string, demo: bool, drive: string, overlay: string, interactive: bool) -> (sandbox: Sandbox, ok: bool) {
 	sandbox.renderer = Render.Renderer_Create(width, height) or_return
 	sandbox.materials = Materials.Materials_Bake() or_return
 	sandbox.terrain = new(Procedural.Terrain)
@@ -68,7 +68,7 @@ Sandbox_Create :: proc(width, height: i32, hours: f32, view: string, demo: bool,
 	sandbox.clock_runs = hours < 0
 	sandbox.hours = 9 if hours < 0 else hours
 	if view == "sun" do sandbox.camera = camera_facing_sun(sandbox.hours)
-	play_create(&sandbox, demo, view != "", drive, interactive) or_return
+	play_create(&sandbox, demo, view != "", drive, overlay, interactive) or_return
 	if !(view != "") do sync_camera_to_player(&sandbox)
 	update_stream(&sandbox)
 	for len(sandbox.build_queue) > 0 do build_next_chunk(&sandbox)

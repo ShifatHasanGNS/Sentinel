@@ -141,3 +141,6 @@
 | Cameras in the world: placement on towers, HQ and guard posts, shootable, disabled by the hack, drawn sweeping; alarm alerts soldiers | `Game/Sandbox/SecurityCameras.odin` |
 | Stealth numbers: visibility and noise by stance and speed | `Game/Gameplay/Stealth.odin` : `Visibility`, `Noise_Radius` |
 | Crouching body (shorter, fits under beams, stands up only where clear) | `Engine/World/Collision.odin` : `Controller_Set_Crouch`, `Controller_Height` |
+| Binoculars (B): 12 degree zoom, slower look, circular mask, range readout to terrain or soldiers | `Game/Sandbox/Optics.odin` : `binoculars_draw_hud`, `binocular_look_scale` |
+| Tactical map (M): base footprints, soldiers, cameras, objectives, vehicles, player arrow | `Game/Sandbox/Optics.odin` : `map_draw_hud` |
+| Four-corner HUD shapes | `Engine/Render/Hud.odin` : `Hud_Quad` |
