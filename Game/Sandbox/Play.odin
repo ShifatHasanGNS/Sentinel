@@ -29,6 +29,8 @@ TRACER_THICKNESS_METERS :: 0.025
 EXPLOSION_VISUAL_RADIUS_METERS :: 4.0
 // A tracer seen end-on from the muzzle would be a square filling the crosshair, so the player's tracers start a few meters out.
 TRACER_SKIP_METERS :: 4.0
+FLASHLIGHT_INTENSITY :: 90.0
+FLASHLIGHT_RANGE_METERS :: 40.0
 CHARACTERS_PER_VARIANT :: 64
 
 Control_Mode :: enum {
@@ -51,6 +53,8 @@ Play :: struct {
 	effect_sphere: Render.Mesh,
 	mode:          Control_Mode,
 	tab_was_down:  bool,
+	flashlight_on: bool,
+	flashlight_was_down: bool,
 	demo:          bool,
 	recoil:        f32,
 	shots_seen:    u32,
@@ -81,6 +85,7 @@ play_create :: proc(sandbox: ^Sandbox, demo: bool, fly: bool) -> (ok: bool) {
 	play.effect_cube = upload_unit(Procedural.Box_Create({1, 1, 1}))
 	play.effect_sphere = upload_unit(Procedural.Sphere_Create(1, EFFECT_SPHERE_SEGMENTS, EFFECT_SPHERE_SEGMENTS / 2))
 	play.demo = demo
+	play.flashlight_on = demo
 	play.mode = .Fly if fly else .Play
 	return true
 }
@@ -133,6 +138,9 @@ play_update :: proc(sandbox: ^Sandbox, input: ^Platform.Input, delta_seconds: f3
 	tab_down := Platform.Input_Key_Down(input, .Tab)
 	if tab_down && !play.tab_was_down do play.mode = .Fly if play.mode == .Play else .Play
 	play.tab_was_down = tab_down
+	flashlight_down := Platform.Input_Key_Down(input, .F)
+	if flashlight_down && !play.flashlight_was_down do play.flashlight_on = !play.flashlight_on
+	play.flashlight_was_down = flashlight_down
 	play.recoil = max(play.recoil - RECOIL_DECAY_PER_SECOND * RECOIL_KICK_METERS * delta_seconds * 10, 0)
 	switch play.mode {
 	case .Fly:
@@ -219,6 +227,10 @@ play_items :: proc(sandbox: ^Sandbox, items, shadow_items: ^[dynamic]Render.Draw
 		append(shadow_items, item)
 	}
 	for effect in play.battle.effects do add_effect(play, effect, items, &lights)
+	if play.flashlight_on && play.mode == .Play {
+		player := play.battle.player
+		append(&lights, Render.Light_Spot(Gameplay.Player_Eye(player) + Gameplay.Player_Forward(player) * 0.3, Gameplay.Player_Forward(player), {1, 0.95, 0.85}, FLASHLIGHT_INTENSITY, FLASHLIGHT_RANGE_METERS, 10, 24))
+	}
 	if play.mode == .Play && !Gameplay.Health_Is_Dead(play.battle.player.health) do add_view_weapon(play, items)
 	return lights
 }

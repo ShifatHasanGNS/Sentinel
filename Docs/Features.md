@@ -110,3 +110,4 @@
 | BMP to PNG for screenshot review | `Tools/ToPng.sh` |
 | Light shafts (screen-space radial march toward the sun) | `Shaders/PostTonemap.glsl` : `light_shafts`; `Engine/Render/Renderer.odin` : `shaft_inputs` |
 | Night lights: floodlight spots, tower and guard-post lamps, door lights, faded by darkness | `Game/Base/NightLights.odin` : `Layout_Night_Lights`; used in `Game/Sandbox/Sandbox.odin` : `Sandbox_Render` |
+| Player flashlight (F), a spot light at the eye | `Game/Sandbox/Play.odin` : `play_items` |

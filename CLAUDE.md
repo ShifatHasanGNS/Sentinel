@@ -45,4 +45,4 @@ Folders and files are PascalCase. One package per folder. One feature per file, 
 `Docs/Roadmap.md` has milestone status (M0-M9). v1 (course scene viewer) is the git tag `legacy-v1`; harvest from it with `git show legacy-v1:<path>`.
 
 ## Playing
-Sandbox starts in Play mode: WASD move, mouse look, Space jump, Shift sprint, left mouse fire, R reload, 1-5 weapons, Enter respawn, Tab toggles the fly camera. `--view` starts in fly mode.
+Sandbox starts in Play mode: WASD move, mouse look, Space jump, Shift sprint, left mouse fire, R reload, 1-5 weapons, F flashlight, Enter respawn, Tab toggles the fly camera. `--view` starts in fly mode.
