@@ -304,7 +304,7 @@ play_draw_hud :: proc(sandbox: ^Sandbox, width, height: i32) {
 	player := play.battle.player
 	w, h := f32(width), f32(height)
 	scale := max(h / 360, 2)
-	if player.damage_flash > 0 do Render.Hud_Rect(hud, 0, 0, w, h, {0.8, 0, 0, 0.4 * player.damage_flash})
+	if play.mode == .Play && player.damage_flash > 0 do Render.Hud_Rect(hud, 0, 0, w, h, {0.8, 0, 0, 0.4 * player.damage_flash})
 	if play.mode == .Play && !Gameplay.Health_Is_Dead(player.health) {
 		draw_crosshair(hud, w / 2, h / 2, scale, player.hit_marker > 0)
 		draw_vitals(hud, player, w, h, scale)

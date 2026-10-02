@@ -15,6 +15,7 @@ Render_Pass :: enum {
 	Sky_Lut,
 	Shadows,
 	Geometry,
+	Ssao,
 	Lighting_Base,
 	Lighting_Volumes,
 	Post,
@@ -26,6 +27,7 @@ Renderer :: struct {
 	hdr:             GPU.Framebuffer,
 	ldr:             GPU.Framebuffer,
 	bloom:           Bloom,
+	ssao:            Ssao,
 	geometry:        GPU.Shader,
 	geometry_instanced: GPU.Shader,
 	base_lighting:   GPU.Shader,
@@ -50,6 +52,7 @@ Renderer_Create :: proc(width, height: i32) -> (renderer: Renderer, ok: bool) {
 	renderer.hdr = GPU.Framebuffer_Create({width, height, {.RGBA16F}, .None})
 	renderer.ldr = GPU.Framebuffer_Create({width, height, {.RGBA8}, .None})
 	renderer.bloom = Bloom_Create(width, height) or_return
+	renderer.ssao = Ssao_Create(width, height) or_return
 	renderer.fullscreen = GPU.Fullscreen_Pass_Create()
 	renderer.shadows = Shadow_Map_Create(SHADOW_MAP_SIZE) or_return
 	renderer.sky_lut = Sky_Lut_Create()
@@ -67,6 +70,7 @@ Renderer_Destroy :: proc(renderer: ^Renderer) {
 	Mesh_Destroy(&renderer.light_volume)
 	GPU.Fullscreen_Pass_Destroy(&renderer.fullscreen)
 	Bloom_Destroy(&renderer.bloom)
+	Ssao_Destroy(&renderer.ssao)
 	GPU.Framebuffer_Destroy(&renderer.ldr)
 	GPU.Framebuffer_Destroy(&renderer.hdr)
 	GPU.Framebuffer_Destroy(&renderer.gbuffer)
@@ -88,6 +92,7 @@ Renderer_Render :: proc(renderer: ^Renderer, frame: Frame, width, height: i32) {
 	}, frame)
 	if frame.sun_shadows do timed(renderer, .Shadows, shadow_pass, frame)
 	timed(renderer, .Geometry, geometry_pass, frame)
+	if frame.ssao_radius_meters > 0 do timed(renderer, .Ssao, ssao_pass, frame)
 	lighting_pass(renderer, frame)
 	timed(renderer, .Post, post_pass, frame)
 }
@@ -160,6 +165,11 @@ draw_geometry_item :: proc(shader: ^GPU.Shader, item: ^Draw_Item) {
 }
 
 @(private = "file")
+ssao_pass :: proc(renderer: ^Renderer, frame: Frame) {
+	Ssao_Render(renderer, frame.camera, frame.ssao_radius_meters)
+}
+
+@(private = "file")
 lighting_pass :: proc(renderer: ^Renderer, frame: Frame) {
 	GPU.Framebuffer_Bind(&renderer.hdr)
 	gl.Disable(gl.DEPTH_TEST)
@@ -192,6 +202,8 @@ light_base :: proc(renderer: ^Renderer, frame: Frame) {
 	Light_Set_Uniforms(shader, "u_Sun", frame.sun)
 	GPU.Shader_Set(shader, "u_CameraForward", frame.camera.forward)
 	GPU.Shader_Set(shader, "u_SunShadows", i32(frame.sun_shadows))
+	GPU.Shader_Set(shader, "u_Ssao", GPU.Texture_Bind_Next(&renderer.ssao.blurred.colors[0], GPU.Sampler_Nearest_Clamp))
+	GPU.Shader_Set(shader, "u_SsaoEnabled", i32(frame.ssao_radius_meters > 0))
 	if frame.sun_shadows do Shadow_Map_Bind(shader, &renderer.shadows, renderer.cascades)
 	GPU.Fullscreen_Pass_Draw(&renderer.fullscreen)
 }
@@ -211,7 +223,6 @@ light_volumes :: proc(renderer: ^Renderer, frame: Frame) {
 	}
 }
 
-@(private = "file")
 bind_gbuffer :: proc(shader: ^GPU.Shader, renderer: ^Renderer, camera: Camera) {
 	GPU.Texture_Units_Reset()
 	GPU.Shader_Set(shader, "u_GAlbedo", GPU.Texture_Bind_Next(&renderer.gbuffer.colors[0], GPU.Sampler_Nearest_Clamp))

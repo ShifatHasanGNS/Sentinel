@@ -50,5 +50,6 @@ Frame :: struct {
 	shadow_distance_meters: f32,
 	exposure:          f32,
 	vignette_strength: f32,
+	ssao_radius_meters: f32, // 0 disables screen-space ambient occlusion.
 	bloom_strength:    f32, // 0 disables bloom; ~0.05 is a soft glow.
 }

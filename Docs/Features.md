@@ -70,6 +70,7 @@
 | Chunk = terrain mesh + scatter | `Game/Sandbox/WorldChunks.odin` |
 | Playable layer: garrison, input mapping, demo bot, effects, view weapon, HUD | `Game/Sandbox/Play.odin` |
 | Bloom (13-tap down, tent up, soft-knee threshold) | `Engine/Render/Bloom.odin` : `Bloom_Render`; `Shaders/PostBloom.glsl` |
+| Screen-space ambient occlusion (hemisphere, 4x4 noise + exact blur) | `Engine/Render/Ssao.odin` : `Ssao_Render`; `Shaders/PostSsao.glsl`; applied in `Shaders/DeferredBase.glsl` |
 | The open-world scene (stream, gather, day cycle) | `Game/Sandbox/Sandbox.odin` |
 | Frame loop, capture, benchmark | `Source/Loop.odin` |
 | Flags: `--scene`, `--time`, `--capture`, `--benchmark` | `Source/Config.odin` |
