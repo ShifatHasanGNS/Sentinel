@@ -134,3 +134,6 @@
 | Helicopter flight model (rotor spool-up, collective climb and hover, pitch/roll/yaw, hull-vs-solid blocking, terrain touchdown and impact speed) | `Engine/World/Aircraft.odin` : `Aircraft_Step` |
 | Helicopter spec (hull, main and tail rotors, seat, handling) and rotor drawing | `Game/Catalogue/Vehicles.odin` : `helicopter_spec`; `Game/Vehicles/VehicleRender.odin` |
 | Flying in play (Space/Ctrl climb and descend, W/S pitch, A/D turn, Q/E strafe, hard-landing damage, altitude and rotor HUD) | `Game/Sandbox/Driving.odin` : `drive_vehicle`, `apply_hard_landing`, `draw_vehicle_hud` |
+| Mission objectives state machine (enter, hack, radar, hostage, extraction) | `Game/Mission/Mission.odin` : `Mission_Update`, `Mission_Current_Objective` |
+| Destructible targets (the radar dish): bullets, blasts, shells | `Game/Gameplay/Target.odin`; `Game/Gameplay/Battle.odin` : `Battle_Add_Target`, `damage_target` |
+| Mission in the sandbox: hostage following, hack and rescue prompts, briefing and completion screens, extraction beacon | `Game/Sandbox/MissionPlay.odin` |

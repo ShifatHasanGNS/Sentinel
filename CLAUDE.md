@@ -29,8 +29,8 @@ Folders and files are PascalCase. One package per folder. One feature per file, 
 ## Commands
 
 - Build/run: `odin run Source -out:Sentinel` (fly: WASD, mouse, Space/Ctrl or E/Q for up/down, Shift to boost, Esc quits). For speed numbers build with `-o:speed`.
-- Flags: `--scene sandbox|showroom|catalogue|soldiers`, `--object <Name>` (catalogue close-up), `--view base|gate|yard|airfield|command|sun|player|hq|inside|barracks` (sandbox camera), `--demo` (sandbox: a bot plays and fires at the nearest enemy), `--drive <Kind>` (start inside that vehicle; with `--demo` a bot drives it), `--time <hours>` (fixed hour; omit to run the day cycle), `--capture <frames> <path>`, `--benchmark <frames>` (1080p, scripted circuit, prints frame and per-pass GPU times).
-- Pure tests: `odin test Engine/GPU`, `Engine/Procedural`, `Engine/Render`, `Engine/World`, `Game/Gameplay`, `Game/Vehicles`, `Game/Catalogue`, `Game/Base`, `Game/Characters`, `Game/Weapons` (one `odin test <package>` each), run from the repo root (fixtures use root-relative paths)
+- Flags: `--scene sandbox|showroom|catalogue|soldiers`, `--object <Name>` (catalogue close-up), `--view base|gate|yard|airfield|command|sun|player|hq|inside|barracks` (sandbox camera), `--briefing` (show the mission briefing even when capturing), `--demo` (sandbox: a bot plays and fires at the nearest enemy), `--drive <Kind>` (start inside that vehicle; with `--demo` a bot drives it), `--time <hours>` (fixed hour; omit to run the day cycle), `--capture <frames> <path>`, `--benchmark <frames>` (1080p, scripted circuit, prints frame and per-pass GPU times).
+- Pure tests: `odin test Engine/GPU`, `Engine/Procedural`, `Engine/Render`, `Engine/World`, `Game/Gameplay`, `Game/Vehicles`, `Game/Mission`, `Game/Catalogue`, `Game/Base`, `Game/Characters`, `Game/Weapons` (one `odin test <package>` each), run from the repo root (fixtures use root-relative paths)
 - GL checks (need a window, main thread): `odin run Tests/GpuCheck -out:GpuCheck`, `odin run Tests/TextureCheck -out:TextureCheck`, `odin run Tests/RenderCheck -out:RenderCheck`
 - Screenshot self-check: `odin run Source -out:SentinelDebug -- --capture <frames> Captures/x.bmp`, then `Tools/ToPng.sh Captures/x.bmp` and view the PNG.
 
@@ -45,4 +45,5 @@ Folders and files are PascalCase. One package per folder. One feature per file, 
 `Docs/Roadmap.md` has milestone status (M0-M9). v1 (course scene viewer) is the git tag `legacy-v1`; harvest from it with `git show legacy-v1:<path>`.
 
 ## Playing
+The game is a mini Project I.G.I.-style mission (`Game/Mission`): enter the compound, hack the HQ computer (hold E), destroy the radar, rescue the hostage in the middle barracks (E), reach the green extraction beacon. A briefing shows first; Enter begins.
 Sandbox starts in Play mode: WASD move, mouse look, Space jump, Shift sprint, left mouse fire, R reload, 1-5 weapons, F flashlight, E open/close doors and board/exit vehicles (V seat or chase view, Space brakes; helicopter: Space climb, Ctrl descend, W/S pitch, A/D turn, Q/E strafe, land to get out), Enter respawn, Tab toggles the fly camera. `--view` starts in fly mode.

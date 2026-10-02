@@ -10,11 +10,12 @@ Config :: struct {
 	capture_path:     string,
 	benchmark_frames: int,
 	drive:            string, // Sandbox: start inside the nearest vehicle of this kind (e.g. Jeep); with --demo a bot drives it.
+	briefing:         bool, // Sandbox: show the mission briefing even when capturing.
 	demo:             bool, // Sandbox: a bot plays (aims and fires at the nearest enemy), for hands-free checks.
 	time_hours:       f32, // Negative: let the day cycle run.
 }
 
-// Flags: --demo, --drive <kind>, --scene <name>, --view <name>, --object <name>, --capture <frames> <path>, --benchmark <frames>, --time <hours>
+// Flags: --briefing, --demo, --drive <kind>, --scene <name>, --view <name>, --object <name>, --capture <frames> <path>, --benchmark <frames>, --time <hours>
 Config_Parse :: proc(arguments: []string) -> (config: Config) {
 	config = Config{scene = "sandbox", time_hours = -1}
 	for index := 0; index < len(arguments); index += 1 {
@@ -22,6 +23,7 @@ Config_Parse :: proc(arguments: []string) -> (config: Config) {
 		case "--scene":
 			if index + 1 < len(arguments) {config.scene = arguments[index + 1]; index += 1}
 		case "--demo": config.demo = true
+		case "--briefing": config.briefing = true
 		case "--drive":
 			if index + 1 < len(arguments) {config.drive = arguments[index + 1]; index += 1}
 		case "--view":

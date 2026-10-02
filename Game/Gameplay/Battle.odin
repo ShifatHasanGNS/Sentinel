@@ -28,6 +28,7 @@ Shot_Kind :: enum {
 	None,
 	World,
 	Enemy,
+	Target,
 }
 
 Shot_Result :: struct {
@@ -36,6 +37,7 @@ Shot_Result :: struct {
 	point:       [3]f32,
 	normal:      [3]f32,
 	enemy_index: int,
+	target_index: int,
 	zone:        Hit_Zone,
 	killed:      bool,
 }
@@ -68,6 +70,7 @@ Battle :: struct {
 	ground:      World.Ground,
 	player:      Player,
 	enemies:     [dynamic]Enemy,
+	targets:     [dynamic]Target,
 	projectiles: [dynamic]Projectile_Entity,
 	effects:     [dynamic]Effect,
 	seed:        u32,
@@ -86,6 +89,7 @@ Battle_Destroy :: proc(battle: ^Battle) {
 	World.Collision_World_Destroy(&battle.collision)
 	for &enemy in battle.enemies do Enemy_Destroy(&enemy)
 	delete(battle.enemies)
+	delete(battle.targets)
 	delete(battle.projectiles)
 	delete(battle.effects)
 }
@@ -103,6 +107,11 @@ Battle_Update :: proc(battle: ^Battle, input: Player_Input, delta_seconds: f32) 
 	regenerate_player(&battle.player, health_before, delta_seconds)
 	update_projectiles(battle, delta_seconds)
 	update_effects(battle, delta_seconds)
+}
+
+Battle_Add_Target :: proc(battle: ^Battle, position: [3]f32, radius, health: f32) -> int {
+	append(&battle.targets, Target_Create(position, radius, health))
+	return len(battle.targets) - 1
 }
 
 // A bullet from anything but the player's own hands (a vehicle's gun): traced, with a flash, a tracer and an impact.
@@ -147,7 +156,15 @@ Resolve_Hitscan :: proc(battle: ^Battle, origin, direction: [3]f32, damage, rang
 		nearest = distance
 		result = Shot_Result{kind = .Enemy, distance = distance, point = origin + direction * distance, enemy_index = index, zone = zone}
 	}
+	for &target, index in battle.targets {
+		if target.destroyed do continue
+		hit := World.Ray_Sphere(origin, direction, target.position, target.radius)
+		if !hit.hit || hit.distance > nearest do continue
+		nearest = hit.distance
+		result = Shot_Result{kind = .Target, distance = hit.distance, point = hit.point, normal = hit.normal, target_index = index}
+	}
 	if result.kind == .Enemy do result.killed = damage_enemy(battle, result.enemy_index, damage, result.zone, origin)
+	if result.kind == .Target do result.killed = damage_target(battle, result.target_index, damage)
 	return result
 }
 
@@ -159,11 +176,25 @@ Battle_Detonate :: proc(battle: ^Battle, position: [3]f32, radius, damage: f32) 
 		falloff := Weapons.Explosion_Falloff(la.length(Enemy_Chest_Position(battle.enemies[index]) - position), radius)
 		if falloff > 0 do damage_enemy(battle, index, damage * falloff, .Torso, position)
 	}
+	for index in 0 ..< len(battle.targets) {
+		falloff := Weapons.Explosion_Falloff(max(la.length(battle.targets[index].position - position) - battle.targets[index].radius, 0), radius)
+		if falloff > 0 do damage_target(battle, index, damage * falloff * TARGET_BLAST_MULTIPLIER)
+	}
 	player_falloff := Weapons.Explosion_Falloff(la.length(Player_Eye(battle.player) - position), radius)
 	if player_falloff > 0 && !Health_Is_Dead(battle.player.health) {
 		Health_Apply_Damage(&battle.player.health, damage * player_falloff * SELF_BLAST_FRACTION, .Torso)
 		battle.player.damage_flash = 1
 	}
+}
+
+// A hit on a target; its destruction is a big explosion, and the player sees the hit marker.
+@(private = "file")
+damage_target :: proc(battle: ^Battle, index: int, damage: f32) -> (destroyed: bool) {
+	target := &battle.targets[index]
+	battle.player.hit_marker = HIT_MARKER_SECONDS
+	destroyed = Target_Damage(target, damage)
+	if destroyed do append(&battle.effects, Effect{kind = .Explosion, position = target.position, lifetime = EFFECT_EXPLOSION_SECONDS * 2})
+	return destroyed
 }
 
 @(private = "file")
@@ -352,6 +383,10 @@ projectile_impact :: proc(battle: Battle, origin, direction: [3]f32, distance: f
 	for enemy in battle.enemies {
 		if !Enemy_Is_Alive(enemy) do continue
 		if body_distance, _, struck := Enemy_Raycast(enemy, origin, direction); struck && body_distance <= nearest do nearest, hit = body_distance, true
+	}
+	for target in battle.targets {
+		if target.destroyed do continue
+		if sphere := World.Ray_Sphere(origin, direction, target.position, target.radius); sphere.hit && sphere.distance <= nearest do nearest, hit = sphere.distance, true
 	}
 	if hit do return origin + direction * nearest
 	return nil

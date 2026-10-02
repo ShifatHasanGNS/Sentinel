@@ -8,6 +8,7 @@ import "../Base"
 import "../Characters"
 import "../Gameplay"
 import "../Materials"
+import "../Mission"
 import "../Vehicles"
 import "../Weapons"
 import "core:fmt"
@@ -51,6 +52,7 @@ Weapon_View_Group :: struct {
 // Everything the playable game adds to the world: the simulation, how soldiers and effects are drawn, the held weapon and the HUD.
 Play :: struct {
 	battle:        Gameplay.Battle,
+	mission:       Mission_Play,
 	soldiers:      Characters.Character_Renderer,
 	doors:         [dynamic]Base.Door,
 	door_renderer: Base.Door_Renderer,
@@ -82,7 +84,7 @@ terrain_height :: proc(data: rawptr, x, z: f32) -> f32 {
 	return Procedural.Terrain_Height((^Procedural.Terrain)(data)^, x, z)
 }
 
-play_create :: proc(sandbox: ^Sandbox, demo: bool, fly: bool, drive: string) -> (ok: bool) {
+play_create :: proc(sandbox: ^Sandbox, demo: bool, fly: bool, drive: string, interactive: bool) -> (ok: bool) {
 	play := &sandbox.play
 	base_height := sandbox.terrain.base_height_meters
 	boxes := Base.Layout_Solids(sandbox.base.layout, base_height)
@@ -92,6 +94,7 @@ play_create :: proc(sandbox: ^Sandbox, demo: bool, fly: bool, drive: string) -> 
 	if demo do spawn = {0, 0, 52}
 	spawn.y = terrain_height(sandbox.terrain, spawn.x, spawn.z)
 	play.battle = Gameplay.Battle_Create(ground, boxes[:], spawn, 99)
+	mission_create(play, sandbox, interactive && !demo && !fly)
 	play.doors = Base.Layout_Doors(sandbox.base.layout, base_height)
 	Base.Doors_Register(play.doors[:], &play.battle.collision)
 	play.door_renderer = Base.Door_Renderer_Create(play.doors[:])
@@ -115,6 +118,7 @@ play_create :: proc(sandbox: ^Sandbox, demo: bool, fly: bool, drive: string) -> 
 }
 
 play_destroy :: proc(play: ^Play) {
+	mission_destroy(&play.mission)
 	vehicles_destroy(play)
 	Base.Door_Renderer_Destroy(&play.door_renderer)
 	delete(play.doors)
@@ -162,6 +166,10 @@ spawn_garrison :: proc(battle: ^Gameplay.Battle, terrain: ^Procedural.Terrain) {
 // Tab flips between playing and the free debug camera; then the simulation advances one frame.
 play_update :: proc(sandbox: ^Sandbox, input: ^Platform.Input, delta_seconds: f32) {
 	play := &sandbox.play
+	if mission_pauses(play) {
+		mission_check_start(play, input)
+		return
+	}
 	fill_prop_solids(sandbox)
 	tab_down := Platform.Input_Key_Down(input, .Tab)
 	if tab_down && !play.tab_was_down do play.mode = .Fly if play.mode == .Play else .Play
@@ -191,6 +199,7 @@ play_update :: proc(sandbox: ^Sandbox, input: ^Platform.Input, delta_seconds: f3
 		}
 	}
 	update_vehicles(sandbox, delta_seconds)
+	if play.mode == .Play do mission_update(sandbox, interact_down, interact_pressed, delta_seconds)
 	if play.battle.player.shots_fired != play.shots_seen {
 		play.shots_seen = play.battle.player.shots_fired
 		play.recoil = RECOIL_KICK_METERS
@@ -273,6 +282,7 @@ play_items :: proc(sandbox: ^Sandbox, items, shadow_items: ^[dynamic]Render.Draw
 	for enemy in play.battle.enemies do append(&characters, enemy.character)
 	body_shown := !Gameplay.Health_Is_Dead(play.battle.player.health) && play.driving == nil
 	if body_shown do append(&characters, play.body)
+	if hostage, present := mission_hostage_character(play).?; present do append(&characters, hostage)
 	for item in Characters.Character_Renderer_Items(&play.soldiers, characters[:]) {
 		append(items, item)
 		append(shadow_items, item)
@@ -286,6 +296,7 @@ play_items :: proc(sandbox: ^Sandbox, items, shadow_items: ^[dynamic]Render.Draw
 		append(shadow_items, door_item)
 	}
 	for effect in play.battle.effects do add_effect(play, effect, items, &lights)
+	mission_items(play, items, &lights)
 	if play.flashlight_on && play.mode == .Play {
 		player := play.battle.player
 		flashlight := Render.Light_Spot(Gameplay.Player_Eye(player) + Gameplay.Player_Forward(player) * 0.3, Gameplay.Player_Forward(player), {1, 0.95, 0.85}, FLASHLIGHT_INTENSITY, FLASHLIGHT_RANGE_METERS, 10, 24)
@@ -403,6 +414,7 @@ play_draw_hud :: proc(sandbox: ^Sandbox, width, height: i32) {
 	if _, can_board := play.boardable.?; play.mode == .Play && play.driving == nil && can_board && !Gameplay.Health_Is_Dead(player.health) do Render.Hud_Text(hud, (w - Render.Hud_Text_Width("E  ENTER VEHICLE", scale)) / 2, h * 0.62, "E  ENTER VEHICLE", scale, {1, 1, 1, 0.9})
 	else if play.mode == .Play && play.door_in_reach && !Gameplay.Health_Is_Dead(player.health) do Render.Hud_Text(hud, (w - Render.Hud_Text_Width("E  OPEN / CLOSE", scale)) / 2, h * 0.62, "E  OPEN / CLOSE", scale, {1, 1, 1, 0.9})
 	if Gameplay.Health_Is_Dead(player.health) do draw_death_screen(hud, w, h, scale)
+	mission_draw_hud(play, w, h, scale)
 	Render.Hud_Flush(hud, width, height)
 }
 
@@ -474,7 +486,7 @@ interact_on_foot :: proc(play: ^Play, pressed: bool) {
 	index, found := Base.Doors_Nearest(play.doors[:], play.battle.player.controller.position)
 	play.door_in_reach = found
 	play.boardable = nearest_boardable(play)
-	if !pressed do return
+	if !pressed || play.mission.hostage_in_reach || play.mission.terminal_in_reach do return
 	if _, boardable := play.boardable.?; boardable do board_vehicle(play)
 	else if found do Base.Doors_Toggle(play.doors[:], index)
 }
