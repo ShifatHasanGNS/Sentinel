@@ -134,7 +134,7 @@ jeep_spec :: proc() -> (spec: Vehicle_Spec) {
 	}
 	for index in 0 ..< 6 do add_box(parts, {0.9, 0.035, 0.05}, {0, 0.76 + f32(index) * 0.075, 2.31}, .Gunmetal, false) // Grille slats.
 	add_box(parts, {1.6, 0.1, 1.2}, {0, 1.95, -0.5}, .Gunmetal, false) // Roof rack with a jerrycan.
-	add_box(parts, {0.45, 0.5, 0.2}, {0.5, 2.25, -0.5}, .Olive_Paint)
+	add_box(parts, {0.45, 0.3, 0.2}, {0.5, 2.13, -0.5}, .Olive_Paint)
 	spec.seat = {0.4, 1.7, -0.3}
 	spec.armor = 1
 	spec.handling = World.Vehicle_Handling{
@@ -200,7 +200,7 @@ armored_carrier_spec :: proc() -> (spec: Vehicle_Spec) {
 	for x in ([2]f32{-1.0, 1.0}) do add_box(parts, {0.7, 0.12, 5.6}, {x, 0.62, 0}, .Olive_Paint, false) // Side skirts over the wheels.
 	add_cylinder(parts, 0.35, 0.1, {-0.7, 2.55, -1.6}, .Olive_Paint, false, 14) // Driver and rear hatches.
 	add_cylinder(parts, 0.35, 0.1, {0.7, 2.55, -1.9}, .Olive_Paint, false, 14)
-	add_cylinder(parts, 0.015, 2.2, {-1.1, 3.1, -2.6}, .Gunmetal, false, 6) // Antenna.
+	add_cylinder(parts, 0.015, 0.6, {-1.1, 2.8, -2.6}, .Gunmetal, false, 6) // Antenna.
 	add_cylinder(&spec.turret, 0.65, 0.55, {}, .Olive_Paint, true, 18)
 	add_cylinder_z(&spec.gun, 0.05, 1.8, {0, 0, 0.9}, .Rusted_Metal, false, 10)
 	spec.turret_pivot = {0.5, 2.75, -0.5}
