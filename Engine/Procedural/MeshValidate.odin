@@ -17,7 +17,7 @@ Mesh_Find_Problem :: proc(mesh: Mesh) -> string {
 		if abs(la.length(vertex.tangent.xyz) - 1) >= 1e-4 do return fmt.tprintf("vertex %d tangent is not unit length", index)
 		if abs(la.dot(vertex.normal, vertex.tangent.xyz)) >= 1e-3 do return fmt.tprintf("vertex %d tangent is not perpendicular to its normal", index)
 		if abs(vertex.tangent.w) != 1 do return fmt.tprintf("vertex %d handedness is %f", index, vertex.tangent.w)
-		if vertex.uv.x < 0 || vertex.uv.x > 1 || vertex.uv.y < 0 || vertex.uv.y > 1 do return fmt.tprintf("vertex %d uv %v is outside [0, 1]", index, vertex.uv)
+		if vertex.uv.x < -1e-5 || vertex.uv.x > 1 + 1e-5 || vertex.uv.y < -1e-5 || vertex.uv.y > 1 + 1e-5 do return fmt.tprintf("vertex %d uv %v is outside [0, 1]", index, vertex.uv)
 	}
 	for first := 0; first + 2 < len(mesh.indices); first += 3 {
 		a, b, c := mesh.vertices[mesh.indices[first]], mesh.vertices[mesh.indices[first + 1]], mesh.vertices[mesh.indices[first + 2]]

@@ -105,6 +105,18 @@ torso_parts :: proc(parts: ^Parts, palette: Palette) {
 	if palette.has_vest {
 		add(parts, Procedural.Box({0.41, 0.3, 0.25}), {0, 0.32, 0}, palette.vest)
 		for x in ([3]f32{-0.1, 0, 0.1}) do add(parts, Procedural.Box({0.08, 0.1, 0.05}), {x, 0.22, 0.15}, palette.vest)
+		for x in ([2]f32{-0.15, 0.15}) do add(parts, Procedural.Box({0.07, 0.13, 0.05}), {x, 0.31, 0.15}, palette.vest) // Magazine pouches.
+		add(parts, Procedural.Box({0.1, 0.08, 0.04}), {0, 0.42, 0.14}, palette.vest) // Chest radio patch.
+		for x in ([2]f32{-0.11, 0.11}) do add(parts, Procedural.Box({0.08, 0.03, 0.22}), {x, 0.465, 0}, palette.vest) // Shoulder straps.
+	}
+	add(parts, Procedural.Cylinder(0.185, 0.045, 14), {0, 0.095, 0}, .Rubber, {1, 1, 0.62}) // Belt.
+	add(parts, Procedural.Box({0.045, 0.045, 0.02}), {0, 0.095, 0.125}, .Gunmetal) // Buckle.
+	add(parts, Procedural.Cylinder(0.04, 0.12, 10), {0.2, 0.05, -0.02}, palette.backpack) // Canteen on the hip.
+	add(parts, Procedural.Box({0.1, 0.03, 0.07}), {0, 0.52, -0.01}, palette.uniform) // Collar.
+	if palette.has_backpack {
+		add(parts, Procedural.Cylinder(0.055, 0.34, 10), {0, 0.52, -0.2}, .Fabric_Desert, {1, 1, 1}) // Bedroll across the top.
+		append(parts, Procedural.Part{primitive = Procedural.Cylinder(0.055, 0.34, 10), position = {0, 0.5, -0.2}, rotation_degrees = {0, 0, 90}, material = i32(Materials.Surface_Material.Fabric_Desert)})
+		for x in ([2]f32{-0.09, 0.09}) do add(parts, Procedural.Box({0.03, 0.34, 0.03}), {x, 0.32, -0.095}, palette.vest) // Straps.
 	}
 	if palette.has_backpack do add(parts, Procedural.Box({0.32, 0.38, 0.16}), {0, 0.3, -0.19}, palette.backpack)
 	if palette.ghillie do ghillie_parts(parts)
@@ -135,19 +147,36 @@ head_parts :: proc(parts: ^Parts, palette: Palette) {
 		add(parts, Procedural.Sphere(0.115, 16, 8), {0, 0.14, 0}, palette.headgear, {0.96, 1.12, 1.02}, {0 = Procedural.Noise_Displace{0.01, 12, 2, 7}})
 		add(parts, Procedural.Box({0.13, 0.025, 0.02}), {0, 0.15, 0.105}, .Skin)
 	}
+	for x in ([2]f32{-0.036, 0.036}) { // Eyes (sclera and iris), brows, ears.
+		add(parts, Procedural.Sphere(0.013, 8, 4), {x, 0.155, 0.098}, .Canvas, {1, 0.8, 0.6})
+		add(parts, Procedural.Sphere(0.007, 6, 3), {x, 0.155, 0.107}, .Gunmetal)
+		add(parts, Procedural.Box({0.034, 0.008, 0.01}), {x, 0.178, 0.098}, .Fabric_Dark)
+		add(parts, Procedural.Sphere(0.022, 8, 4), {x * 2.6, 0.14, 0}, .Skin, {0.5, 1, 0.8})
+	}
+	add(parts, Procedural.Cone(0.017, 0.045, 6), {0, 0.135, 0.106}, .Skin) // Nose.
+	add(parts, Procedural.Box({0.05, 0.008, 0.012}), {0, 0.095, 0.095}, .Skin, {1, 1, 1}) // Mouth line.
 	if palette.has_goggles do add(parts, Procedural.Box({0.16, 0.04, 0.03}), {0, 0.16, 0.115}, .Glass)
+	if palette.headgear_style == .Helmet { // Chin strap and rail for night vision.
+		add(parts, Procedural.Box({0.012, 0.09, 0.012}), {-0.09, 0.1, 0.03}, .Rubber)
+		add(parts, Procedural.Box({0.012, 0.09, 0.012}), {0.09, 0.1, 0.03}, .Rubber)
+		add(parts, Procedural.Box({0.1, 0.02, 0.02}), {0, 0.075, 0.095}, .Rubber)
+		add(parts, Procedural.Box({0.05, 0.03, 0.03}), {0, 0.245, 0.1}, .Gunmetal)
+	}
 }
 
 @(private = "file")
 forearm_parts :: proc(parts: ^Parts, palette: Palette) {
 	add(parts, Procedural.Capsule(0.04, 0.17, 12, 5), {0, 0.135, 0}, palette.uniform)
 	add(parts, Procedural.Sphere(0.052, 10, 6), {0, 0.27, 0}, palette.gloves, {1, 1.2, 1})
+	for finger in 0 ..< 4 do add(parts, Procedural.Capsule(0.008, 0.035, 6, 3), {-0.027 + f32(finger) * 0.018, 0.325, 0.012}, palette.gloves) // Fingers curl over the grip.
+	add(parts, Procedural.Capsule(0.009, 0.03, 6, 3), {0.045, 0.3, 0.015}, palette.gloves) // Thumb.
 }
 
 @(private = "file")
 shin_parts :: proc(parts: ^Parts, palette: Palette) {
 	add(parts, Procedural.Capsule(0.06, 0.31, 12, 5), {0, 0.225, 0}, palette.uniform)
 	add(parts, Procedural.Cylinder(0.066, 0.2, 12), {0, 0.36, 0}, palette.boots)
+	add(parts, Procedural.Sphere(0.062, 10, 5), {0, 0.0, 0.035}, palette.uniform, {1, 0.8, 1.1}) // Knee pad.
 }
 
 // Foot origin is the ankle, 0.08 m above the sole; +Z is the toe.
