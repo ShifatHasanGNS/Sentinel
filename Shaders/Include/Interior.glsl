@@ -5,7 +5,7 @@ const int INTERIORS_MAX = 24;
 uniform int u_InteriorCount;
 uniform vec4 u_InteriorCenter[INTERIORS_MAX]; // xyz center, w yaw
 uniform vec3 u_InteriorHalf[INTERIORS_MAX];
-const float INTERIOR_AMBIENT_FRACTION = 0.04;
+const float INTERIOR_AMBIENT_FRACTION = 0.5; // Daylight reaching a room through its windows and door, after bouncing off the walls.
 const float INTERIOR_EDGE_METERS = 0.06;
 const float INTERIOR_SLACK_METERS = 0.08; // The walls, floor and ceiling lie on the box faces; growing the box a little puts their inner surfaces inside it.
 

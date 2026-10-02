@@ -31,7 +31,13 @@ void main() {
 	if (u_SunShadows) sun *= shadow_factor(surface.position, surface.normal, -u_Sun.direction, u_CameraPosition, u_CameraForward);
 	// Occlusion only dims light that arrives from the sky; direct sun is handled by shadow maps.
 	float occlusion = surface.ambient_occlusion * (u_SsaoEnabled ? texture(u_Ssao, v_uv).r : 1.0);
-	occlusion *= interior_ambient_scale(surface.position);
-	vec3 ambient = ambient_light(surface.albedo, surface.roughness, surface.metallic, surface.normal, view, occlusion);
+	// Indirect light in a room (a one-bounce radiosity stand-in): daylight enters by the windows and door and bounces between the
+	// walls until it comes from everywhere, so the ambient is a fraction of the sky's and its direction is blended toward up
+	// (floor and walls light the ceiling), where outdoors a ceiling would face the dark ground.
+	float room_scale = interior_ambient_scale(surface.position);
+	float in_room = clamp((1.0 - room_scale) / (1.0 - INTERIOR_AMBIENT_FRACTION), 0.0, 1.0);
+	vec3 bounce_normal = normalize(mix(surface.normal, vec3(0.0, 1.0, 0.0), 0.6 * in_room));
+	occlusion *= room_scale;
+	vec3 ambient = ambient_light(surface.albedo, surface.roughness, surface.metallic, bounce_normal, view, occlusion);
 	color = vec4(sun + ambient + surface.emission, 1.0);
 }
