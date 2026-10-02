@@ -111,8 +111,13 @@ test_the_player_cannot_walk_through_a_real_barracks :: proc(t: ^testing.T) {
 	layout := Base.Layout_Create(5, 90)
 	defer Base.Layout_Destroy(&layout)
 	barracks := Base.Placement{kind = .Barracks, x = 0, z = 0, yaw_degrees = 0}
-	boxes := Base.Placement_Solids(barracks)
-	defer delete(boxes)
+	append(&layout.placements, barracks)
+	world := World.Collision_World{boxes = Base.Placement_Solids(barracks)}
+	defer World.Collision_World_Destroy(&world)
+	doors := Base.Layout_Doors(layout, 0)
+	defer delete(doors)
+	Base.Doors_Register(doors[:], &world) // The doors are shut, so the walls are unbroken.
+	boxes := world.boxes
 	for heading in 0 ..< 8 {
 		angle := f32(heading) * math.PI / 4
 		start := [3]f32{math.cos(angle) * 25, 0, math.sin(angle) * 25}
