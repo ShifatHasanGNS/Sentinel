@@ -48,7 +48,7 @@ Texture_Create :: proc(desc: Texture_Desc) -> Texture {
 	if texture.mip_levels == 0 do texture.mip_levels = mip_chain_length(desc)
 	gl.GenTextures(1, &texture.id)
 	target := texture_target(desc.kind)
-	gl.BindTexture(target, texture.id)
+	bind_for_edit(target, texture.id)
 	for level in 0 ..< texture.mip_levels do allocate_level(desc, level)
 	gl.TexParameteri(target, gl.TEXTURE_BASE_LEVEL, 0)
 	gl.TexParameteri(target, gl.TEXTURE_MAX_LEVEL, texture.mip_levels - 1)
@@ -65,7 +65,7 @@ Texture_Upload :: proc(texture: ^Texture, data: []$T, level: i32 = 0, layer: i32
 	assert(len(data) * size_of(T) == expected_bytes, "Texture_Upload: data size does not match level size")
 	info := format_info(texture.desc.format)
 	target := texture_target(texture.desc.kind)
-	gl.BindTexture(target, texture.id)
+	bind_for_edit(target, texture.id)
 	gl.PixelStorei(gl.UNPACK_ALIGNMENT, 1)
 	switch texture.desc.kind {
 	case .Texture_2D:
@@ -83,7 +83,7 @@ Texture_Upload :: proc(texture: ^Texture, data: []$T, level: i32 = 0, layer: i32
 
 Texture_Generate_Mips :: proc(texture: ^Texture) {
 	target := texture_target(texture.desc.kind)
-	gl.BindTexture(target, texture.id)
+	bind_for_edit(target, texture.id)
 	texture.mip_levels = mip_chain_length(texture.desc)
 	gl.TexParameteri(target, gl.TEXTURE_MAX_LEVEL, texture.mip_levels - 1) // Generation stops at MAX_LEVEL, so raise it first.
 	gl.GenerateMipmap(target)
@@ -96,7 +96,7 @@ Texture_Read_2D :: proc(texture: ^Texture, out: []$T, level: i32 = 0) {
 	expected_bytes := int(width) * int(height) * int(source_bytes_per_pixel(texture.desc.format))
 	assert(len(out) * size_of(T) == expected_bytes, "Texture_Read_2D: output size does not match level size")
 	info := format_info(texture.desc.format)
-	gl.BindTexture(gl.TEXTURE_2D, texture.id)
+	bind_for_edit(gl.TEXTURE_2D, texture.id)
 	gl.PixelStorei(gl.PACK_ALIGNMENT, 1)
 	gl.GetTexImage(gl.TEXTURE_2D, level, info.pixel_format, info.pixel_type, raw_data(out))
 	GL_Check()
@@ -130,14 +130,32 @@ Texture_Destroy :: proc(texture: ^Texture) {
 @(private = "file")
 texture_unit_next: i32
 
+// The last unit is reserved for creating, uploading and reading textures, so those never replace a texture the caller bound.
+@(private = "file")
+scratch_unit_cached: i32
+
+@(private = "file")
+scratch_unit :: proc() -> i32 {
+	if scratch_unit_cached == 0 {
+		units_available: i32
+		gl.GetIntegerv(gl.MAX_COMBINED_TEXTURE_IMAGE_UNITS, &units_available)
+		scratch_unit_cached = units_available - 1
+	}
+	return scratch_unit_cached
+}
+
+@(private = "file")
+bind_for_edit :: proc(target: u32, id: u32) {
+	gl.ActiveTexture(gl.TEXTURE0 + u32(scratch_unit()))
+	gl.BindTexture(target, id)
+}
+
 Texture_Units_Reset :: proc() {
 	texture_unit_next = 0
 }
 
 Texture_Bind_Next :: proc(texture: ^Texture, sampler_desc: Sampler_Desc) -> (unit: i32) {
-	units_available: i32
-	gl.GetIntegerv(gl.MAX_COMBINED_TEXTURE_IMAGE_UNITS, &units_available)
-	assert(texture_unit_next < units_available, "Texture_Bind_Next: out of texture units")
+	assert(texture_unit_next < scratch_unit(), "Texture_Bind_Next: out of texture units")
 	unit = texture_unit_next
 	texture_unit_next += 1
 	gl.ActiveTexture(gl.TEXTURE0 + u32(unit))

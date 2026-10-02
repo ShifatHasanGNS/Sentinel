@@ -1,13 +1,7 @@
 // Bake pass shared by all recipes: include after defining `Surface recipe_surface(vec2 uv)`.
 // Writes albedo (sRGB target, so the shader outputs linear), normal + height, and roughness/metallic/occlusion.
 
-#stage vertex
-out vec2 v_uv;
-void main() {
-	vec2 corner = vec2((gl_VertexID << 1) & 2, gl_VertexID & 2);
-	v_uv = corner;
-	gl_Position = vec4(corner * 2.0 - 1.0, 0.0, 1.0);
-}
+#include "Fullscreen.glsl"
 
 #stage fragment
 in vec2 v_uv;

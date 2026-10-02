@@ -25,6 +25,7 @@ main :: proc() {
 	check_array_texture_layer_sampling(c)
 	check_bad_shader_reports_failure(c)
 	check_render_into_array_layer(c)
+	check_creating_textures_does_not_disturb_bound_units(c)
 	fmt.printfln("%d checks passed, %d failed", checks.passed, checks.failed)
 	if checks.failed > 0 do os.exit(1)
 }
@@ -232,4 +233,38 @@ void main() { color = texelFetch(u_Layers, ivec3(0, 0, u_Layer), 0); }
 	pixel: [1][4]u8
 	gpu.Texture_Read_2D(&destination.colors[0], pixel[:])
 	return pixel[0]
+}
+
+// Creating, uploading to or reading a texture must not replace a texture the caller already bound to a unit.
+check_creating_textures_does_not_disturb_bound_units :: proc(c: ^Support.Checks) {
+	red := gpu.Texture_Create({.Texture_2D, .RGBA8, 1, 1, 0, 1})
+	defer gpu.Texture_Destroy(&red)
+	gpu.Texture_Upload(&red, [][4]u8{{255, 0, 0, 255}})
+	shader, ok := gpu.Shader_Create_From_Source(SOLID_COLOR_VERTEX, `#version 410 core
+uniform sampler2D u_Texture;
+out vec4 color;
+void main() { color = texelFetch(u_Texture, ivec2(0), 0); }
+`, "bound unit probe")
+	Support.expect(c, ok)
+	defer gpu.Shader_Destroy(&shader)
+	gpu.Texture_Units_Reset()
+	unit := gpu.Texture_Bind_Next(&red, gpu.Sampler_Nearest_Clamp)
+	gpu.Shader_Set(&shader, "u_Texture", unit)
+
+	green := gpu.Texture_Create({.Texture_2D, .RGBA8, 1, 1, 0, 0})
+	defer gpu.Texture_Destroy(&green)
+	gpu.Texture_Upload(&green, [][4]u8{{0, 255, 0, 255}})
+	gpu.Texture_Generate_Mips(&green)
+	readback: [1][4]u8
+	gpu.Texture_Read_2D(&green, readback[:])
+	destination := gpu.Framebuffer_Create({1, 1, {.RGBA8}, .None})
+	defer gpu.Framebuffer_Destroy(&destination)
+	pass := gpu.Fullscreen_Pass_Create()
+	defer gpu.Fullscreen_Pass_Destroy(&pass)
+	gpu.Framebuffer_Bind(&destination)
+	gpu.Shader_Use(&shader)
+	gpu.Fullscreen_Pass_Draw(&pass)
+	pixel: [1][4]u8
+	gpu.Texture_Read_2D(&destination.colors[0], pixel[:])
+	Support.expect_value(c, pixel[0], [4]u8{255, 0, 0, 255})
 }
