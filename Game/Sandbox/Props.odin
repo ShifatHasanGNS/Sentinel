@@ -2,11 +2,14 @@ package Sandbox
 
 import "../../Engine/Procedural"
 import "../../Engine/Render"
+import "core:math"
 import la "core:math/linalg"
 
 TREE_CAPACITY :: 6000
 ROCK_CAPACITY :: 4000
 BUSH_CAPACITY :: 8000
+GRASS_CAPACITY :: 24000
+GRASS_DRAW_DISTANCE_METERS :: 45.0
 
 // Scatter variant thresholds: [0, TREE) tree, [TREE, ROCK) rock, the rest bush.
 TREE_VARIANT_LIMIT :: 0.30
@@ -19,6 +22,7 @@ Props :: struct {
 	tree_canopy:        Render.Mesh,
 	rock:               Render.Mesh,
 	bush:               Render.Mesh,
+	grass:              Render.Mesh,
 	tree_trunk_shadow:  Render.Mesh,
 	tree_canopy_shadow: Render.Mesh,
 	rock_shadow:        Render.Mesh,
@@ -30,6 +34,7 @@ Props_Create :: proc() -> (props: Props) {
 	props.tree_canopy = upload_prop(tree_canopy_mesh(), TREE_CAPACITY)
 	props.rock = upload_prop(rock_mesh(), ROCK_CAPACITY)
 	props.bush = upload_prop(bush_mesh(), BUSH_CAPACITY)
+	props.grass = upload_prop(grass_tuft_mesh(), GRASS_CAPACITY)
 	props.tree_trunk_shadow = upload_shadow_proxy(placed(Procedural.Cylinder_Create(0.2, 4, 5, 1), {0, 2, 0}, {1, 1, 1}), &props.tree_trunk)
 	props.tree_canopy_shadow = upload_shadow_proxy(placed(Procedural.Sphere_Create(2.0, 8, 4), {0, 5.2, 0}, {1, 1.25, 1}), &props.tree_canopy)
 	props.rock_shadow = upload_shadow_proxy(placed(Procedural.Sphere_Create(0.9, 8, 4), {0, 0.25, 0}, {1.2, 0.7, 1}), &props.rock)
@@ -46,6 +51,7 @@ Props_Destroy :: proc(props: ^Props) {
 	Render.Mesh_Destroy(&props.tree_canopy)
 	Render.Mesh_Destroy(&props.rock)
 	Render.Mesh_Destroy(&props.bush)
+	Render.Mesh_Destroy(&props.grass)
 }
 
 @(private = "file")
@@ -107,4 +113,24 @@ placed :: proc(mesh: Procedural.Mesh, offset, scale: [3]f32) -> (result: Procedu
 	defer Procedural.Mesh_Destroy(&mesh)
 	Procedural.Mesh_Append(&result, mesh, la.matrix4_translate_f32(offset) * la.matrix4_scale_f32(scale))
 	return result
+}
+
+// A tuft of eleven blades fanned out from one root, each a thin four-sided spike leaning outward and bent by a noise displacement,
+// so no two directions look alike. Blades are pointed (a blade is a taper to nothing) and about 0.25-0.55 m tall.
+@(private = "file")
+grass_tuft_mesh :: proc() -> (tuft: Procedural.Mesh) {
+	BLADES :: 11
+	for index in 0 ..< BLADES {
+		hash := Procedural.Hash_U32(u32(index) * 2654435761 + 17)
+		around := f32(index) / BLADES * 2 * math.PI + Procedural.Hash_To_Unit_Float(hash) * 0.5
+		lean := 0.3 + 0.6 * Procedural.Hash_To_Unit_Float(Procedural.Hash_U32(hash ~ 1))
+		height := 0.14 + 0.2 * Procedural.Hash_To_Unit_Float(Procedural.Hash_U32(hash ~ 2))
+		blade := Procedural.Cone_Create(0.011, height, 4)
+		Procedural.Mesh_Deform(&blade, {Procedural.Bend{lean * 5.0}})
+		root := [3]f32{math.cos(around), 0, math.sin(around)} * (0.03 + 0.1 * Procedural.Hash_To_Unit_Float(Procedural.Hash_U32(hash ~ 3)))
+		turn := la.matrix4_rotate_f32(-around + math.PI / 2, {0, 1, 0})
+		Procedural.Mesh_Append(&tuft, blade, la.matrix4_translate_f32(root + {0, height / 2, 0}) * turn)
+		Procedural.Mesh_Destroy(&blade)
+	}
+	return tuft
 }

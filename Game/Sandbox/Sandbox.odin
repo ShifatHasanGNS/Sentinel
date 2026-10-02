@@ -30,6 +30,8 @@ Sandbox :: struct {
 	materials:      Procedural.Texture_Set,
 	terrain:        ^Procedural.Terrain, // On the heap: the battle's ground function points at it.
 	scatter_rules:  Procedural.Scatter_Rules,
+	grass_rules:    Procedural.Scatter_Rules,
+	grass_instances: [dynamic]Render.Instance,
 	props:          Props,
 	base:           Base.Base_Scene,
 	play:           Play,
@@ -61,6 +63,7 @@ Sandbox_Create :: proc(width, height: i32, hours: f32, view: string, demo: bool,
 		plateau_radius_meters = 90,
 		plateau_blend_meters = 120,
 	}
+	sandbox.grass_rules = Procedural.Scatter_Rules{seed = 8, attempts_per_chunk = 1400, min_normal_y = 0.88, exclusion_radius_meters = 100, scale_range = {0.7, 1.4}}
 	sandbox.scatter_rules = Procedural.Scatter_Rules{seed = 3, attempts_per_chunk = 120, min_normal_y = 0.93, exclusion_radius_meters = 125, scale_range = {0.8, 1.5}}
 	sandbox.props = Props_Create()
 	sandbox.base = Base.Base_Scene_Create(Base.Layout_Create(BASE_SEED, sandbox.terrain.plateau_radius_meters), sandbox.terrain.base_height_meters)
@@ -86,6 +89,7 @@ Sandbox_Destroy :: proc(sandbox: ^Sandbox) {
 	delete(sandbox.canopy_instances)
 	delete(sandbox.rock_instances)
 	delete(sandbox.bush_instances)
+	delete(sandbox.grass_instances)
 	play_destroy(&sandbox.play)
 	Base.Base_Scene_Destroy(&sandbox.base)
 	Props_Destroy(&sandbox.props)
@@ -163,6 +167,7 @@ camera_for_view :: proc(view: string) -> Fly_Camera {
 	case "inside": return Fly_Camera_Looking_At({3, 11.75, -2.6}, {-3.5, 11.2, -10})
 	case "barracks": return Fly_Camera_Looking_At({-31, 11.7, -4}, {-44, 11.5, -2})
 	case "camera": return Fly_Camera_Looking_At({-30, 15.5, 33}, {-43.8, 16, 43.8})
+	case "field": return Fly_Camera_Looking_At({10, 9, 215}, {10, 5, 190})
 	case "command": return Fly_Camera_Looking_At({-20, 24, 62}, {-8, 11, -12})
 	}
 	return Fly_Camera{position = {-150, 45, 190}, yaw_radians = -0.67, pitch_radians = -0.15}
@@ -202,7 +207,7 @@ find_queued :: proc(queue: []World.Chunk_Coordinate, coordinate: World.Chunk_Coo
 build_next_chunk :: proc(sandbox: ^Sandbox) {
 	coordinate := sandbox.build_queue[0]
 	ordered_remove(&sandbox.build_queue, 0)
-	sandbox.chunks[coordinate] = Chunk_Build(sandbox.terrain^, sandbox.scatter_rules, coordinate)
+	sandbox.chunks[coordinate] = Chunk_Build(sandbox.terrain^, sandbox.scatter_rules, sandbox.grass_rules, coordinate)
 }
 
 // Terrain chunks in view are drawn; every loaded chunk and every prop casts shadows, so trees behind the camera still shade the scene.
@@ -231,11 +236,11 @@ terrain_item :: proc(chunk: ^Chunk) -> Render.Draw_Item {
 }
 
 @(private = "file")
-prop_items :: proc(sandbox: ^Sandbox) -> [4]Render.Draw_Item {
+prop_items :: proc(sandbox: ^Sandbox) -> [5]Render.Draw_Item {
 	prop :: proc(mesh: ^Render.Mesh) -> Render.Draw_Item {
 		return Render.Draw_Item{mesh = mesh, model = la.MATRIX4F32_IDENTITY, uv_scale = {1, 1}, triplanar = true, illumination_model = .Cook_Torrance}
 	}
-	return {prop(&sandbox.props.tree_trunk), prop(&sandbox.props.tree_canopy), prop(&sandbox.props.rock), prop(&sandbox.props.bush)}
+	return {prop(&sandbox.props.tree_trunk), prop(&sandbox.props.tree_canopy), prop(&sandbox.props.rock), prop(&sandbox.props.bush), prop(&sandbox.props.grass)}
 }
 
 @(private = "file")
@@ -254,13 +259,16 @@ collect_instances :: proc(sandbox: ^Sandbox, frustum: Render.Frustum, camera_pos
 	clear(&sandbox.canopy_instances)
 	clear(&sandbox.rock_instances)
 	clear(&sandbox.bush_instances)
+	clear(&sandbox.grass_instances)
 	for _, &chunk in sandbox.chunks {
 		if chunk_matters(chunk, frustum, camera_position) do for point in chunk.scatter do place_prop(sandbox, point)
+		if Render.Frustum_Intersects_Aabb(frustum, chunk.lowest, chunk.highest) do for point in chunk.grass do place_grass(sandbox, point, camera_position)
 	}
 	Render.Mesh_Set_Instances(&sandbox.props.tree_trunk, sandbox.trunk_instances[:min(len(sandbox.trunk_instances), TREE_CAPACITY)])
 	Render.Mesh_Set_Instances(&sandbox.props.tree_canopy, sandbox.canopy_instances[:min(len(sandbox.canopy_instances), TREE_CAPACITY)])
 	Render.Mesh_Set_Instances(&sandbox.props.rock, sandbox.rock_instances[:min(len(sandbox.rock_instances), ROCK_CAPACITY)])
 	Render.Mesh_Set_Instances(&sandbox.props.bush, sandbox.bush_instances[:min(len(sandbox.bush_instances), BUSH_CAPACITY)])
+	Render.Mesh_Set_Instances(&sandbox.props.grass, sandbox.grass_instances[:min(len(sandbox.grass_instances), GRASS_CAPACITY)])
 }
 
 @(private = "file")
@@ -268,6 +276,14 @@ chunk_matters :: proc(chunk: Chunk, frustum: Render.Frustum, camera_position: [3
 	if Render.Frustum_Intersects_Aabb(frustum, chunk.lowest, chunk.highest) do return true
 	nearest := [3]f32{clamp(camera_position.x, chunk.lowest.x, chunk.highest.x), clamp(camera_position.y, chunk.lowest.y, chunk.highest.y), clamp(camera_position.z, chunk.lowest.z, chunk.highest.z)}
 	return la.length(nearest - camera_position) < SHADOW_DISTANCE_METERS
+}
+
+@(private = "file")
+place_grass :: proc(sandbox: ^Sandbox, point: Procedural.Scatter_Point, camera_position: [3]f32) {
+	offset := point.position - camera_position
+	if offset.x * offset.x + offset.z * offset.z > GRASS_DRAW_DISTANCE_METERS * GRASS_DRAW_DISTANCE_METERS do return
+	model := la.matrix4_translate_f32(point.position) * la.matrix4_rotate_f32(point.yaw_radians, {0, 1, 0}) * la.matrix4_scale_f32({point.scale, point.scale, point.scale})
+	append(&sandbox.grass_instances, Render.Instance{model = model, material_layer = f32(Materials.Surface_Material.Grass)})
 }
 
 @(private = "file")

@@ -12,18 +12,21 @@ Chunk :: struct {
 	lowest:  [3]f32,
 	highest: [3]f32,
 	scatter: [dynamic]Procedural.Scatter_Point,
+	grass:   [dynamic]Procedural.Scatter_Point, // Dense small tufts, drawn only near the camera.
 }
 
-Chunk_Build :: proc(terrain: Procedural.Terrain, rules: Procedural.Scatter_Rules, coordinate: [2]i32) -> (chunk: Chunk) {
+Chunk_Build :: proc(terrain: Procedural.Terrain, rules, grass_rules: Procedural.Scatter_Rules, coordinate: [2]i32) -> (chunk: Chunk) {
 	cpu_mesh := Procedural.Terrain_Chunk_Mesh(terrain, coordinate, CHUNK_SIZE_METERS, CHUNK_CELLS)
 	defer Procedural.Mesh_Destroy(&cpu_mesh)
 	chunk.lowest, chunk.highest = Procedural.Mesh_Bounds(cpu_mesh)
 	chunk.mesh = Render.Mesh_Upload(cpu_mesh)
 	chunk.scatter = Procedural.Scatter_Chunk(terrain, rules, coordinate, CHUNK_SIZE_METERS)
+	chunk.grass = Procedural.Scatter_Chunk(terrain, grass_rules, coordinate, CHUNK_SIZE_METERS)
 	return chunk
 }
 
 Chunk_Destroy :: proc(chunk: ^Chunk) {
 	Render.Mesh_Destroy(&chunk.mesh)
 	delete(chunk.scatter)
+	delete(chunk.grass)
 }
