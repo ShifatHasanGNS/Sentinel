@@ -36,6 +36,16 @@ Key :: enum {
 	Escape,
 	Period,
 	Comma,
+	Num_1,
+	Num_2,
+	Num_3,
+	Num_4,
+	Num_5,
+	R,
+	F,
+	C,
+	Tab,
+	Enter,
 }
 
 @(private = "file")
@@ -52,6 +62,16 @@ glfw_keys := [Key]i32{
 	.Escape = glfw.KEY_ESCAPE,
 	.Period = glfw.KEY_PERIOD,
 	.Comma = glfw.KEY_COMMA,
+	.Num_1 = glfw.KEY_1,
+	.Num_2 = glfw.KEY_2,
+	.Num_3 = glfw.KEY_3,
+	.Num_4 = glfw.KEY_4,
+	.Num_5 = glfw.KEY_5,
+	.R = glfw.KEY_R,
+	.F = glfw.KEY_F,
+	.C = glfw.KEY_C,
+	.Tab = glfw.KEY_TAB,
+	.Enter = glfw.KEY_ENTER,
 }
 
 Input_Key_Down :: proc(input: ^Input, key: Key) -> bool {
@@ -62,4 +82,14 @@ Input_Capture_Mouse :: proc(input: ^Input, captured: bool) {
 	mode: i32 = glfw.CURSOR_DISABLED if captured else glfw.CURSOR_NORMAL
 	glfw.SetInputMode(input.window, glfw.CURSOR, mode)
 	input.has_mouse = false
+}
+
+Mouse_Button :: enum {
+	Left,
+	Right,
+}
+
+Input_Mouse_Down :: proc(input: ^Input, button: Mouse_Button) -> bool {
+	glfw_button: i32 = glfw.MOUSE_BUTTON_LEFT if button == .Left else glfw.MOUSE_BUTTON_RIGHT
+	return glfw.GetMouseButton(input.window, glfw_button) == glfw.PRESS
 }

@@ -123,3 +123,22 @@ test_collision_boxes_follow_the_placement_rotation :: proc(t: ^testing.T) {
 	testing.expect(t, abs(upright_size.x - turned_size.z) < 0.05 && abs(upright_size.z - turned_size.x) < 0.05 && abs(upright_size.y - turned_size.y) < 0.05)
 	testing.expect(t, abs(turned_center.x - 10) < 1.0 && abs(turned_center.z + 5) < 1.0)
 }
+
+@(test)
+test_layout_collision_boxes_cover_every_placement_at_the_ground_height :: proc(t: ^testing.T) {
+	layout := Layout_Create(7, PLATEAU_RADIUS_METERS)
+	defer Layout_Destroy(&layout)
+	boxes := Layout_World_Boxes(layout, 10)
+	defer delete(boxes)
+	expected := 0
+	for placement in layout.placements {
+		own := Placement_Collision_Boxes(placement)
+		expected += len(own)
+		delete(own)
+	}
+	testing.expect_value(t, len(boxes), expected)
+	for box in boxes {
+		testing.expect(t, box.lowest.y >= 10 - 0.3 - 1e-3) // On the plateau, allowing the catalogue's footings 0.3 m into it.
+		testing.expect(t, box.highest.y > box.lowest.y)
+	}
+}

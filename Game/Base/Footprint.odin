@@ -112,3 +112,15 @@ project :: proc(corners: [4][2]f32, axis: [2]f32) -> (low, high: f32) {
 	}
 	return
 }
+
+// Every placement's collision boxes in world coordinates, lifted onto the ground the base stands on.
+Layout_World_Boxes :: proc(layout: Layout, ground_height_meters: f32) -> (boxes: [dynamic]Procedural.Collision_Box) {
+	for placement in layout.placements {
+		own := Placement_Collision_Boxes(placement)
+		defer delete(own)
+		for box in own {
+			append(&boxes, Procedural.Collision_Box{box.lowest + {0, ground_height_meters, 0}, box.highest + {0, ground_height_meters, 0}})
+		}
+	}
+	return boxes
+}
