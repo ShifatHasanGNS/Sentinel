@@ -17,6 +17,7 @@ Gallery_Item :: struct {
 	material: Materials.Surface_Material,
 	uv_scale: [2]f32,
 	triplanar: bool,
+	illumination_model: Render.Illumination_Model,
 }
 
 Gallery_Entry :: struct {
@@ -26,7 +27,7 @@ Gallery_Entry :: struct {
 	triplanar: bool,
 }
 
-// Row 0: every primitive plain. Row 1: deformers. Row 2: one sphere per material.
+// Row 0: every primitive plain. Row 1: deformers. Row 2: one sphere per material. Row 3: one sphere per illumination model.
 Gallery_Create :: proc() -> (items: [dynamic]Gallery_Item) {
 	plain := [?]Gallery_Entry{
 		{Procedural.Box_Create({1.5, 1.5, 1.5}), .Concrete, {1, 1}, false},
@@ -49,6 +50,7 @@ Gallery_Create :: proc() -> (items: [dynamic]Gallery_Item) {
 	add_row(&items, plain[:], 0)
 	add_row(&items, deformed[:], GALLERY_ROW_SPACING_METERS)
 	add_material_spheres(&items, 2 * GALLERY_ROW_SPACING_METERS)
+	add_model_spheres(&items, 3 * GALLERY_ROW_SPACING_METERS)
 	return items
 }
 
@@ -68,7 +70,7 @@ deformed_mesh :: proc(mesh: Procedural.Mesh, deformers: []Procedural.Deformer) -
 add_row :: proc(items: ^[dynamic]Gallery_Item, entries: []Gallery_Entry, z_meters: f32) {
 	for &entry, index in entries {
 		x_meters := (f32(index) - f32(len(entries) - 1) / 2) * GALLERY_SPACING_METERS
-		append(items, Gallery_Item{Render.Mesh_Upload(entry.mesh), la.matrix4_translate_f32({x_meters, 1, z_meters}), entry.material, entry.uv_scale, entry.triplanar})
+		append(items, Gallery_Item{Render.Mesh_Upload(entry.mesh), la.matrix4_translate_f32({x_meters, 1, z_meters}), entry.material, entry.uv_scale, entry.triplanar, .Cook_Torrance})
 		Procedural.Mesh_Destroy(&entry.mesh)
 	}
 }
@@ -79,7 +81,18 @@ add_material_spheres :: proc(items: ^[dynamic]Gallery_Item, z_meters: f32) {
 	for material, index in Materials.Surface_Material {
 		sphere := Procedural.Sphere_Create(1, 48, 24)
 		x_meters := (f32(index) - f32(count - 1) / 2) * MATERIAL_SPHERE_SPACING_METERS
-		append(items, Gallery_Item{Render.Mesh_Upload(sphere), la.matrix4_translate_f32({x_meters, 1, z_meters}), material, {4, 2}, false})
+		append(items, Gallery_Item{Render.Mesh_Upload(sphere), la.matrix4_translate_f32({x_meters, 1, z_meters}), material, {4, 2}, false, .Cook_Torrance})
+		Procedural.Mesh_Destroy(&sphere)
+	}
+}
+
+@(private = "file")
+add_model_spheres :: proc(items: ^[dynamic]Gallery_Item, z_meters: f32) {
+	count := len(Render.Illumination_Model)
+	for model, index in Render.Illumination_Model {
+		sphere := Procedural.Sphere_Create(1, 48, 24)
+		x_meters := (f32(index) - f32(count - 1) / 2) * MATERIAL_SPHERE_SPACING_METERS
+		append(items, Gallery_Item{Render.Mesh_Upload(sphere), la.matrix4_translate_f32({x_meters, 1, z_meters}), .Painted_Metal, {4, 2}, false, model})
 		Procedural.Mesh_Destroy(&sphere)
 	}
 }

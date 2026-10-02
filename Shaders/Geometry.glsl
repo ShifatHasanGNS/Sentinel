@@ -1,4 +1,5 @@
 #version 410 core
+#include "Gbuffer.glsl"
 #include "Triplanar.glsl"
 #stage vertex
 layout(location = 0) in vec3 a_Position;
@@ -24,7 +25,9 @@ in vec3 v_world_position;
 in vec3 v_world_normal;
 in vec4 v_world_tangent;
 in vec2 v_uv;
-out vec4 color;
+layout(location = 0) out vec4 o_Albedo;
+layout(location = 1) out vec4 o_Normal;
+layout(location = 2) out vec4 o_Emission;
 uniform sampler2DArray u_AlbedoArray;
 uniform sampler2DArray u_NormalArray;
 uniform sampler2DArray u_OrmArray;
@@ -32,8 +35,8 @@ uniform float u_Layer;
 uniform vec2 u_UvScale;
 uniform float u_TriplanarScale;
 uniform bool u_Triplanar;
-uniform vec3 u_LightDirection;
-uniform vec3 u_CameraPosition;
+uniform int u_IlluminationModel;
+uniform vec3 u_Emission;
 
 void main() {
 	vec3 geometric_normal = normalize(v_world_normal);
@@ -53,16 +56,7 @@ void main() {
 		vec3 bitangent = cross(geometric_normal, tangent) * v_world_tangent.w;
 		normal = normalize(mat3(tangent, bitangent, geometric_normal) * tangent_normal);
 	}
-	// Placeholder shading until the deferred renderer lands: Blinn-Phong with roughness-derived shininess.
-	float roughness = max(orm.r, 0.05);
-	float metallic = orm.g;
-	vec3 light = normalize(u_LightDirection);
-	vec3 view = normalize(u_CameraPosition - v_world_position);
-	float diffuse = max(dot(normal, light), 0.0);
-	float shininess = 2.0 / (roughness * roughness) - 2.0;
-	float specular = pow(max(dot(normal, normalize(light + view)), 0.0), shininess) * diffuse;
-	vec3 diffuse_color = albedo * (1.0 - metallic);
-	vec3 specular_color = mix(vec3(0.04), albedo, metallic);
-	vec3 linear = diffuse_color * (0.2 * orm.b + 0.9 * diffuse) + specular_color * specular;
-	color = vec4(pow(linear, vec3(1.0 / 2.2)), 1.0);
+	o_Albedo = vec4(albedo, float(u_IlluminationModel) / 255.0);
+	o_Normal = vec4(oct_encode(normal), max(orm.r, 0.045), orm.g);
+	o_Emission = vec4(u_Emission, orm.b);
 }

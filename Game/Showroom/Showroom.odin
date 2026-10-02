@@ -11,21 +11,27 @@ import gl "vendor:OpenGL"
 
 GROUND_HALF_EXTENT_METERS :: 40
 GROUND_TILES :: 40
+BULB_RADIUS_METERS :: 0.18
 
 Showroom :: struct {
+	renderer:             Render.Renderer,
 	materials:            Procedural.Texture_Set,
-	lit:                  GPU.Shader,
 	gallery:              [dynamic]Gallery_Item,
 	ground:               Gallery_Item,
+	bulb:                 Render.Mesh,
+	sun:                  Render.Light,
+	local_lights:         [dynamic]Render.Light,
 	camera_angle_radians: f32,
 }
 
-Showroom_Create :: proc() -> (showroom: Showroom, ok: bool) {
-	showroom.lit = GPU.Shader_Create("Shaders/Lit.glsl") or_return
+Showroom_Create :: proc(width, height: i32) -> (showroom: Showroom, ok: bool) {
+	showroom.renderer = Render.Renderer_Create(width, height) or_return
 	showroom.materials = Materials.Materials_Bake() or_return
 	showroom.gallery = Gallery_Create()
 	showroom.ground = create_ground()
-	gl.Enable(gl.DEPTH_TEST)
+	showroom.bulb = create_bulb()
+	showroom.sun = Render.Light_Directional({-0.55, -0.35, -0.4}, {1, 0.78, 0.55}, 3)
+	showroom.local_lights = create_lights()
 	return showroom, true
 }
 
@@ -34,45 +40,73 @@ Showroom_Update :: proc(showroom: ^Showroom, clock: Platform.Clock) {
 }
 
 Showroom_Render :: proc(showroom: ^Showroom, window: Platform.Window) {
-	GPU.Framebuffer_Bind_Default(window.framebuffer_width, window.framebuffer_height)
-	gl.ClearColor(0.45, 0.6, 0.8, 1)
-	gl.Clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT)
-	GPU.Shader_Use(&showroom.lit)
-	Render.Texture_Set_Bind(&showroom.lit, &showroom.materials)
-	eye, view_projection := camera(showroom, window)
-	GPU.Shader_Set(&showroom.lit, "u_ViewProjection", view_projection)
-	GPU.Shader_Set(&showroom.lit, "u_CameraPosition", eye)
-	GPU.Shader_Set(&showroom.lit, "u_LightDirection", [3]f32{0.4, 0.8, 0.5})
-	GPU.Shader_Set(&showroom.lit, "u_TriplanarScale", f32(TRIPLANAR_TILES_PER_METER))
-	draw_item(showroom, &showroom.ground)
-	for &item in showroom.gallery do draw_item(showroom, &item)
+	items := make([dynamic]Render.Draw_Item, context.temp_allocator)
+	append(&items, as_draw_item(&showroom.ground))
+	for &item in showroom.gallery do append(&items, as_draw_item(&item))
+	for light in showroom.local_lights do append(&items, bulb_draw_item(showroom, light))
+	frame := Render.Frame{
+		camera = camera(showroom, window),
+		items = items[:],
+		sun = showroom.sun,
+		local_lights = showroom.local_lights[:],
+		sky = dusk_sky(showroom.sun),
+		materials = &showroom.materials,
+		exposure = 1,
+		vignette_strength = 0.35,
+	}
+	Render.Renderer_Render(&showroom.renderer, frame, window.framebuffer_width, window.framebuffer_height)
 }
 
 Showroom_Destroy :: proc(showroom: ^Showroom) {
+	Render.Mesh_Destroy(&showroom.bulb)
+	delete(showroom.local_lights)
 	Render.Mesh_Destroy(&showroom.ground.mesh)
 	Gallery_Destroy(&showroom.gallery)
 	Procedural.Texture_Set_Destroy(&showroom.materials)
-	GPU.Shader_Destroy(&showroom.lit)
+	Render.Renderer_Destroy(&showroom.renderer)
 	GPU.Sampler_Cache_Destroy()
 }
 
+// One of every local light type, placed over the gallery.
 @(private = "file")
-draw_item :: proc(showroom: ^Showroom, item: ^Gallery_Item) {
-	GPU.Shader_Set(&showroom.lit, "u_Model", item.model)
-	GPU.Shader_Set(&showroom.lit, "u_Layer", f32(item.material))
-	GPU.Shader_Set(&showroom.lit, "u_UvScale", item.uv_scale)
-	GPU.Shader_Set(&showroom.lit, "u_Triplanar", i32(item.triplanar))
-	Render.Mesh_Draw(&item.mesh)
+create_lights :: proc() -> (lights: [dynamic]Render.Light) {
+	append(&lights, Render.Light_Point({-9, 1.6, 5}, {1, 0.45, 0.15}, 60, 12))
+	append(&lights, Render.Light_Point({9, 1.6, 5}, {0.2, 0.5, 1}, 60, 12))
+	append(&lights, Render.Light_Spot({0, 7, 12}, {0, -1, -0.25}, {1, 0.95, 0.85}, 400, 22, 14, 26))
+	append(&lights, Render.Light_Area({0, 3.2, 3.5}, {0, -1, 0}, {1, 1, 1}, 4, 1.2, 160, 14))
+	return lights
 }
 
 @(private = "file")
-camera :: proc(showroom: ^Showroom, window: Platform.Window) -> (eye: [3]f32, view_projection: matrix[4, 4]f32) {
+dusk_sky :: proc(sun: Render.Light) -> Render.Sky {
+	return Render.Sky{zenith = {0.05, 0.1, 0.25}, horizon = {0.55, 0.32, 0.2}, ground = {0.04, 0.035, 0.03}, sun_color = sun.color, to_sun = -sun.direction}
+}
+
+@(private = "file")
+as_draw_item :: proc(item: ^Gallery_Item) -> Render.Draw_Item {
+	return Render.Draw_Item{&item.mesh, item.model, i32(item.material), item.uv_scale, item.triplanar, item.illumination_model, {}}
+}
+
+// A small emissive sphere marking each local light's position.
+@(private = "file")
+bulb_draw_item :: proc(showroom: ^Showroom, light: Render.Light) -> Render.Draw_Item {
+	model := la.matrix4_translate_f32(light.position) * la.matrix4_scale_f32({BULB_RADIUS_METERS, BULB_RADIUS_METERS, BULB_RADIUS_METERS})
+	return Render.Draw_Item{&showroom.bulb, model, i32(Materials.Surface_Material.Concrete), {1, 1}, false, .Lambert, light.color * 6}
+}
+
+@(private = "file")
+camera :: proc(showroom: ^Showroom, window: Platform.Window) -> Render.Camera {
 	aspect := f32(window.framebuffer_width) / f32(window.framebuffer_height)
-	projection := la.matrix4_perspective_f32(math.to_radians(f32(60)), aspect, 0.1, 200)
-	target := [3]f32{0, 1, GALLERY_ROW_SPACING_METERS}
-	eye = target + {13 * math.sin(showroom.camera_angle_radians), 5, 13 * math.cos(showroom.camera_angle_radians)}
-	view := la.matrix4_look_at_f32(eye, target, {0, 1, 0})
-	return eye, projection * view
+	target := [3]f32{0, 1, 5}
+	eye := target + {19 * math.sin(showroom.camera_angle_radians), 7, 19 * math.cos(showroom.camera_angle_radians)}
+	return Render.Camera_Look_At(eye, target, 60, aspect, 0.1, 200)
+}
+
+@(private = "file")
+create_bulb :: proc() -> Render.Mesh {
+	sphere := Procedural.Sphere_Create(1, 16, 8)
+	defer Procedural.Mesh_Destroy(&sphere)
+	return Render.Mesh_Upload(sphere)
 }
 
 // A thin slab whose top face is the floor; its [0,1] uv is scaled to tile the dirt material across it.
@@ -80,5 +114,5 @@ camera :: proc(showroom: ^Showroom, window: Platform.Window) -> (eye: [3]f32, vi
 create_ground :: proc() -> Gallery_Item {
 	slab := Procedural.Box_Create({2 * GROUND_HALF_EXTENT_METERS, 0.2, 2 * GROUND_HALF_EXTENT_METERS})
 	defer Procedural.Mesh_Destroy(&slab)
-	return Gallery_Item{Render.Mesh_Upload(slab), la.matrix4_translate_f32({0, -0.1, 0}), .Dirt, {GROUND_TILES, GROUND_TILES}, false}
+	return Gallery_Item{Render.Mesh_Upload(slab), la.matrix4_translate_f32({0, -0.1, 0}), .Dirt, {GROUND_TILES, GROUND_TILES}, false, .Cook_Torrance}
 }

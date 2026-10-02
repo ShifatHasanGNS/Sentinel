@@ -10,7 +10,7 @@ main :: proc() {
 	window, window_ok := Platform.Window_Create("Sentinel", 1280, 720, config.capture_frames == 0)
 	if !window_ok do os.exit(1)
 	defer Platform.Window_Destroy(&window)
-	showroom, showroom_ok := Showroom.Showroom_Create()
+	showroom, showroom_ok := Showroom.Showroom_Create(window.framebuffer_width, window.framebuffer_height)
 	if !showroom_ok do os.exit(1)
 	defer Showroom.Showroom_Destroy(&showroom)
 	clock: Platform.Clock

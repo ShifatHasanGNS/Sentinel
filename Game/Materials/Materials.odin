@@ -15,6 +15,7 @@ Surface_Material :: enum i32 {
 	Grass,
 	Dirt,
 	Rock,
+	Painted_Metal,
 }
 
 // Colours are linear RGB. detail, bump_strength and the three colours mean what each recipe shader says they mean.
@@ -27,6 +28,7 @@ recipes := [Surface_Material]Procedural.Texture_Recipe {
 	.Canvas        = {"Shaders/Recipes/Canvas.glsl", 53, 8, {{0.18, 0.20, 0.10}, {0.12, 0.14, 0.07}, {}}, 0.5, 0.9},
 	.Grass         = {"Shaders/Recipes/Grass.glsl", 61, 8, {{0.05, 0.12, 0.02}, {0.12, 0.25, 0.04}, {0.30, 0.28, 0.08}}, 0.5, 0.7},
 	.Dirt          = {"Shaders/Recipes/Dirt.glsl", 71, 4, {{0.18, 0.12, 0.07}, {0.10, 0.07, 0.04}, {0.20, 0.18, 0.15}}, 0.5, 0.9},
+	.Painted_Metal = {"Shaders/Recipes/PaintedMetal.glsl", 97, 4, {{0.16, 0.19, 0.09}, {0.50, 0.50, 0.52}, {}}, 0.5, 1.2},
 	.Rock          = {"Shaders/Recipes/Rock.glsl", 83, 4, {{0.30, 0.29, 0.27}, {0.14, 0.13, 0.12}, {}}, 0.5, 1.0},
 }
 

@@ -1,0 +1,165 @@
+package Render
+
+import "../GPU"
+import "../Procedural"
+import la "core:math/linalg"
+import gl "vendor:OpenGL"
+
+TRIPLANAR_TILES_PER_METER :: 0.5
+LIGHT_VOLUME_SEGMENTS :: 24
+LIGHT_VOLUME_RINGS :: 12
+
+Renderer :: struct {
+	gbuffer:         GPU.Framebuffer, // albedo + model, normal + roughness + metallic, emission + occlusion, depth
+	hdr:             GPU.Framebuffer,
+	ldr:             GPU.Framebuffer,
+	geometry:        GPU.Shader,
+	base_lighting:   GPU.Shader,
+	volume_lighting: GPU.Shader,
+	tonemap:         GPU.Shader,
+	fxaa:            GPU.Shader,
+	fullscreen:      GPU.Fullscreen_Pass,
+	light_volume:    Mesh,
+}
+
+Renderer_Create :: proc(width, height: i32) -> (renderer: Renderer, ok: bool) {
+	renderer.geometry = GPU.Shader_Create("Shaders/Geometry.glsl", nil, true) or_return
+	renderer.base_lighting = GPU.Shader_Create("Shaders/DeferredBase.glsl", nil, true) or_return
+	renderer.volume_lighting = GPU.Shader_Create("Shaders/DeferredLight.glsl", nil, true) or_return
+	renderer.tonemap = GPU.Shader_Create("Shaders/PostTonemap.glsl", nil, true) or_return
+	renderer.fxaa = GPU.Shader_Create("Shaders/PostFxaa.glsl", nil, true) or_return
+	renderer.gbuffer = GPU.Framebuffer_Create({width, height, {.SRGB8_A8, .RGBA16F, .RGBA16F}, .Depth32F})
+	renderer.hdr = GPU.Framebuffer_Create({width, height, {.RGBA16F}, .None})
+	renderer.ldr = GPU.Framebuffer_Create({width, height, {.RGBA8}, .None})
+	renderer.fullscreen = GPU.Fullscreen_Pass_Create()
+	sphere := Procedural.Sphere_Create(1, LIGHT_VOLUME_SEGMENTS, LIGHT_VOLUME_RINGS)
+	defer Procedural.Mesh_Destroy(&sphere)
+	renderer.light_volume = Mesh_Upload(sphere)
+	return renderer, true
+}
+
+Renderer_Destroy :: proc(renderer: ^Renderer) {
+	Mesh_Destroy(&renderer.light_volume)
+	GPU.Fullscreen_Pass_Destroy(&renderer.fullscreen)
+	GPU.Framebuffer_Destroy(&renderer.ldr)
+	GPU.Framebuffer_Destroy(&renderer.hdr)
+	GPU.Framebuffer_Destroy(&renderer.gbuffer)
+	GPU.Shader_Destroy(&renderer.fxaa)
+	GPU.Shader_Destroy(&renderer.tonemap)
+	GPU.Shader_Destroy(&renderer.volume_lighting)
+	GPU.Shader_Destroy(&renderer.base_lighting)
+	GPU.Shader_Destroy(&renderer.geometry)
+}
+
+Renderer_Render :: proc(renderer: ^Renderer, frame: Frame, width, height: i32) {
+	GPU.Framebuffer_Resize(&renderer.gbuffer, width, height)
+	GPU.Framebuffer_Resize(&renderer.hdr, width, height)
+	GPU.Framebuffer_Resize(&renderer.ldr, width, height)
+	geometry_pass(renderer, frame)
+	lighting_pass(renderer, frame)
+	post_pass(renderer, frame, width, height)
+}
+
+@(private = "file")
+geometry_pass :: proc(renderer: ^Renderer, frame: Frame) {
+	GPU.Framebuffer_Bind(&renderer.gbuffer)
+	gl.Enable(gl.DEPTH_TEST)
+	gl.DepthMask(true)
+	gl.Enable(gl.CULL_FACE)
+	gl.CullFace(gl.BACK)
+	gl.ClearColor(0, 0, 0, 0)
+	gl.Clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT)
+	shader := &renderer.geometry
+	GPU.Shader_Use(shader)
+	Texture_Set_Bind(shader, frame.materials)
+	GPU.Shader_Set(shader, "u_ViewProjection", frame.camera.view_projection)
+	GPU.Shader_Set(shader, "u_TriplanarScale", f32(TRIPLANAR_TILES_PER_METER))
+	gl.Enable(gl.FRAMEBUFFER_SRGB)
+	for &item in frame.items do draw_geometry_item(shader, &item)
+	gl.Disable(gl.FRAMEBUFFER_SRGB)
+}
+
+@(private = "file")
+draw_geometry_item :: proc(shader: ^GPU.Shader, item: ^Draw_Item) {
+	GPU.Shader_Set(shader, "u_Model", item.model)
+	GPU.Shader_Set(shader, "u_Layer", f32(item.material_layer))
+	GPU.Shader_Set(shader, "u_UvScale", item.uv_scale)
+	GPU.Shader_Set(shader, "u_Triplanar", i32(item.triplanar))
+	GPU.Shader_Set(shader, "u_IlluminationModel", i32(item.illumination_model))
+	GPU.Shader_Set(shader, "u_Emission", item.emission)
+	Mesh_Draw(item.mesh)
+}
+
+@(private = "file")
+lighting_pass :: proc(renderer: ^Renderer, frame: Frame) {
+	GPU.Framebuffer_Bind(&renderer.hdr)
+	gl.Disable(gl.DEPTH_TEST)
+	gl.Disable(gl.CULL_FACE)
+	gl.Disable(gl.BLEND)
+	light_base(renderer, frame)
+	gl.Enable(gl.BLEND)
+	gl.BlendFunc(gl.ONE, gl.ONE)
+	gl.Enable(gl.CULL_FACE)
+	gl.CullFace(gl.FRONT) // Back faces of the volume cover the lit pixels even when the camera is inside it.
+	light_volumes(renderer, frame)
+	gl.CullFace(gl.BACK)
+	gl.Disable(gl.BLEND)
+}
+
+@(private = "file")
+light_base :: proc(renderer: ^Renderer, frame: Frame) {
+	shader := &renderer.base_lighting
+	GPU.Shader_Use(shader)
+	bind_gbuffer(shader, renderer, frame.camera)
+	GPU.Shader_Set(shader, "u_SkyZenith", frame.sky.zenith)
+	GPU.Shader_Set(shader, "u_SkyHorizon", frame.sky.horizon)
+	GPU.Shader_Set(shader, "u_SkyGround", frame.sky.ground)
+	GPU.Shader_Set(shader, "u_SunColor", frame.sky.sun_color)
+	GPU.Shader_Set(shader, "u_ToSun", frame.sky.to_sun)
+	Light_Set_Uniforms(shader, "u_Sun", frame.sun)
+	GPU.Fullscreen_Pass_Draw(&renderer.fullscreen)
+}
+
+@(private = "file")
+light_volumes :: proc(renderer: ^Renderer, frame: Frame) {
+	shader := &renderer.volume_lighting
+	GPU.Shader_Use(shader)
+	bind_gbuffer(shader, renderer, frame.camera)
+	GPU.Shader_Set(shader, "u_ViewProjection", frame.camera.view_projection)
+	GPU.Shader_Set(shader, "u_ScreenSize", [2]f32{f32(renderer.gbuffer.width), f32(renderer.gbuffer.height)})
+	for light in frame.local_lights {
+		volume := la.matrix4_translate_f32(light.position) * la.matrix4_scale_f32({light.range_meters, light.range_meters, light.range_meters})
+		GPU.Shader_Set(shader, "u_Model", volume)
+		Light_Set_Uniforms(shader, "u_Light", light)
+		Mesh_Draw(&renderer.light_volume)
+	}
+}
+
+@(private = "file")
+bind_gbuffer :: proc(shader: ^GPU.Shader, renderer: ^Renderer, camera: Camera) {
+	GPU.Texture_Units_Reset()
+	GPU.Shader_Set(shader, "u_GAlbedo", GPU.Texture_Bind_Next(&renderer.gbuffer.colors[0], GPU.Sampler_Nearest_Clamp))
+	GPU.Shader_Set(shader, "u_GNormal", GPU.Texture_Bind_Next(&renderer.gbuffer.colors[1], GPU.Sampler_Nearest_Clamp))
+	GPU.Shader_Set(shader, "u_GEmission", GPU.Texture_Bind_Next(&renderer.gbuffer.colors[2], GPU.Sampler_Nearest_Clamp))
+	GPU.Shader_Set(shader, "u_GDepth", GPU.Texture_Bind_Next(&renderer.gbuffer.depth, GPU.Sampler_Nearest_Clamp))
+	GPU.Shader_Set(shader, "u_InverseViewProjection", la.inverse(camera.view_projection))
+	GPU.Shader_Set(shader, "u_CameraPosition", camera.position)
+}
+
+@(private = "file")
+post_pass :: proc(renderer: ^Renderer, frame: Frame, width, height: i32) {
+	GPU.Framebuffer_Bind(&renderer.ldr)
+	GPU.Shader_Use(&renderer.tonemap)
+	GPU.Texture_Units_Reset()
+	GPU.Shader_Set(&renderer.tonemap, "u_Hdr", GPU.Texture_Bind_Next(&renderer.hdr.colors[0], GPU.Sampler_Linear_Clamp))
+	GPU.Shader_Set(&renderer.tonemap, "u_Exposure", frame.exposure)
+	GPU.Shader_Set(&renderer.tonemap, "u_VignetteStrength", frame.vignette_strength)
+	GPU.Fullscreen_Pass_Draw(&renderer.fullscreen)
+
+	GPU.Framebuffer_Bind_Default(width, height)
+	GPU.Shader_Use(&renderer.fxaa)
+	GPU.Texture_Units_Reset()
+	GPU.Shader_Set(&renderer.fxaa, "u_Ldr", GPU.Texture_Bind_Next(&renderer.ldr.colors[0], GPU.Sampler_Linear_Clamp))
+	GPU.Shader_Set(&renderer.fxaa, "u_ScreenSize", [2]f32{f32(width), f32(height)})
+	GPU.Fullscreen_Pass_Draw(&renderer.fullscreen)
+}
