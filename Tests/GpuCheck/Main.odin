@@ -3,6 +3,7 @@ package main
 import "../../Engine/Platform"
 import "core:fmt"
 import "core:os"
+import gl "vendor:OpenGL"
 import "../Support"
 import gpu "../../Engine/GPU"
 
@@ -26,6 +27,7 @@ main :: proc() {
 	check_bad_shader_reports_failure(c)
 	check_render_into_array_layer(c)
 	check_creating_textures_does_not_disturb_bound_units(c)
+	check_render_depth_into_array_layers(c)
 	fmt.printfln("%d checks passed, %d failed", checks.passed, checks.failed)
 	if checks.failed > 0 do os.exit(1)
 }
@@ -267,4 +269,42 @@ void main() { color = texelFetch(u_Texture, ivec2(0), 0); }
 	pixel: [1][4]u8
 	gpu.Texture_Read_2D(&destination.colors[0], pixel[:])
 	Support.expect_value(c, pixel[0], [4]u8{255, 0, 0, 255})
+}
+
+check_render_depth_into_array_layers :: proc(c: ^Support.Checks) {
+	depth := gpu.Texture_Create({.Texture_2D_Array, .Depth32F, 4, 4, 3, 1})
+	defer gpu.Texture_Destroy(&depth)
+	target := gpu.Framebuffer_Create_For_Layers(4, 4)
+	defer gpu.Framebuffer_Destroy(&target)
+	for layer_depth in ([2][2]f32{{0, 0.5}, {2, 0.25}}) {
+		gpu.Framebuffer_Set_Depth_Layer(&target, &depth, i32(layer_depth[0]))
+		gpu.Framebuffer_Bind(&target)
+		gl.ClearDepth(f64(layer_depth[1]))
+		gl.Clear(gl.DEPTH_BUFFER_BIT)
+	}
+	Support.expect_value(c, read_depth_texel(&depth, 0), 0.5)
+	Support.expect_value(c, read_depth_texel(&depth, 2), 0.25)
+}
+
+read_depth_texel :: proc(array: ^gpu.Texture, layer: i32) -> f32 {
+	reader, _ := gpu.Shader_Create_From_Source(SOLID_COLOR_VERTEX, `#version 410 core
+uniform sampler2DArray u_Layers;
+uniform int u_Layer;
+out vec4 color;
+void main() { color = vec4(texelFetch(u_Layers, ivec3(1, 1, u_Layer), 0).r, 0.0, 0.0, 1.0); }
+`, "depth reader")
+	defer gpu.Shader_Destroy(&reader)
+	destination := gpu.Framebuffer_Create({1, 1, {.RGBA32F}, .None})
+	defer gpu.Framebuffer_Destroy(&destination)
+	pass := gpu.Fullscreen_Pass_Create()
+	defer gpu.Fullscreen_Pass_Destroy(&pass)
+	gpu.Texture_Units_Reset()
+	gpu.Shader_Set(&reader, "u_Layers", gpu.Texture_Bind_Next(array, gpu.Sampler_Nearest_Clamp))
+	gpu.Shader_Set(&reader, "u_Layer", layer)
+	gpu.Framebuffer_Bind(&destination)
+	gpu.Shader_Use(&reader)
+	gpu.Fullscreen_Pass_Draw(&pass)
+	pixel: [1][4]f32
+	gpu.Texture_Read_2D(&destination.colors[0], pixel[:])
+	return pixel[0].x
 }

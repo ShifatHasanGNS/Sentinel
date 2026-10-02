@@ -112,3 +112,14 @@ Framebuffer_Set_Layers :: proc(framebuffer: ^Framebuffer, targets: []Layer_Targe
 	assert(gl.CheckFramebufferStatus(gl.FRAMEBUFFER) == gl.FRAMEBUFFER_COMPLETE, "Framebuffer incomplete")
 	GL_Check()
 }
+
+// Depth-only target: renders into one layer of a depth array texture, with no colour output (shadow maps).
+Framebuffer_Set_Depth_Layer :: proc(framebuffer: ^Framebuffer, texture: ^Texture, layer: i32) {
+	assert(Texture_Format_Is_Depth(texture.desc.format), "Framebuffer_Set_Depth_Layer: not a depth texture")
+	gl.BindFramebuffer(gl.FRAMEBUFFER, framebuffer.id)
+	gl.FramebufferTextureLayer(gl.FRAMEBUFFER, gl.DEPTH_ATTACHMENT, texture.id, 0, layer)
+	gl.DrawBuffer(gl.NONE)
+	gl.ReadBuffer(gl.NONE)
+	assert(gl.CheckFramebufferStatus(gl.FRAMEBUFFER) == gl.FRAMEBUFFER_COMPLETE, "Framebuffer incomplete")
+	GL_Check()
+}

@@ -2,10 +2,12 @@ package main
 
 import "../../Engine/GPU"
 import "../../Engine/Platform"
+import "../../Engine/Procedural"
 import "../../Engine/Render"
 import "../Support"
 import "core:fmt"
 import "core:math"
+import la "core:math/linalg"
 import "core:os"
 
 // Lighting, tonemap and shadow functions are probed on the GPU: a fixture shader includes the real GLSL and writes results to pixels.
@@ -20,6 +22,7 @@ main :: proc() {
 	check_tonemap_is_monotonic_and_bounded(&checks)
 	check_illumination_models(&checks)
 	check_light_falloff_and_shapes(&checks)
+	check_sun_shadows(&checks)
 	fmt.printfln("%d checks passed, %d failed", checks.passed, checks.failed)
 	if checks.failed > 0 do os.exit(1)
 }
@@ -176,4 +179,57 @@ check_light_falloff_and_shapes :: proc(checks: ^Support.Checks) {
 	sun := Support.Probe_Render(&shader, 64, 1)
 	defer delete(sun)
 	for sample in sun do Support.expect(checks, abs(sample.x - sun[0].x) < 1e-6 && sample.x > 0) // Directional light does not depend on position.
+}
+
+// A floor with a 2 m box on it. Points under the box's shadow must be dark, nearby points lit, and a lit stretch of floor must
+// show no acne (false self-shadowing) even under a low, oblique sun.
+check_sun_shadows :: proc(checks: ^Support.Checks) {
+	floor_cpu := Procedural.Box_Create({20, 0.2, 20})
+	defer Procedural.Mesh_Destroy(&floor_cpu)
+	occluder_cpu := Procedural.Box_Create({2, 2, 2})
+	defer Procedural.Mesh_Destroy(&occluder_cpu)
+	floor_mesh := Render.Mesh_Upload(floor_cpu)
+	defer Render.Mesh_Destroy(&floor_mesh)
+	occluder_mesh := Render.Mesh_Upload(occluder_cpu)
+	defer Render.Mesh_Destroy(&occluder_mesh)
+	items := []Render.Draw_Item{
+		{mesh = &floor_mesh, model = la.matrix4_translate_f32({0, -0.1, 0})},
+		{mesh = &occluder_mesh, model = la.matrix4_translate_f32({0, 1, 0})},
+	}
+	shadow_map, map_ok := Render.Shadow_Map_Create(1024)
+	Support.expect(checks, map_ok)
+	if !map_ok do return
+	defer Render.Shadow_Map_Destroy(&shadow_map)
+	probe, probe_ok := GPU.Shader_Create("Tests/RenderCheck/Fixtures/ShadowProbe.glsl", {"CASCADE_COUNT 3"}, true)
+	Support.expect(checks, probe_ok)
+	if !probe_ok do return
+	defer GPU.Shader_Destroy(&probe)
+	camera := Render.Camera_Look_At({0, 6, 10}, {0, 0, 0}, 60, 1.5, 0.5, 60)
+
+	steep: [3]f32 = la.normalize([3]f32{-0.3, -1, -0.2})
+	cascades := Render.Shadow_Cascades_Fit(camera, steep, 40, 0.75, 1024)
+	Render.Shadow_Map_Render(&shadow_map, cascades, items)
+	points := [8][3]f32{{0, 0, 0}, {8, 0, 8}, {-8, 0, 5}, {0, 0, -6}, {3, 0, 0}, {0, 2.0, 0}, {-1.5, 0, -0.5}, {0, 0, 4}}
+	run_shadow_probe(&probe, &shadow_map, cascades, camera, steep, 0, points)
+	row := Support.Probe_Render(&probe, 8, 1)
+	defer delete(row)
+	for index in ([2]int{0, 6}) do Support.expect(checks, row[index].x < 0.1) // Under the box's shadow.
+	for index in ([6]int{1, 2, 3, 4, 5, 7}) do Support.expect(checks, row[index].x > 0.9) // In the sun, including the box's own lit top.
+
+	oblique: [3]f32 = la.normalize([3]f32{-0.95, -0.12, -0.3})
+	cascades = Render.Shadow_Cascades_Fit(camera, oblique, 40, 0.75, 1024)
+	Render.Shadow_Map_Render(&shadow_map, cascades, items)
+	run_shadow_probe(&probe, &shadow_map, cascades, camera, oblique, 1, points)
+	for sample in Support.Probe_Render(&probe, 64, 64) do Support.expect(checks, sample.x > 0.95)
+}
+
+run_shadow_probe :: proc(probe: ^GPU.Shader, shadow_map: ^Render.Shadow_Map, cascades: Render.Cascade_Set, camera: Render.Camera, light_travel: [3]f32, mode: i32, points: [8][3]f32) {
+	GPU.Shader_Use(probe)
+	GPU.Texture_Units_Reset()
+	Render.Shadow_Map_Bind(probe, shadow_map, cascades)
+	GPU.Shader_Set(probe, "u_Mode", mode)
+	for point, index in points do GPU.Shader_Set(probe, fmt.tprintf("u_Points[%d]", index), point)
+	GPU.Shader_Set(probe, "u_ToLight", -light_travel)
+	GPU.Shader_Set(probe, "u_ProbeCameraPosition", camera.position)
+	GPU.Shader_Set(probe, "u_ProbeCameraForward", camera.forward)
 }
