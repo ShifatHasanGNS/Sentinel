@@ -1,0 +1,171 @@
+package Catalogue
+
+import "../../Engine/Procedural"
+import "../Materials"
+import "core:fmt"
+import "core:math"
+import "core:strings"
+
+// Every object the base is built from. Objects stand on y = 0, face +Z; buildings are long along X, vehicles along Z.
+Object_Kind :: enum {
+	// Buildings.
+	Barracks,
+	Headquarters,
+	Hangar,
+	Mess_Hall,
+	Generator_Shed,
+	Fuel_Tank,
+	Water_Tower,
+	Watchtower,
+	Guard_Post,
+	Bunker,
+	Helipad,
+	Radio_Mast,
+	Radar_Station,
+	// Fortifications.
+	Fence_Section,
+	Gate,
+	Barrier_Arm,
+	T_Wall,
+	Hesco_Barrier,
+	Sandbag_Wall,
+	// Vehicles.
+	Jeep,
+	Cargo_Truck,
+	Armored_Carrier,
+	Battle_Tank,
+	Helicopter,
+	// Props.
+	Crate,
+	Barrel,
+	Pallet,
+	Tent,
+	Camo_Net,
+	Floodlight,
+	Sign,
+	Flag,
+	Ammo_Box,
+}
+
+Catalogue_Build :: proc(kind: Object_Kind) -> Procedural.Assembly {
+	parts := object_parts(kind)
+	defer delete(parts)
+	return Procedural.Assembly_Build(parts[:])
+}
+
+// Whether `name` is this object's name, ignoring case (for command-line selection).
+Object_Name_Matches :: proc(kind: Object_Kind, name: string) -> bool {
+	return strings.equal_fold(object_name(kind), name)
+}
+
+@(private = "package")
+Parts :: [dynamic]Procedural.Part
+
+@(private = "package")
+object_name :: proc(kind: Object_Kind) -> string {
+	return fmt.tprintf("%v", kind)
+}
+
+@(private = "file")
+object_parts :: proc(kind: Object_Kind) -> Parts {
+	switch kind {
+	case .Barracks: return barracks()
+	case .Headquarters: return headquarters()
+	case .Hangar: return hangar()
+	case .Mess_Hall: return mess_hall()
+	case .Generator_Shed: return generator_shed()
+	case .Fuel_Tank: return fuel_tank()
+	case .Water_Tower: return water_tower()
+	case .Watchtower: return watchtower()
+	case .Guard_Post: return guard_post()
+	case .Bunker: return bunker()
+	case .Helipad: return helipad()
+	case .Radio_Mast: return radio_mast()
+	case .Radar_Station: return radar_station()
+	case .Fence_Section: return fence_section()
+	case .Gate: return gate()
+	case .Barrier_Arm: return barrier_arm()
+	case .T_Wall: return t_wall()
+	case .Hesco_Barrier: return hesco_barrier()
+	case .Sandbag_Wall: return sandbag_wall()
+	case .Jeep: return jeep()
+	case .Cargo_Truck: return cargo_truck()
+	case .Armored_Carrier: return armored_carrier()
+	case .Battle_Tank: return battle_tank()
+	case .Helicopter: return helicopter()
+	case .Crate: return crate()
+	case .Barrel: return barrel()
+	case .Pallet: return pallet()
+	case .Tent: return tent()
+	case .Camo_Net: return camo_net()
+	case .Floodlight: return floodlight()
+	case .Sign: return sign()
+	case .Flag: return flag()
+	case .Ammo_Box: return ammo_box()
+	}
+	unreachable()
+}
+
+// --- Helpers shared by the object tables ---
+
+@(private = "package")
+layer :: proc(material: Materials.Surface_Material) -> i32 {
+	return i32(material)
+}
+
+// A solid-by-default box part; most of an object is boxes.
+@(private = "package")
+add_box :: proc(parts: ^Parts, size, position: [3]f32, material: Materials.Surface_Material, solid := true, rotation := [3]f32{}, emission := [3]f32{}) {
+	append(parts, Procedural.Part{primitive = Procedural.Box(size), position = position, rotation_degrees = rotation, material = layer(material), emission = emission, solid = solid})
+}
+
+@(private = "package")
+add_part :: proc(parts: ^Parts, part: Procedural.Part) {
+	append(parts, part)
+}
+
+// A cylinder lying along the X axis (axes of Procedural.Cylinder are Y).
+@(private = "package")
+add_cylinder_x :: proc(parts: ^Parts, radius, length: f32, position: [3]f32, material: Materials.Surface_Material, solid := true, segments := 16) {
+	append(parts, Procedural.Part{primitive = Procedural.Cylinder(radius, length, segments), position = position, rotation_degrees = {0, 0, 90}, material = layer(material), solid = solid})
+}
+
+// A cylinder lying along the Z axis.
+@(private = "package")
+add_cylinder_z :: proc(parts: ^Parts, radius, length: f32, position: [3]f32, material: Materials.Surface_Material, solid := true, segments := 16) {
+	append(parts, Procedural.Part{primitive = Procedural.Cylinder(radius, length, segments), position = position, rotation_degrees = {90, 0, 0}, material = layer(material), solid = solid})
+}
+
+@(private = "package")
+add_cylinder :: proc(parts: ^Parts, radius, height: f32, position: [3]f32, material: Materials.Surface_Material, solid := true, segments := 16) {
+	append(parts, Procedural.Part{primitive = Procedural.Cylinder(radius, height, segments), position = position, material = layer(material), solid = solid})
+}
+
+// A wheel with its axle along X: rubber tyre plus a metal hub.
+@(private = "package")
+add_wheel :: proc(parts: ^Parts, radius, width: f32, position: [3]f32) {
+	add_cylinder_x(parts, radius, width, position, .Rubber, true, 20)
+	add_cylinder_x(parts, radius * 0.5, width * 1.04, position, .Painted_Metal, false, 12)
+}
+
+// A gable roof: two wedges meeting at a ridge along X, covering `length` x `depth` and `rise` tall, its base at base_y.
+@(private = "package")
+add_gable_roof :: proc(parts: ^Parts, length, depth, rise, base_y: f32, position_z: f32, material: Materials.Surface_Material) {
+	half := depth / 2
+	add_part(parts, Procedural.Part{primitive = Procedural.Wedge({length, rise, half}), position = {0, base_y + rise / 2, position_z + half / 2}, material = layer(material), solid = true})
+	add_part(parts, Procedural.Part{primitive = Procedural.Wedge({length, rise, half}), position = {0, base_y + rise / 2, position_z - half / 2}, rotation_degrees = {0, 180, 0}, material = layer(material), solid = true})
+}
+
+// A row of lit windows on a wall facing +Z: `count` windows centred about x = 0, spaced `spacing` apart.
+@(private = "package")
+add_front_windows :: proc(parts: ^Parts, count: int, spacing: f32, y, z: f32, size: [2]f32) {
+	for index in 0 ..< count {
+		x := (f32(index) - f32(count - 1) / 2) * spacing
+		add_box(parts, {size.x, size.y, 0.1}, {x, y, z}, .Glass, false, {}, {0.9, 0.65, 0.3})
+	}
+}
+
+@(private = "package")
+degrees :: proc(radians: f32) -> f32 {
+	return math.to_degrees(radians)
+}

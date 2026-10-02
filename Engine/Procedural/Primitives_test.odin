@@ -6,17 +6,8 @@ import "core:testing"
 
 // Properties every generated surface must satisfy, whatever its shape. The expected values come from geometry, not from the generators.
 expect_valid_mesh :: proc(t: ^testing.T, mesh: Mesh, label: string) {
-	testing.expectf(t, len(mesh.vertices) > 0, "%s: no vertices", label)
-	testing.expectf(t, len(mesh.indices) > 0 && len(mesh.indices) % 3 == 0, "%s: index count %d", label, len(mesh.indices))
-	for index in mesh.indices do testing.expectf(t, int(index) < len(mesh.vertices), "%s: index %d out of range", label, index)
-	for vertex, index in mesh.vertices {
-		testing.expectf(t, abs(linalg.length(vertex.normal) - 1) < 1e-4, "%s: vertex %d normal not unit", label, index)
-		testing.expectf(t, abs(linalg.length(vertex.tangent.xyz) - 1) < 1e-4, "%s: vertex %d tangent not unit", label, index)
-		testing.expectf(t, abs(linalg.dot(vertex.normal, vertex.tangent.xyz)) < 1e-3, "%s: vertex %d tangent not perpendicular", label, index)
-		testing.expectf(t, abs(vertex.tangent.w) == 1, "%s: vertex %d handedness %f", label, index, vertex.tangent.w)
-		testing.expectf(t, vertex.uv.x >= 0 && vertex.uv.x <= 1 && vertex.uv.y >= 0 && vertex.uv.y <= 1, "%s: vertex %d uv %v", label, index, vertex.uv)
-	}
-	expect_winding_agrees_with_normals(t, mesh, label)
+	problem := Mesh_Find_Problem(mesh)
+	testing.expectf(t, problem == "", "%s: %s", label, problem)
 }
 
 // A triangle wound counter-clockwise seen from outside has a geometric normal along the surface normals.

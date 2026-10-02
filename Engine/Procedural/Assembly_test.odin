@@ -52,7 +52,7 @@ test_rotation_and_stretch_place_each_part :: proc(t: ^testing.T) {
 
 @(test)
 test_deformers_apply_before_stretch :: proc(t: ^testing.T) {
-	assembly := Assembly_Build({{primitive = Cylinder(1, 2, 24, 4), deformers = {Taper{1, 0.5}}, stretch = {2, 1, 2}}})
+	assembly := Assembly_Build({{primitive = Cylinder(1, 2, 24, 4), deformers = {0 = Taper{1, 0.5}}, stretch = {2, 1, 2}}})
 	defer Assembly_Destroy(&assembly)
 	top_radius, bottom_radius: f32
 	for vertex in assembly.groups[0].mesh.vertices {
@@ -82,7 +82,7 @@ test_assembled_meshes_are_valid_even_with_mirroring :: proc(t: ^testing.T) {
 	assembly := Assembly_Build({
 		{primitive = Cylinder(1, 2, 16, 2), stretch = {-1, 1, 1}, material = 0},
 		{primitive = Capsule(0.5, 1, 16, 6), position = {4, 0, 0}, rotation_degrees = {30, 20, 10}, material = 0},
-		{primitive = Sphere(1, 20, 10), deformers = {Noise_Displace{0.2, 1.5, 3, 4}}, position = {-4, 0, 0}, material = 0},
+		{primitive = Sphere(1, 20, 10), deformers = {0 = Noise_Displace{0.2, 1.5, 3, 4}}, position = {-4, 0, 0}, material = 0},
 	})
 	defer Assembly_Destroy(&assembly)
 	expect_valid_mesh(t, assembly.groups[0].mesh, "assembled")
@@ -91,7 +91,7 @@ test_assembled_meshes_are_valid_even_with_mirroring :: proc(t: ^testing.T) {
 @(test)
 test_assembly_is_deterministic :: proc(t: ^testing.T) {
 	parts := []Part{
-		{primitive = Sphere(1, 20, 10), deformers = {Noise_Displace{0.2, 1.5, 3, 9}}, material = 2},
+		{primitive = Sphere(1, 20, 10), deformers = {0 = Noise_Displace{0.2, 1.5, 3, 9}}, material = 2},
 		{primitive = Torus(1, 0.2, 24, 8), position = {0, 2, 0}, rotation_degrees = {90, 0, 0}, material = 2},
 	}
 	first, second := Assembly_Build(parts), Assembly_Build(parts)

@@ -18,10 +18,10 @@ main :: proc() {
 	if interactive && config.benchmark_frames == 0 do Platform.Input_Capture_Mouse(&input, true)
 	if config.benchmark_frames > 0 do Platform.Window_Set_Vsync(false)
 
-	if config.scene == "showroom" {
-		run_showroom(&window, &input, config)
-	} else {
-		run_sandbox(&window, &input, config)
+	switch config.scene {
+	case "showroom": run_showroom(&window, &input, config)
+	case "catalogue": run_catalogue(&window, &input, config)
+	case: run_sandbox(&window, &input, config)
 	}
 }
 
@@ -54,6 +54,21 @@ run_showroom :: proc(window: ^Platform.Window, input: ^Platform.Input, config: C
 		},
 		render = proc(user: rawptr, window: Platform.Window) {
 			Showroom.Showroom_Render((^Showroom.Showroom)(user), window)
+		},
+	})
+}
+
+run_catalogue :: proc(window: ^Platform.Window, input: ^Platform.Input, config: Config) {
+	view, ok := Showroom.Catalogue_View_Create(window.framebuffer_width, window.framebuffer_height, config.object, config.time_hours)
+	if !ok do os.exit(1)
+	defer Showroom.Catalogue_View_Destroy(&view)
+	Run_Loop(window, input, config, Scene{
+		user = &view,
+		update = proc(user: rawptr, clock: Platform.Clock, input: ^Platform.Input, scripted_seconds: f32) {
+			Showroom.Catalogue_View_Update((^Showroom.Catalogue_View)(user), clock)
+		},
+		render = proc(user: rawptr, window: Platform.Window) {
+			Showroom.Catalogue_View_Render((^Showroom.Catalogue_View)(user), window)
 		},
 	})
 }

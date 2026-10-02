@@ -84,13 +84,15 @@ Wedge :: proc(size: [3]f32) -> Primitive {
 	return Wedge_Spec{size}
 }
 
+PART_DEFORMERS_MAX :: 3
+
 // One building block of an object: a primitive, deformed in its own space, stretched, rotated (about X, then Y, then Z), moved.
 Part :: struct {
 	primitive:        Primitive,
 	position:         [3]f32,
 	rotation_degrees: [3]f32,
 	stretch:          [3]f32, // Per-axis scale after deformers; a zero component means 1, so most parts leave it unset.
-	deformers:        []Deformer,
+	deformers:        [PART_DEFORMERS_MAX]Deformer, // Stored inline (a slice literal would dangle once the table's proc returns); unused entries are nil.
 	material:         i32, // Layer in the baked material arrays.
 	emission:         [3]f32, // Linear radiance the part gives off (lit windows, lamps).
 	solid:            bool, // Contributes a collision box.
@@ -117,7 +119,11 @@ Assembly_Build :: proc(parts: []Part) -> (assembly: Assembly) {
 	for part in parts {
 		mesh := primitive_mesh(part.primitive)
 		defer Mesh_Destroy(&mesh)
-		if len(part.deformers) > 0 do Mesh_Deform(&mesh, part.deformers)
+		deformers := part.deformers
+		for deformer, index in deformers {
+			if deformer == nil do continue
+			Mesh_Deform(&mesh, deformers[index:index + 1])
+		}
 		transform := part_transform(part)
 		Mesh_Append(&group_for(&assembly, part.material, part.emission).mesh, mesh, transform)
 		if part.solid do append(&assembly.collision_boxes, transformed_bounds(mesh, transform))

@@ -79,7 +79,6 @@ create_lights :: proc() -> (lights: [dynamic]Render.Light) {
 	return lights
 }
 
-@(private = "file")
 as_draw_item :: proc(item: ^Gallery_Item) -> Render.Draw_Item {
 	return Render.Draw_Item{&item.mesh, item.model, i32(item.material), item.uv_scale, item.triplanar, item.illumination_model, {}, false}
 }
@@ -107,9 +106,8 @@ create_bulb :: proc() -> Render.Mesh {
 }
 
 // A thin slab whose top face is the floor; its [0,1] uv is scaled to tile the dirt material across it.
-@(private = "file")
-create_ground :: proc() -> Gallery_Item {
-	slab := Procedural.Box_Create({2 * GROUND_HALF_EXTENT_METERS, 0.2, 2 * GROUND_HALF_EXTENT_METERS})
+create_ground :: proc(half_extent_meters: f32 = GROUND_HALF_EXTENT_METERS, tiles: f32 = GROUND_TILES) -> Gallery_Item {
+	slab := Procedural.Box_Create({2 * half_extent_meters, 0.2, 2 * half_extent_meters})
 	defer Procedural.Mesh_Destroy(&slab)
-	return Gallery_Item{Render.Mesh_Upload(slab), la.matrix4_translate_f32({0, -0.1, 0}), .Dirt, {GROUND_TILES, GROUND_TILES}, false, .Cook_Torrance}
+	return Gallery_Item{Render.Mesh_Upload(slab), la.matrix4_translate_f32({0, -0.1, 0}), .Dirt, {tiles, tiles}, false, .Cook_Torrance}
 }
