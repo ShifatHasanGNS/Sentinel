@@ -1,28 +1,53 @@
 package main
 
-import "../Engine/GPU"
 import "../Engine/Platform"
+import "../Game/Sandbox"
 import "../Game/Showroom"
 import "core:os"
 
 main :: proc() {
 	config := Config_Parse(os.args[1:])
-	window, window_ok := Platform.Window_Create("Sentinel", 1280, 720, config.capture_frames == 0)
+	interactive := config.capture_frames == 0
+	window, window_ok := Platform.Window_Create("Sentinel", 1280, 720, interactive)
 	if !window_ok do os.exit(1)
 	defer Platform.Window_Destroy(&window)
-	showroom, showroom_ok := Showroom.Showroom_Create(window.framebuffer_width, window.framebuffer_height)
-	if !showroom_ok do os.exit(1)
-	defer Showroom.Showroom_Destroy(&showroom)
-	clock: Platform.Clock
+	input := Platform.Input_Create(&window)
+	if interactive && config.benchmark_frames == 0 do Platform.Input_Capture_Mouse(&input, true)
+	if config.benchmark_frames > 0 do Platform.Window_Set_Vsync(false)
 
-	for frame := 1; !Platform.Window_Should_Close(&window); frame += 1 {
-		Platform.Clock_Tick(&clock)
-		Showroom.Showroom_Update(&showroom, clock)
-		Showroom.Showroom_Render(&showroom, window)
-		if frame == config.capture_frames {
-			GPU.Screenshot_Save(config.capture_path, int(window.framebuffer_width), int(window.framebuffer_height))
-			break
-		}
-		Platform.Window_Present(&window)
+	if config.scene == "showroom" {
+		run_showroom(&window, &input, config)
+	} else {
+		run_sandbox(&window, &input, config)
 	}
+}
+
+run_sandbox :: proc(window: ^Platform.Window, input: ^Platform.Input, config: Config) {
+	sandbox, ok := Sandbox.Sandbox_Create(window.framebuffer_width, window.framebuffer_height, config.time_hours)
+	if !ok do os.exit(1)
+	defer Sandbox.Sandbox_Destroy(&sandbox)
+	Run_Loop(window, input, config, Scene{
+		user = &sandbox,
+		update = proc(user: rawptr, clock: Platform.Clock, input: ^Platform.Input, scripted_seconds: f32) {
+			Sandbox.Sandbox_Update((^Sandbox.Sandbox)(user), clock, input, scripted_seconds)
+		},
+		render = proc(user: rawptr, window: Platform.Window) {
+			Sandbox.Sandbox_Render((^Sandbox.Sandbox)(user), window)
+		},
+	})
+}
+
+run_showroom :: proc(window: ^Platform.Window, input: ^Platform.Input, config: Config) {
+	showroom, ok := Showroom.Showroom_Create(window.framebuffer_width, window.framebuffer_height)
+	if !ok do os.exit(1)
+	defer Showroom.Showroom_Destroy(&showroom)
+	Run_Loop(window, input, config, Scene{
+		user = &showroom,
+		update = proc(user: rawptr, clock: Platform.Clock, input: ^Platform.Input, scripted_seconds: f32) {
+			Showroom.Showroom_Update((^Showroom.Showroom)(user), clock)
+		},
+		render = proc(user: rawptr, window: Platform.Window) {
+			Showroom.Showroom_Render((^Showroom.Showroom)(user), window)
+		},
+	})
 }

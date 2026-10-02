@@ -30,15 +30,17 @@ float star_field(vec3 direction) {
 	uint hash = hash_u32(uint(cell.x) ^ hash_u32(uint(cell.y) ^ hash_u32(uint(cell.z))));
 	float chance = float(hash >> 8u) / 16777216.0;
 	vec3 center = (vec3(cell) + 0.5) / 220.0;
-	float closeness = smoothstep(0.004, 0.0, distance(direction, normalize(center)));
-	return chance > 0.996 ? closeness * (0.3 + 3.0 * float(hash & 255u) / 255.0) : 0.0;
+	float closeness = smoothstep(0.0016, 0.0, distance(direction, normalize(center))); // Radius under half a cell, so stars stay round.
+	return chance > 0.996 ? closeness * (0.5 + 6.0 * float(hash & 255u) / 255.0) : 0.0;
 }
 
 vec3 sky_radiance(vec3 direction) {
-	// Below the horizon the view ray would hit the planet; continue the horizon haze instead and fade it into the ground colour.
+	// Below the horizon the view ray would hit the planet; continue the horizon haze instead, dimmed like distant land.
 	vec3 haze_direction = normalize(vec3(direction.x, max(direction.y, 0.0), direction.z));
 	vec3 scattered = atmosphere_radiance(haze_direction, u_ToSun, u_SunIntensity);
-	vec3 sky = mix(scattered, u_SkyGround, smoothstep(0.0, -0.15, direction.y));
+	// Single scattering loses the blue along the long horizon path; real skies fill it back in by multiple scattering. Blend in the
+	// gradient colours as that fill. Below the horizon the haze dims like distant land.
+	vec3 sky = mix(scattered, sky_gradient(direction), 0.35) * mix(1.0, 0.6, smoothstep(0.0, -0.2, direction.y));
 	float night = smoothstep(0.05, -0.2, u_ToSun.y);
 	float above_ground = smoothstep(-0.02, 0.05, direction.y);
 	sky += vec3(star_field(direction)) * night * above_ground;

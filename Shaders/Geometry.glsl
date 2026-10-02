@@ -1,6 +1,7 @@
 #version 410 core
 #include "Gbuffer.glsl"
 #include "Triplanar.glsl"
+#include "TerrainBlend.glsl"
 #stage vertex
 layout(location = 0) in vec3 a_Position;
 layout(location = 1) in vec3 a_Normal;
@@ -58,7 +59,22 @@ uniform vec3 u_Emission;
 void main() {
 	vec3 geometric_normal = normalize(v_world_normal);
 	vec3 albedo, orm, normal;
-	if (u_Triplanar) {
+	if (u_Terrain) {
+		vec3 blend = triplanar_blend(geometric_normal);
+		vec3 position = v_world_position * u_TriplanarScale;
+		vec4 weights = terrain_weights(geometric_normal, v_world_position);
+		albedo = vec3(0.0);
+		orm = vec3(0.0);
+		vec3 normal_sum = vec3(0.0);
+		for (int index = 0; index < 4; index++) {
+			if (weights[index] < 0.01) continue;
+			float terrain_layer = u_TerrainLayers[index];
+			albedo += weights[index] * triplanar_sample(u_AlbedoArray, terrain_layer, position, blend).rgb;
+			orm += weights[index] * triplanar_sample(u_OrmArray, terrain_layer, position, blend).rgb;
+			normal_sum += weights[index] * triplanar_normal(u_NormalArray, terrain_layer, position, geometric_normal, blend);
+		}
+		normal = normalize(normal_sum);
+	} else if (u_Triplanar) {
 		vec3 blend = triplanar_blend(geometric_normal);
 		vec3 position = v_world_position * u_TriplanarScale;
 		albedo = triplanar_sample(u_AlbedoArray, v_layer, position, blend).rgb;

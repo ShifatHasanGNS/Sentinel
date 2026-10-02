@@ -8,6 +8,7 @@ ATMOSPHERE_SUN_INTENSITY :: 20.0
 Daylight :: struct {
 	sun: Render.Light, // The one directional light: the sun by day, the moon by night.
 	sky: Render.Sky,
+	exposure: f32,
 }
 
 // Everything lighting depends on at a given hour. At night the directional light switches to the moon.
@@ -19,6 +20,7 @@ Daylight_For_Hours :: proc(hours: f32) -> Daylight {
 	sun_light := Render.Light_Directional(-to_sun, sunlight.color, sunlight.intensity)
 	if sunlight.intensity < moonlight.intensity do sun_light = Render.Light_Directional(-moonlight.to_moon, moonlight.color, moonlight.intensity)
 	return Daylight{
+		exposure = Exposure_For_Elevation(to_sun.y),
 		sun = sun_light,
 		sky = Render.Sky{
 			zenith = colors.zenith,

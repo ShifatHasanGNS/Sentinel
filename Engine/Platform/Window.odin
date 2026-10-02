@@ -51,3 +51,11 @@ Window_Present :: proc(window: ^Window) {
 	glfw.PollEvents()
 	window.framebuffer_width, window.framebuffer_height = glfw.GetFramebufferSize(window.handle)
 }
+
+Window_Request_Close :: proc(window: ^Window) {
+	glfw.SetWindowShouldClose(window.handle, true)
+}
+
+Window_Set_Vsync :: proc(enabled: bool) {
+	glfw.SwapInterval(1 if enabled else 0)
+}

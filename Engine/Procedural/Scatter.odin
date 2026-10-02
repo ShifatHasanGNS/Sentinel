@@ -16,6 +16,7 @@ Scatter_Point :: struct {
 	position:    [3]f32,
 	yaw_radians: f32,
 	scale:       f32,
+	variant:     f32, // Stable roll in [0, 1) for choosing what to place here (tree, rock, bush).
 }
 
 // Candidate positions come from hashing (chunk, attempt, seed), so a chunk's layout never depends on load order or neighbours.
@@ -29,7 +30,8 @@ Scatter_Chunk :: proc(terrain: Terrain, rules: Scatter_Rules, chunk: [2]i32, chu
 		if surface_normal_y(terrain, x, z) < rules.min_normal_y do continue
 		yaw := Hash_To_Unit_Float(Hash_U32(hash ~ 0x9E3779B9)) * 2 * math.PI
 		scale := math.lerp(rules.scale_range.x, rules.scale_range.y, Hash_To_Unit_Float(Hash_U32(hash ~ 0x85EBCA6B)))
-		append(&points, Scatter_Point{{x, Terrain_Height(terrain, x, z), z}, yaw, scale})
+		variant := Hash_To_Unit_Float(Hash_U32(hash ~ 0xC2B2AE35))
+		append(&points, Scatter_Point{{x, Terrain_Height(terrain, x, z), z}, yaw, scale, variant})
 	}
 	return points
 }

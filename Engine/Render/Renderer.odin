@@ -73,7 +73,8 @@ Renderer_Render :: proc(renderer: ^Renderer, frame: Frame, width, height: i32) {
 @(private = "file")
 shadow_pass :: proc(renderer: ^Renderer, frame: Frame) {
 	renderer.cascades = Shadow_Cascades_Fit(frame.camera, frame.sun.direction, frame.shadow_distance_meters, CASCADE_SPLIT_LAMBDA, SHADOW_MAP_SIZE)
-	Shadow_Map_Render(&renderer.shadows, renderer.cascades, frame.items)
+	casters := frame.shadow_items if len(frame.shadow_items) > 0 else frame.items
+	Shadow_Map_Render(&renderer.shadows, renderer.cascades, casters)
 }
 
 @(private = "file")
@@ -97,6 +98,10 @@ draw_geometry_items :: proc(shader: ^GPU.Shader, frame: Frame, instanced: bool) 
 	Texture_Set_Bind(shader, frame.materials)
 	GPU.Shader_Set(shader, "u_ViewProjection", frame.camera.view_projection)
 	GPU.Shader_Set(shader, "u_TriplanarScale", f32(TRIPLANAR_TILES_PER_METER))
+	shading := frame.terrain_shading
+	GPU.Shader_Set(shader, "u_TerrainLayers", [4]f32{f32(shading.grass_layer), f32(shading.dirt_layer), f32(shading.rock_layer), f32(shading.sand_layer)})
+	GPU.Shader_Set(shader, "u_PlateauCenter", shading.plateau_center)
+	GPU.Shader_Set(shader, "u_PlateauRange", [2]f32{shading.plateau_radius_meters, shading.plateau_blend_meters})
 	for &item in frame.items {
 		if item.mesh.instanced == instanced do draw_geometry_item(shader, &item)
 	}
@@ -110,6 +115,7 @@ draw_geometry_item :: proc(shader: ^GPU.Shader, item: ^Draw_Item) {
 	GPU.Shader_Set(shader, "u_Triplanar", i32(item.triplanar))
 	GPU.Shader_Set(shader, "u_IlluminationModel", i32(item.illumination_model))
 	GPU.Shader_Set(shader, "u_Emission", item.emission)
+	GPU.Shader_Set(shader, "u_Terrain", i32(item.terrain))
 	Mesh_Draw(item.mesh)
 }
 

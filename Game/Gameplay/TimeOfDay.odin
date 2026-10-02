@@ -65,3 +65,12 @@ Sky_Colors_For_Sun :: proc(to_sun: [3]f32) -> Sky_Colors {
 	horizon = math.lerp(horizon, [3]f32{0.85, 0.4, 0.18}, twilight * 0.9)
 	return Sky_Colors{zenith, horizon, horizon * 0.12}
 }
+
+EXPOSURE_NIGHT :: 10.0
+
+// Camera exposure for the sun's elevation (its sine): 1 in daylight, rising to EXPOSURE_NIGHT once the sun is well below
+// the horizon, like the eye adapting to the dark. Log-linear in between so the change looks even.
+Exposure_For_Elevation :: proc(elevation_sine: f32) -> f32 {
+	darkness := math.smoothstep(f32(0.25), f32(-0.25), elevation_sine)
+	return math.pow(f32(EXPOSURE_NIGHT), darkness)
+}

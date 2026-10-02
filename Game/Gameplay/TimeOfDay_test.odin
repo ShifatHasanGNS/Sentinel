@@ -79,3 +79,18 @@ test_sky_colours_are_dark_at_night_blue_at_noon_and_red_at_the_horizon_at_dusk :
 	testing.expect(t, noon.zenith.b > noon.zenith.r * 1.5)
 	testing.expect(t, dusk.horizon.r > dusk.horizon.b)
 }
+
+// Eye adaptation: the camera exposure rises as the sun sets so night scenes stay readable, and is 1 in full daylight.
+@(test)
+test_exposure_is_one_in_daylight_and_rises_smoothly_toward_night :: proc(t: ^testing.T) {
+	testing.expect_value(t, Exposure_For_Elevation(0.9), 1)
+	testing.expect_value(t, Exposure_For_Elevation(0.3), 1)
+	testing.expect(t, Exposure_For_Elevation(-0.5) >= EXPOSURE_NIGHT - 1e-4 && Exposure_For_Elevation(-0.5) <= EXPOSURE_NIGHT + 1e-4)
+	previous: f32 = 0
+	for step in 0 ..= 40 {
+		exposure := Exposure_For_Elevation(0.9 - f32(step) * 0.035) // From noon down below the horizon.
+		testing.expect(t, exposure >= 1 && exposure <= EXPOSURE_NIGHT)
+		testing.expect(t, exposure >= previous)
+		previous = exposure
+	}
+}

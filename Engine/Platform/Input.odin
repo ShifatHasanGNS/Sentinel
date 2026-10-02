@@ -23,8 +23,39 @@ Input_Update :: proc(input: ^Input) {
 	input.has_mouse = true
 }
 
-Input_Key_Down :: proc(input: ^Input, key: i32) -> bool {
-	return glfw.GetKey(input.window, key) == glfw.PRESS
+Key :: enum {
+	W,
+	A,
+	S,
+	D,
+	Q,
+	E,
+	Space,
+	Left_Shift,
+	Left_Control,
+	Escape,
+	Period,
+	Comma,
+}
+
+@(private = "file")
+glfw_keys := [Key]i32{
+	.W = glfw.KEY_W,
+	.A = glfw.KEY_A,
+	.S = glfw.KEY_S,
+	.D = glfw.KEY_D,
+	.Q = glfw.KEY_Q,
+	.E = glfw.KEY_E,
+	.Space = glfw.KEY_SPACE,
+	.Left_Shift = glfw.KEY_LEFT_SHIFT,
+	.Left_Control = glfw.KEY_LEFT_CONTROL,
+	.Escape = glfw.KEY_ESCAPE,
+	.Period = glfw.KEY_PERIOD,
+	.Comma = glfw.KEY_COMMA,
+}
+
+Input_Key_Down :: proc(input: ^Input, key: Key) -> bool {
+	return glfw.GetKey(input.window, glfw_keys[key]) == glfw.PRESS
 }
 
 Input_Capture_Mouse :: proc(input: ^Input, captured: bool) {

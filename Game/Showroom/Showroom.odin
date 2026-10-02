@@ -53,7 +53,7 @@ Showroom_Render :: proc(showroom: ^Showroom, window: Platform.Window) {
 		materials = &showroom.materials,
 		sun_shadows = true,
 		shadow_distance_meters = 70,
-		exposure = 1,
+		exposure = daylight.exposure,
 		vignette_strength = 0.35,
 	}
 	Render.Renderer_Render(&showroom.renderer, frame, window.framebuffer_width, window.framebuffer_height)
@@ -81,14 +81,14 @@ create_lights :: proc() -> (lights: [dynamic]Render.Light) {
 
 @(private = "file")
 as_draw_item :: proc(item: ^Gallery_Item) -> Render.Draw_Item {
-	return Render.Draw_Item{&item.mesh, item.model, i32(item.material), item.uv_scale, item.triplanar, item.illumination_model, {}}
+	return Render.Draw_Item{&item.mesh, item.model, i32(item.material), item.uv_scale, item.triplanar, item.illumination_model, {}, false}
 }
 
 // A small emissive sphere marking each local light's position.
 @(private = "file")
 bulb_draw_item :: proc(showroom: ^Showroom, light: Render.Light) -> Render.Draw_Item {
 	model := la.matrix4_translate_f32(light.position) * la.matrix4_scale_f32({BULB_RADIUS_METERS, BULB_RADIUS_METERS, BULB_RADIUS_METERS})
-	return Render.Draw_Item{&showroom.bulb, model, i32(Materials.Surface_Material.Concrete), {1, 1}, false, .Lambert, light.color * 6}
+	return Render.Draw_Item{&showroom.bulb, model, i32(Materials.Surface_Material.Concrete), {1, 1}, false, .Lambert, light.color * 6, false}
 }
 
 @(private = "file")
