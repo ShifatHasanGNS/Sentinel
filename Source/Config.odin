@@ -11,13 +11,13 @@ Config :: struct {
 	benchmark_frames: int,
 	drive:            string, // Sandbox: start inside the nearest vehicle of this kind (e.g. Jeep); with --demo a bot drives it.
 	overlay:          string, // Sandbox: start with `map` or `binoculars` open (for captures).
-	windowed:         bool, // Play in a normal window instead of fullscreen.
+	fullscreen:       bool, // Start fullscreen (F11 toggles it any time).
 	briefing:         bool, // Sandbox: show the mission briefing even when capturing.
 	demo:             bool, // Sandbox: a bot plays (aims and fires at the nearest enemy), for hands-free checks.
 	time_hours:       f32, // Negative: let the day cycle run.
 }
 
-// Flags: --windowed, --briefing, --demo, --drive <kind>, --scene <name>, --view <name>, --object <name>, --capture <frames> <path>, --benchmark <frames>, --time <hours>
+// Flags: --fullscreen, --briefing, --demo, --drive <kind>, --scene <name>, --view <name>, --object <name>, --capture <frames> <path>, --benchmark <frames>, --time <hours>
 Config_Parse :: proc(arguments: []string) -> (config: Config) {
 	config = Config{scene = "sandbox", time_hours = -1}
 	for index := 0; index < len(arguments); index += 1 {
@@ -26,7 +26,7 @@ Config_Parse :: proc(arguments: []string) -> (config: Config) {
 			if index + 1 < len(arguments) {config.scene = arguments[index + 1]; index += 1}
 		case "--demo": config.demo = true
 		case "--briefing": config.briefing = true
-		case "--windowed": config.windowed = true
+		case "--fullscreen": config.fullscreen = true
 		case "--overlay":
 			if index + 1 < len(arguments) {config.overlay = arguments[index + 1]; index += 1}
 		case "--drive":

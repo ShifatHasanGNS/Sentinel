@@ -8,6 +8,8 @@ GL_VERSION_MAJOR :: 4
 GL_VERSION_MINOR :: 1
 
 Window :: struct {
+	windowed_position:    [2]i32, // Where the window was before going fullscreen.
+	windowed_size:        [2]i32,
 	handle:               glfw.WindowHandle,
 	framebuffer_width:    i32,
 	framebuffer_height:   i32,
@@ -68,4 +70,21 @@ Window_Request_Close :: proc(window: ^Window) {
 
 Window_Set_Vsync :: proc(enabled: bool) {
 	glfw.SwapInterval(1 if enabled else 0)
+}
+
+Window_Is_Fullscreen :: proc(window: Window) -> bool {
+	return glfw.GetWindowMonitor(window.handle) != nil
+}
+
+// Switches between a normal resizable window and fullscreen on the monitor it is on, remembering the window's place and size.
+Window_Toggle_Fullscreen :: proc(window: ^Window) {
+	if Window_Is_Fullscreen(window^) {
+		glfw.SetWindowMonitor(window.handle, nil, window.windowed_position.x, window.windowed_position.y, window.windowed_size.x, window.windowed_size.y, glfw.DONT_CARE)
+		return
+	}
+	window.windowed_position.x, window.windowed_position.y = glfw.GetWindowPos(window.handle)
+	window.windowed_size.x, window.windowed_size.y = glfw.GetWindowSize(window.handle)
+	monitor := glfw.GetPrimaryMonitor()
+	mode := glfw.GetVideoMode(monitor)
+	glfw.SetWindowMonitor(window.handle, monitor, 0, 0, mode.width, mode.height, mode.refresh_rate)
 }

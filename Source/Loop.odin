@@ -19,11 +19,18 @@ Scene :: struct {
 
 Run_Loop :: proc(window: ^Platform.Window, input: ^Platform.Input, config: Config, scene: Scene) {
 	clock: Platform.Clock
+	fullscreen_was_down, cursor_was_down: bool
 	frame_milliseconds: [dynamic]f32
 	defer delete(frame_milliseconds)
 	for frame := 1; !Platform.Window_Should_Close(window); frame += 1 {
 		Platform.Clock_Tick(&clock)
 		if config.capture_frames == 0 do Platform.Input_Update(input) // Captures must not depend on where the mouse happens to be.
+		if !input.captured do input.mouse_delta = {} // A free cursor must not turn the view.
+		// F11 toggles fullscreen; F9 frees the cursor (to resize, move or minimise the window) and captures it again.
+		fullscreen_down, cursor_down := Platform.Input_Key_Down(input, .F11), Platform.Input_Key_Down(input, .F9)
+		if fullscreen_down && !fullscreen_was_down do Platform.Window_Toggle_Fullscreen(window)
+		if cursor_down && !cursor_was_down && config.capture_frames == 0 && config.benchmark_frames == 0 do Platform.Input_Capture_Mouse(input, !input.captured)
+		fullscreen_was_down, cursor_was_down = fullscreen_down, cursor_down
 		if Platform.Input_Key_Down(input, .Escape) do Platform.Window_Request_Close(window)
 		scripted_seconds: f32 = f32(frame) * BENCHMARK_FRAME_SECONDS if config.benchmark_frames > 0 else -1
 		scene.update(scene.user, clock, input, scripted_seconds)

@@ -11,7 +11,7 @@ main :: proc() {
 	benchmarking := config.benchmark_frames > 0
 	width: i32 = 1920 if benchmarking else 1280
 	height: i32 = 1080 if benchmarking else 720
-	window, window_ok := Platform.Window_Create("Sentinel", width, height, interactive, !benchmarking, interactive && !benchmarking && config.windowed == false)
+	window, window_ok := Platform.Window_Create("Sentinel", width, height, interactive, !benchmarking, interactive && !benchmarking && config.fullscreen)
 	if !window_ok do os.exit(1)
 	defer Platform.Window_Destroy(&window)
 	input := Platform.Input_Create(&window)

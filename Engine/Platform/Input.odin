@@ -7,6 +7,7 @@ Input :: struct {
 	mouse_position: [2]f64,
 	mouse_delta:    [2]f32,
 	has_mouse:      bool,
+	captured:       bool,
 }
 
 Input_Create :: proc(window: ^Window) -> Input {
@@ -52,6 +53,8 @@ Key :: enum {
 	H,
 	Z,
 	X,
+	F9,
+	F11,
 }
 
 @(private = "file")
@@ -84,6 +87,8 @@ glfw_keys := [Key]i32{
 	.H = glfw.KEY_H,
 	.Z = glfw.KEY_Z,
 	.X = glfw.KEY_X,
+	.F9 = glfw.KEY_F9,
+	.F11 = glfw.KEY_F11,
 }
 
 Input_Key_Down :: proc(input: ^Input, key: Key) -> bool {
@@ -94,6 +99,8 @@ Input_Capture_Mouse :: proc(input: ^Input, captured: bool) {
 	mode: i32 = glfw.CURSOR_DISABLED if captured else glfw.CURSOR_NORMAL
 	glfw.SetInputMode(input.window, glfw.CURSOR, mode)
 	input.has_mouse = false
+	input.captured = captured
+	input.mouse_delta = {}
 }
 
 Mouse_Button :: enum {
