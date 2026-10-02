@@ -108,3 +108,4 @@
 | Fullscreen triangle vertex stage | `Shaders/Include/Fullscreen.glsl` |
 | Program entry, scene table, loop | `Source/Main.odin`, `Source/Loop.odin`, `Source/Config.odin` |
 | BMP to PNG for screenshot review | `Tools/ToPng.sh` |
+| Light shafts (screen-space radial march toward the sun) | `Shaders/PostTonemap.glsl` : `light_shafts`; `Engine/Render/Renderer.odin` : `shaft_inputs` |

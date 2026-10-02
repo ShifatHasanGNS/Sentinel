@@ -16,6 +16,7 @@ LOAD_RADIUS_CHUNKS :: 4
 UNLOAD_RADIUS_CHUNKS :: 6
 CHUNK_BUILDS_PER_FRAME_MAX :: 1
 BLOOM_STRENGTH :: 0.06
+SHAFT_STRENGTH :: 0.2
 SSAO_RADIUS_METERS :: 0.8
 SHADOW_DISTANCE_METERS :: 140.0
 HOURS_PER_REAL_SECOND :: 0.02 // A full day passes in twenty minutes.
@@ -66,6 +67,7 @@ Sandbox_Create :: proc(width, height: i32, hours: f32, view: string, demo: bool)
 	sandbox.camera = camera_for_view(view)
 	sandbox.clock_runs = hours < 0
 	sandbox.hours = 9 if hours < 0 else hours
+	if view == "sun" do sandbox.camera = camera_facing_sun(sandbox.hours)
 	play_create(&sandbox, demo, view != "") or_return
 	if !(view != "") do sync_camera_to_player(&sandbox)
 	update_stream(&sandbox)
@@ -131,6 +133,7 @@ Sandbox_Render :: proc(sandbox: ^Sandbox, window: Platform.Window) {
 		local_lights = lights[:],
 		sky = daylight.sky,
 		bloom_strength = BLOOM_STRENGTH,
+		shaft_strength = SHAFT_STRENGTH,
 		ssao_radius_meters = SSAO_RADIUS_METERS,
 		sun_shadows = true,
 		shadow_distance_meters = SHADOW_DISTANCE_METERS,
@@ -153,6 +156,14 @@ camera_for_view :: proc(view: string) -> Fly_Camera {
 	case "command": return Fly_Camera_Looking_At({-20, 24, 62}, {-8, 11, -12})
 	}
 	return Fly_Camera{position = {-150, 45, 190}, yaw_radians = -0.67, pitch_radians = -0.15}
+}
+
+// Looks toward the sun from inside the base, with the sun in the upper part of the frame (for checking glare and light shafts).
+@(private = "file")
+camera_facing_sun :: proc(hours: f32) -> Fly_Camera {
+	position := [3]f32{0, 12, 40}
+	to_sun := Gameplay.Sun_Direction_To_Sun(hours)
+	return Fly_Camera_Looking_At(position, position + to_sun * 100 - {0, to_sun.y * 60, 0})
 }
 
 @(private = "file")

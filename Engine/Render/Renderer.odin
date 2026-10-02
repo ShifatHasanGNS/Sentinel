@@ -243,6 +243,10 @@ post_pass :: proc(renderer: ^Renderer, frame: Frame) {
 	GPU.Shader_Set(&renderer.tonemap, "u_Hdr", GPU.Texture_Bind_Next(&renderer.hdr.colors[0], GPU.Sampler_Linear_Clamp))
 	GPU.Shader_Set(&renderer.tonemap, "u_Bloom", GPU.Texture_Bind_Next(&renderer.bloom.levels[0].colors[0], GPU.Sampler_Linear_Clamp))
 	GPU.Shader_Set(&renderer.tonemap, "u_BloomStrength", frame.bloom_strength)
+	GPU.Shader_Set(&renderer.tonemap, "u_Depth", GPU.Texture_Bind_Next(&renderer.gbuffer.depth, GPU.Sampler_Nearest_Clamp))
+	sun_uv, shaft_color := shaft_inputs(frame)
+	GPU.Shader_Set(&renderer.tonemap, "u_SunUv", sun_uv)
+	GPU.Shader_Set(&renderer.tonemap, "u_ShaftColor", shaft_color)
 	GPU.Shader_Set(&renderer.tonemap, "u_Exposure", frame.exposure)
 	GPU.Shader_Set(&renderer.tonemap, "u_VignetteStrength", frame.vignette_strength)
 	GPU.Fullscreen_Pass_Draw(&renderer.fullscreen)
@@ -253,4 +257,14 @@ post_pass :: proc(renderer: ^Renderer, frame: Frame) {
 	GPU.Shader_Set(&renderer.fxaa, "u_Ldr", GPU.Texture_Bind_Next(&renderer.ldr.colors[0], GPU.Sampler_Linear_Clamp))
 	GPU.Shader_Set(&renderer.fxaa, "u_ScreenSize", [2]f32{f32(width), f32(height)})
 	GPU.Fullscreen_Pass_Draw(&renderer.fullscreen)
+}
+
+// Where the sun lands on screen, and the shaft tint (zero when the sun is behind the camera, below the horizon, or shafts are off).
+@(private = "file")
+shaft_inputs :: proc(frame: Frame) -> (sun_uv: [2]f32, color: [3]f32) {
+	if frame.shaft_strength <= 0 || frame.sky.to_sun.y <= 0.02 do return
+	clip := frame.camera.view_projection * [4]f32{frame.camera.position.x + frame.sky.to_sun.x * 1000, frame.camera.position.y + frame.sky.to_sun.y * 1000, frame.camera.position.z + frame.sky.to_sun.z * 1000, 1}
+	if clip.w <= 0 do return
+	sun_uv = {clip.x / clip.w * 0.5 + 0.5, clip.y / clip.w * 0.5 + 0.5}
+	return sun_uv, frame.sky.sun_color * frame.shaft_strength * min(frame.sky.to_sun.y * 4, 1)
 }

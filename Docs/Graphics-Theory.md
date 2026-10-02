@@ -68,3 +68,6 @@ Real lenses scatter a little light from very bright points into a halo. We appro
 
 ## Screen-space ambient occlusion
 Ambient light reaching a point P with normal n is `(1/pi) * integral V(w) cos(theta) dw` over the hemisphere, where V is visibility. We estimate V with 12 cosine-distributed points `S = P + r*k` (shorter vectors weighted more), project each into the depth buffer and count it blocked when the visible surface there is nearer the camera than S. A range term `smoothstep(r / |d_P - d_visible|)` drops occluders far in front of P, which would otherwise darken object silhouettes. The sample spiral is rotated per pixel with a 4x4 pattern and a 4x4 box blur removes it exactly. The result multiplies only the ambient term; direct sun is shadowed by the cascaded shadow maps.
+
+## Light shafts
+Single scattering along a view ray from the pixel to the sun adds `integral T(t) * S(t) dt`, where S is non-zero only where the sun is visible through that point. In screen space we march from the pixel toward the sun's projected position and sum open-sky samples (depth at the far plane) with weights `0.93^i`. Occluders (trees, buildings) between the pixel and the sun darken the sum, producing visible shafts. A per-pixel jitter of the start offset trades banding for fine noise.

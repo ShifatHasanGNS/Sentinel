@@ -11,6 +11,6 @@
 | M6 | Base content | done: `odin test Game/Catalogue` (5: validity, size ranges, grounding, budget, determinism, collision, shadow subset), `Game/Base` (7: layout), `Engine/Procedural` (52); base on the plateau, 1080p benchmark avg 12.1 ms, p99 18.9 ms |
 | M7 | Characters + animation | done: `odin test Game/Characters` (26: IK, gait, skeleton, soldier), `Game/Weapons` (3), `Engine/World` (11, incl. spring); line-up screenshot reviewed |
 | M8 | Gameplay | done |
-| M9 | Polish | in progress (bloom, SSAO done) |
+| M9 | Polish | in progress (bloom, SSAO, light shafts done) |
 
 Full plan: milestone definitions and "done when" checks are in the approved plan (`~/.claude/plans/compiled-giggling-trinket.md`); copy into this file as each milestone starts.

@@ -51,5 +51,6 @@ Frame :: struct {
 	exposure:          f32,
 	vignette_strength: f32,
 	ssao_radius_meters: f32, // 0 disables screen-space ambient occlusion.
+	shaft_strength:    f32, // 0 disables light shafts; scales the sun colour added along sky-visible rays.
 	bloom_strength:    f32, // 0 disables bloom; ~0.05 is a soft glow.
 }
