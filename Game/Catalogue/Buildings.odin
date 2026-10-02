@@ -193,6 +193,7 @@ watchtower :: proc() -> (parts: Parts) {
 			add_part(&parts, Procedural.Part{primitive = Procedural.Cylinder(0.13, 6, 10, 2), position = {x, 3, z}, deformers = {0 = Procedural.Taper{1.3, 1}}, material = layer(.Wood), solid = true})
 		}
 	}
+	add_collision_box(&parts, {2.5, 3.2, 2.5}, {0, 1.6, 0}) // The legs stand 2.2 m apart: a body fits between them, and a tower is a link in the perimeter, so its base is closed.
 	for height in ([2]f32{1.8, 3.8}) {
 		add_box(&parts, {2.3, 0.08, 0.08}, {0, height, 1.1}, .Wood, false)
 		add_box(&parts, {2.3, 0.08, 0.08}, {0, height, -1.1}, .Wood, false)

@@ -6,13 +6,13 @@ import "core:testing"
 
 // Seam: a body walking at an object through the world built from Placement_Solids. Every object blocks, except the ones a person
 // legitimately steps over or through: a flat pad and a low ammunition box (under the 0.35 m step height), a net strung overhead,
-// the open legs of the two towers, and the gate (whose leaves are doors, tested in Doors_test.odin).
+// the open legs of the water tower, and the gate (whose leaves are doors, tested in Doors_test.odin).
 
 flat :: proc(data: rawptr, x, z: f32) -> f32 {
 	return 0
 }
 
-PASS_THROUGH :: bit_set[Catalogue.Object_Kind]{.Helipad, .Ammo_Box, .Camo_Net, .Water_Tower, .Watchtower, .Gate}
+PASS_THROUGH :: bit_set[Catalogue.Object_Kind]{.Helipad, .Ammo_Box, .Camo_Net, .Water_Tower, .Gate}
 
 // The body starts 8 m behind the object (-Z, away from any door) and walks along the object's own centre line (x = 0).
 @(test)
