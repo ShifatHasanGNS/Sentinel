@@ -6,6 +6,8 @@ import "../../Engine/Render"
 import "core:math"
 import la "core:math/linalg"
 
+ROTOR_BLUR_COPIES :: 5
+ROTOR_BLUR_STEP_RADIANS :: 0.16
 TAIL_ROTOR_SPEED_RATIO :: 1.7 // The small rotor turns faster than the main one.
 
 Part_Group :: struct {
@@ -87,7 +89,13 @@ Vehicle_Renderer_Items :: proc(renderer: ^Vehicle_Renderer, vehicles: []Vehicle,
 			add_group_items(&items, render.body[:], hull)
 			add_group_items(&items, render.turret[:], Vehicle_Turret_Matrix(vehicle))
 			add_group_items(&items, render.gun[:], Vehicle_Gun_Matrix(vehicle))
-			add_group_items(&items, render.main_rotor[:], hull * la.matrix4_translate_f32(vehicle.spec.main_rotor_pivot) * la.matrix4_rotate_f32(vehicle.air.rotor_angle_radians, {0, 1, 0}))
+			// Rotor blur: a fast rotor turns a stroboscopic fan of copies trailing the blades, which the eye reads as a smear; the
+			// copies are drawn at angles behind the true one, spaced by how far the rotor turns in a frame at 60 Hz.
+			copies := 1 + int(vehicle.air.rotor * ROTOR_BLUR_COPIES)
+			for copy in 0 ..< copies {
+				trail := f32(copy) * ROTOR_BLUR_STEP_RADIANS * vehicle.air.rotor
+				add_group_items(&items, render.main_rotor[:], hull * la.matrix4_translate_f32(vehicle.spec.main_rotor_pivot) * la.matrix4_rotate_f32(vehicle.air.rotor_angle_radians - trail, {0, 1, 0}))
+			}
 			add_group_items(&items, render.tail_rotor[:], hull * la.matrix4_translate_f32(vehicle.spec.tail_rotor_pivot) * la.matrix4_rotate_f32(vehicle.air.rotor_angle_radians * TAIL_ROTOR_SPEED_RATIO, {1, 0, 0}))
 			for mount in vehicle.spec.wheel_mounts do append(&wheels, Render.Instance{model = wheel_matrix(vehicle, hull, mount)})
 			if track, has_track := vehicle.spec.track.?; has_track do append_track_links(&links, vehicle, hull, track)
