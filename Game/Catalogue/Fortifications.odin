@@ -20,12 +20,12 @@ fence_section :: proc() -> (parts: Parts) {
 // Two concrete posts and two mesh leaves, closed.
 @(private = "package")
 gate :: proc() -> (parts: Parts) {
-	for x in ([2]f32{-3.9, 3.9}) do add_box(&parts, {0.5, 3.2, 0.5}, {x, 1.6, 0}, .Concrete)
+	for x in ([2]f32{-4.25, 4.25}) do add_box(&parts, {0.5, 3.2, 0.5}, {x, 1.6, 0}, .Concrete)
 	for side in ([2]f32{-1, 1}) {
-		center := side * 1.95
-		add_box(&parts, {3.4, 0.12, 0.1}, {center, 2.6, 0}, .Rusted_Metal)
-		add_box(&parts, {3.4, 0.12, 0.1}, {center, 0.3, 0}, .Rusted_Metal)
-		for index in 0 ..< 12 do add_box(&parts, {0.05, 2.3, 0.05}, {center + (f32(index) - 5.5) * 0.28, 1.45, 0}, .Rusted_Metal, false)
+		center := side * 2.1
+		add_box(&parts, {3.7, 0.12, 0.1}, {center, 2.6, 0}, .Rusted_Metal)
+		add_box(&parts, {3.7, 0.12, 0.1}, {center, 0.3, 0}, .Rusted_Metal)
+		for index in 0 ..< 12 do add_box(&parts, {0.05, 2.3, 0.05}, {center + (f32(index) - 5.5) * 0.3, 1.45, 0}, .Rusted_Metal, false)
 	}
 	return parts
 }

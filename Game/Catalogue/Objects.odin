@@ -169,3 +169,26 @@ add_front_windows :: proc(parts: ^Parts, count: int, spacing: f32, y, z: f32, si
 degrees :: proc(radians: f32) -> f32 {
 	return math.to_degrees(radians)
 }
+
+// What the rest of the game needs to know about an object without its meshes: its extent and its collision boxes.
+Object_Info :: struct {
+	lowest:          [3]f32,
+	highest:         [3]f32,
+	collision_boxes: []Procedural.Collision_Box,
+}
+
+@(private = "file")
+info_cache: [Object_Kind]Maybe(Object_Info)
+
+// Computed on first use and kept for the life of the program.
+Catalogue_Info :: proc(kind: Object_Kind) -> Object_Info {
+	if info, cached := info_cache[kind].?; cached do return info
+	assembly := Catalogue_Build(kind)
+	defer Procedural.Assembly_Destroy(&assembly)
+	info: Object_Info
+	info.lowest, info.highest = Procedural.Assembly_Bounds(assembly)
+	info.collision_boxes = make([]Procedural.Collision_Box, len(assembly.collision_boxes))
+	copy(info.collision_boxes, assembly.collision_boxes[:])
+	info_cache[kind] = info
+	return info
+}
