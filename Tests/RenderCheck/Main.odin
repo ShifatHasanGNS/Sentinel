@@ -2,8 +2,10 @@ package main
 
 import "../../Engine/GPU"
 import "../../Engine/Platform"
+import "../../Engine/Render"
 import "../Support"
 import "core:fmt"
+import "core:math"
 import "core:os"
 
 // Lighting, tonemap and shadow functions are probed on the GPU: a fixture shader includes the real GLSL and writes results to pixels.
@@ -16,6 +18,7 @@ main :: proc() {
 
 	check_normal_encoding_round_trip(&checks)
 	check_tonemap_is_monotonic_and_bounded(&checks)
+	check_illumination_models(&checks)
 	fmt.printfln("%d checks passed, %d failed", checks.passed, checks.failed)
 	if checks.failed > 0 do os.exit(1)
 }
@@ -55,4 +58,77 @@ check_tonemap_is_monotonic_and_bounded :: proc(checks: ^Support.Checks) {
 		if index > 0 do Support.expect(checks, pixel.x >= row[index - 1].x)
 	}
 	Support.expect(checks, row[63].x > 0.99) // Very bright input saturates near white.
+}
+
+Model :: Render.Illumination_Model
+
+set_brdf :: proc(shader: ^GPU.Shader, mode: i32, model: Model, roughness, metallic: f32, albedo: [3]f32 = {1, 1, 1}, view_cosine: f32 = 0.7) {
+	GPU.Shader_Set(shader, "u_Mode", mode)
+	GPU.Shader_Set(shader, "u_Model", i32(model))
+	GPU.Shader_Set(shader, "u_Roughness", roughness)
+	GPU.Shader_Set(shader, "u_Metallic", metallic)
+	GPU.Shader_Set(shader, "u_Albedo", albedo)
+	GPU.Shader_Set(shader, "u_ViewCosine", view_cosine)
+}
+
+check_illumination_models :: proc(checks: ^Support.Checks) {
+	shader, ok := GPU.Shader_Create("Tests/RenderCheck/Fixtures/BrdfProbe.glsl", nil, true)
+	Support.expect(checks, ok)
+	if !ok do return
+	defer GPU.Shader_Destroy(&shader)
+
+	for model in Model do for roughness in ([3]f32{0.3, 0.6, 1.0}) do for metallic in ([2]f32{0, 1}) {
+		set_brdf(&shader, 0, model, roughness, metallic)
+		samples := Support.Probe_Render(&shader, 64, 64)
+		defer delete(samples)
+		reciprocal := model != .Phong // Phong uses the reflection vector R.V, which is not symmetric in l and v by design.
+		for sample in samples {
+			Support.expect(checks, sample.x >= 0 && sample.y >= 0 && sample.z >= 0 && sample.x < 1e3)
+			if reciprocal do Support.expect(checks, abs(sample.x - sample.w) < 1e-4 * (1 + sample.x))
+		}
+		check_white_furnace(checks, &shader, model, roughness, metallic)
+	}
+
+	set_brdf(&shader, 0, .Lambert, 0.5, 0, {0.6, 0.6, 0.6})
+	for sample in Support.Probe_Render(&shader, 64, 64) do Support.expect(checks, abs(sample.x - 0.6 / math.PI) < 1e-5)
+
+	set_brdf(&shader, 0, .Oren_Nayar, 0, 0)
+	for sample in Support.Probe_Render(&shader, 64, 64) do Support.expect(checks, abs(sample.x - 1 / math.PI) < 1e-5)
+
+	for model in Model {
+		if model == .Subsurface do continue // Wrapped lighting deliberately lets light arrive from just below the horizon.
+		set_brdf(&shader, 1, model, 0.5, 0)
+		for sample in Support.Probe_Render(&shader, 64, 64) do Support.expect_value(checks, sample.x, 0)
+	}
+
+	set_brdf(&shader, 3, .Lambert, 0.5, 0)
+	for sample, index in Support.Probe_Render(&shader, 64, 1) {
+		Support.expect(checks, abs(sample.y - max(sample.z, 0)) < 1e-5) // Standard cosine.
+		Support.expect(checks, sample.x >= sample.y - 1e-6) // Wrapped light is never darker.
+		if sample.z <= -0.99 do Support.expect(checks, sample.x < 0.01)
+		if sample.z > 0.9 && index == 63 do Support.expect(checks, sample.x > 0.95)
+		if sample.z > -0.1 && sample.z < 0.1 do Support.expect(checks, sample.x > 0.2) // Light wraps past the terminator.
+	}
+}
+
+FURNACE_GRID :: 256
+
+// Directional albedo = integral of f * cos over the hemisphere. Energy conservation bounds it by 1; Lambert gives its albedo.
+// Phong and Blinn-Phong normalisations are approximations that overshoot slightly at normal incidence, so they get a looser bound.
+check_white_furnace :: proc(checks: ^Support.Checks, shader: ^GPU.Shader, model: Model, roughness, metallic: f32) {
+	diffuse_only_metal := (model == .Lambert || model == .Oren_Nayar) && metallic == 1
+	upper_bound: f32 = 1.10 if model == .Phong || model == .Blinn_Phong else 1.03
+	for view_cosine in ([3]f32{0.2, 0.7, 1.0}) {
+		set_brdf(shader, 2, model, roughness, metallic, {1, 1, 1}, view_cosine)
+		GPU.Shader_Set(shader, "u_GridSize", f32(FURNACE_GRID))
+		samples := Support.Probe_Render(shader, FURNACE_GRID, FURNACE_GRID)
+		defer delete(samples)
+		total: f32
+		for sample in samples do total += sample.x
+		albedo := total * (math.PI / 2 / FURNACE_GRID) * (2 * math.PI / FURNACE_GRID)
+		if albedo > upper_bound do fmt.eprintfln("furnace %v rough %v metal %v view %v: %v", model, roughness, metallic, view_cosine, albedo)
+		Support.expect(checks, albedo <= upper_bound)
+		Support.expect(checks, albedo < 1e-4 if diffuse_only_metal else albedo > 0.05)
+		if model == .Lambert && metallic == 0 do Support.expect(checks, abs(albedo - 1) < 0.01)
+	}
 }
