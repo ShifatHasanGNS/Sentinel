@@ -83,6 +83,7 @@ void main() {
 			normal_sum += weights[index] * triplanar_normal(u_NormalArray, terrain_layer, position, position_dx, position_dy, geometric_normal, blend);
 		}
 		normal = normalize(normal_sum);
+		if (distance(v_world_position, u_CameraPosition) < 250.0) mottle_terrain(v_world_position, albedo);
 	} else if (u_Triplanar) {
 		vec3 blend = triplanar_blend(geometric_normal);
 		vec3 position = triplanar_position;

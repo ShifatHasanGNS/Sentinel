@@ -61,10 +61,10 @@ Sandbox_Create :: proc(width, height: i32, hours: f32, view: string, demo: bool,
 		frequency_per_meter = 1.0 / 180,
 		octaves = 5,
 		plateau_radius_meters = 90,
-		plateau_blend_meters = 120,
+		plateau_blend_meters = 55,
 	}
-	sandbox.grass_rules = Procedural.Scatter_Rules{seed = 8, attempts_per_chunk = 1400, min_normal_y = 0.88, exclusion_radius_meters = 100, scale_range = {0.7, 1.4}}
-	sandbox.scatter_rules = Procedural.Scatter_Rules{seed = 3, attempts_per_chunk = 120, min_normal_y = 0.93, exclusion_radius_meters = 125, scale_range = {0.8, 1.5}}
+	sandbox.grass_rules = Procedural.Scatter_Rules{seed = 8, attempts_per_chunk = 1400, min_normal_y = 0.88, exclusion_radius_meters = 92, scale_range = {0.7, 1.4}}
+	sandbox.scatter_rules = Procedural.Scatter_Rules{seed = 3, attempts_per_chunk = 120, min_normal_y = 0.93, exclusion_radius_meters = 105, scale_range = {0.8, 1.5}}
 	sandbox.props = Props_Create()
 	sandbox.base = Base.Base_Scene_Create(Base.Layout_Create(BASE_SEED, sandbox.terrain.plateau_radius_meters), sandbox.terrain.base_height_meters)
 	sandbox.camera = camera_for_view(view)

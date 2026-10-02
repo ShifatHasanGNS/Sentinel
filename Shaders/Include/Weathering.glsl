@@ -31,3 +31,12 @@ void weather_surface(vec3 world_position, vec3 normal, float ground_level, inout
 	albedo *= 1.0 - 0.22 * streaks;
 	orm.b *= 1.0 - 0.15 * splash;
 }
+
+// Terrain breaks up differently from walls: broad patches of drier and darker ground (60 m and 12 m scale) hide the repeating tile,
+// and small bare patches show through the grass. Only albedo changes; the textures already carry the fine detail.
+void mottle_terrain(vec3 world_position, inout vec3 albedo) {
+	float broad = world_fbm(world_position.xz * 0.016, 3, 191u);
+	float patches = world_fbm(world_position.xz * 0.08, 3, 193u);
+	albedo *= 1.0 + 0.22 * broad + 0.12 * patches;
+	albedo = mix(albedo, albedo * vec3(1.15, 1.0, 0.8), clamp(0.5 + broad, 0.0, 1.0) * 0.3);
+}
