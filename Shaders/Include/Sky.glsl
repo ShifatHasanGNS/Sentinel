@@ -38,7 +38,7 @@ float star_field(vec3 direction) {
 // (coverage threshold gives clear gaps), and the lighting asks how much cloud lies toward the sun: a point with thick cloud
 // between it and the sun is darker (self-shadowing, one extra sample), thin edges glow (silver lining).
 float cloud_density(vec2 plane_position) {
-	float shape = fbm(plane_position * 0.0006 / 4096.0, 4096, 5, 301u) * 0.5 + 0.5;
+	float shape = fbm(plane_position * 0.0006 / 4096.0, 4096, 4, 301u) * 0.5 + 0.5;
 	float detail = fbm(plane_position * 0.003 / 4096.0, 4096, 3, 303u) * 0.5 + 0.5;
 	return smoothstep(0.4, 0.68, shape * 0.8 + detail * 0.2);
 }

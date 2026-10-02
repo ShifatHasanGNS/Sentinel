@@ -85,7 +85,7 @@ tree_canopy_mesh :: proc() -> (canopy: Procedural.Mesh) {
 		seed:     u32,
 	}{{{0, 5.2, 0}, 1.5, 11}, {{0.9, 4.4, 0.5}, 1.05, 12}, {{-0.8, 4.7, -0.6}, 1.1, 13}, {{-0.3, 6.1, 0.3}, 1.0, 14}, {{0.6, 5.6, -0.7}, 0.9, 15}, {{-1.0, 5.6, 0.7}, 0.85, 16}}
 	for lobe in lobes {
-		blob := Procedural.Sphere_Create(lobe.radius, 24, 12)
+		blob := Procedural.Sphere_Create(lobe.radius, 14, 7)
 		Procedural.Mesh_Deform(&blob, {Procedural.Noise_Displace{lobe.radius * 0.3, 2.6 / lobe.radius, 4, lobe.seed}})
 		Procedural.Mesh_Append(&canopy, blob, la.matrix4_translate_f32(lobe.position) * la.matrix4_scale_f32({1, 1.25, 1}))
 		Procedural.Mesh_Destroy(&blob)

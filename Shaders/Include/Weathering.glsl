@@ -15,8 +15,8 @@ float world_fbm(vec2 position, int octaves, uint seed) {
 //  grime: rain-splashed dirt in the lowest 0.9 m of a wall, darker and rougher, breaking up with noise;
 //  streaks: vertical rain stains under edges, stretched noise along y.
 void weather_surface(vec3 world_position, vec3 normal, float ground_level, inout vec3 albedo, inout vec3 orm) {
-	float coarse = world_fbm(world_position.xz * 0.125 + world_position.y * 0.07, 3, 91u);
-	float medium = world_fbm(world_position.xz * 0.6 + world_position.y * 0.5, 3, 93u);
+	float coarse = world_fbm(world_position.xz * 0.125 + world_position.y * 0.07, 2, 91u);
+	float medium = world_fbm(world_position.xz * 0.6 + world_position.y * 0.5, 2, 93u);
 	albedo *= 1.0 + 0.18 * coarse + 0.08 * medium;
 	float height = world_position.y - ground_level;
 	float up = smoothstep(0.55, 0.95, normal.y);
@@ -26,7 +26,7 @@ void weather_surface(vec3 world_position, vec3 normal, float ground_level, inout
 	float splash = (1.0 - smoothstep(0.1, 0.9 + 0.5 * medium, height)) * wall;
 	albedo = mix(albedo, albedo * vec3(0.55, 0.48, 0.4), clamp(splash * 0.8, 0.0, 0.8));
 	orm.r = mix(orm.r, 0.95, clamp(splash, 0.0, 0.7));
-	float streak_noise = world_fbm(vec2((world_position.x + world_position.z) * 3.2, world_position.y * 0.18), 3, 97u);
+	float streak_noise = world_fbm(vec2((world_position.x + world_position.z) * 3.2, world_position.y * 0.18), 2, 97u);
 	float streaks = smoothstep(0.25, 0.7, streak_noise) * wall * smoothstep(0.5, 3.0, height);
 	albedo *= 1.0 - 0.22 * streaks;
 	orm.b *= 1.0 - 0.15 * splash;

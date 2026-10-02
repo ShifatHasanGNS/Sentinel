@@ -58,6 +58,9 @@ uniform bool u_Triplanar;
 uniform int u_IlluminationModel;
 uniform vec3 u_Emission;
 uniform float u_GroundLevel;
+uniform vec3 u_CameraPosition;
+const float DETAIL_DISTANCE_METERS = 25.0; // Fine detail and weathering are for close surfaces: farther away they are sub-pixel.
+const float WEATHER_DISTANCE_METERS = 80.0;
 
 void main() {
 	vec3 geometric_normal = normalize(v_world_normal);
@@ -96,13 +99,13 @@ void main() {
 		normal = normalize(mat3(tangent, bitangent, geometric_normal) * tangent_normal);
 	}
 	if (!u_Terrain) {
-		if (u_Triplanar && orm.r > 0.6) {
+		if (u_Triplanar && orm.r > 0.6 && distance(v_world_position, u_CameraPosition) < DETAIL_DISTANCE_METERS) {
 			// A second, finer layer of the same material's bumps: the tile never reads as one repeated pattern up close.
 			vec3 fine_position = triplanar_position * DETAIL_SCALE;
 			vec3 fine = triplanar_normal(u_NormalArray, v_layer, fine_position, position_dx * DETAIL_SCALE, position_dy * DETAIL_SCALE, geometric_normal, triplanar_blend(geometric_normal));
 			normal = normalize(normal + (fine - geometric_normal) * DETAIL_STRENGTH);
 		}
-		if (orm.r > 0.3) weather_surface(v_world_position, geometric_normal, u_GroundLevel, albedo, orm); // Glass stays clean.
+		if (orm.r > 0.3 && distance(v_world_position, u_CameraPosition) < WEATHER_DISTANCE_METERS) weather_surface(v_world_position, geometric_normal, u_GroundLevel, albedo, orm); // Glass stays clean.
 	}
 	o_Albedo = vec4(albedo, float(u_IlluminationModel) / 255.0);
 	o_Normal = vec4(oct_encode(normal), max(orm.r, 0.045), orm.g);
