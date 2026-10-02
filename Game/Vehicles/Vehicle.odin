@@ -21,6 +21,9 @@ TURRET_TURN_GUN :: 2.4
 GUN_PITCH_MIN :: -0.15
 GUN_PITCH_MAX :: 0.4
 SOLID_HEIGHT_FRACTION :: 1.0
+SUSPENSION_FREQUENCY :: 9.0
+SUSPENSION_PITCH_PER_ACCELERATION :: 0.0075
+SUSPENSION_ROLL_PER_LATERAL :: 0.004
 
 // One drivable vehicle in the world: its hull, its turret and gun angles, its slot in the collision world, who is in it.
 Vehicle :: struct {
@@ -33,6 +36,9 @@ Vehicle :: struct {
 	turret_yaw:       f32, // Radians relative to the hull; positive turns left, like hull yaw.
 	gun_pitch:        f32,
 	cooldown_seconds: f32,
+	dive:             World.Spring, // Suspension: the body noses down under braking and squats under power, then settles.
+	lean:             World.Spring, // ... and rolls outward in turns.
+	previous_speed:   f32,
 	shots:            u32,
 }
 
@@ -102,6 +108,7 @@ Vehicle_Update :: proc(vehicle: ^Vehicle, controls: Vehicle_Controls, collision:
 		if !vehicle.occupied do input = World.Vehicle_Input{brake = true}
 		World.Ground_Vehicle_Step(&vehicle.body, vehicle.spec.handling, input, collision^, ground, vehicle.solid_index, delta_seconds)
 		if vehicle.occupied do slew_turret(vehicle, controls, delta_seconds)
+		step_suspension(vehicle, delta_seconds)
 	}
 	vehicle.cooldown_seconds = max(vehicle.cooldown_seconds - delta_seconds, 0)
 	collision.boxes[vehicle.solid_index] = hull_solid(vehicle^)
@@ -126,6 +133,10 @@ wrap_angle :: proc(angle: f32) -> f32 {
 // Hull frame: translate, turn about +Y, then nose up (a rotation about X by -pitch, since +Z is the nose) and lean (about Z).
 Vehicle_Hull_Matrix :: proc(vehicle: Vehicle) -> matrix[4, 4]f32 {
 	position, yaw, pitch, roll := Vehicle_Pose(vehicle)
+	if !vehicle.spec.is_aircraft {
+		pitch += vehicle.dive.value
+		roll += vehicle.lean.value
+	}
 	return la.matrix4_translate_f32(position) * la.matrix4_rotate_f32(yaw, {0, 1, 0}) * la.matrix4_rotate_f32(-pitch, {1, 0, 0}) * la.matrix4_rotate_f32(roll, {0, 0, 1})
 }
 
@@ -211,4 +222,15 @@ spread :: proc(direction: [3]f32, counter: u32) -> [3]f32 {
 	u1 := f32(counter * 2654435761 % 1000) / 1000
 	u2 := f32(counter * 40503 % 1000) / 1000
 	return World.Spread_Direction(direction, MACHINE_GUN_SPREAD, u1, u2)
+}
+
+// A spring-damper on the body's pitch and roll: acceleration pitches it (braking noses down), and the turn rate times speed (the
+// sideways acceleration) rolls it outward. A critically damped spring settles with no wobble, with a slightly lively frequency.
+@(private = "file")
+step_suspension :: proc(vehicle: ^Vehicle, delta_seconds: f32) {
+	if delta_seconds <= 0 do return
+	acceleration := (vehicle.body.speed - vehicle.previous_speed) / delta_seconds
+	vehicle.previous_speed = vehicle.body.speed
+	World.Spring_Step(&vehicle.dive, clamp(-acceleration * SUSPENSION_PITCH_PER_ACCELERATION, -0.07, 0.07), SUSPENSION_FREQUENCY, delta_seconds)
+	World.Spring_Step(&vehicle.lean, clamp(vehicle.body.steer * vehicle.body.speed * SUSPENSION_ROLL_PER_LATERAL, -0.08, 0.08), SUSPENSION_FREQUENCY, delta_seconds)
 }

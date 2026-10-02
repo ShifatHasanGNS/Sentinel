@@ -168,6 +168,18 @@ add_cylinder :: proc(parts: ^Parts, radius, height: f32, position: [3]f32, mater
 add_wheel :: proc(parts: ^Parts, radius, width: f32, position: [3]f32) {
 	add_cylinder_x(parts, radius, width, position, .Rubber, true, 20)
 	add_cylinder_x(parts, radius * 0.5, width * 1.04, position, .Painted_Metal, false, 12)
+	for lug in 0 ..< 18 { // Tread blocks around the tyre, each a small box standing proud of the surface.
+		angle := f32(lug) / 18 * 2 * math.PI
+		offset := [3]f32{0, math.cos(angle), math.sin(angle)} * (radius + 0.012)
+		append(parts, Procedural.Part{primitive = Procedural.Box({width * 0.96, 0.03, radius * 0.28}), position = position + offset, rotation_degrees = {math.to_degrees(-angle) + 90, 0, 0}, material = layer(.Rubber)})
+	}
+	for nut in 0 ..< 6 { // Wheel nuts on the hub face.
+		angle := f32(nut) / 6 * 2 * math.PI
+		for side in ([2]f32{-1, 1}) {
+			offset := [3]f32{side * width * 0.53, math.cos(angle) * radius * 0.28, math.sin(angle) * radius * 0.28}
+			add_cylinder_x(parts, radius * 0.04, 0.025, position + offset, .Gunmetal, false, 6)
+		}
+	}
 }
 
 // A gable roof: two wedges meeting at a ridge along X, covering `length` x `depth` and `rise` tall, its base at base_y.

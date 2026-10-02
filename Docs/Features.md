@@ -153,3 +153,5 @@
 | Head bob and weapon sway | `Game/Sandbox/Play.odin` : `update_view_motion` |
 | Soft shadow filter (Vogel disk PCF) | `Shaders/Include/Shadow.glsl` |
 | Moving tank tracks (links on a stadium path, the two sides running opposite ways when pivoting) | `Game/Vehicles/VehicleRender.odin` : `append_track_links`; `Game/Catalogue/Vehicles.odin` : `Track_Spec` |
+| Vehicle suspension (critically damped pitch and roll springs: braking noses down, turns lean out) | `Game/Vehicles/Vehicle.odin` : `step_suspension` |
+| Tyre treads and wheel nuts | `Game/Catalogue/Objects.odin` : `add_wheel` |

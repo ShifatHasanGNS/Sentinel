@@ -152,8 +152,8 @@ jeep_spec :: proc() -> (spec: Vehicle_Spec) {
 		add_part(parts, Procedural.Part{primitive = Procedural.Cylinder(0.56, 0.12, 20), position = {x, 0.72, 1.5}, rotation_degrees = {0, 0, 90}, material = layer(.Olive_Paint)})
 	}
 	for index in 0 ..< 6 do add_box(parts, {0.9, 0.035, 0.05}, {0, 0.76 + f32(index) * 0.075, 2.31}, .Gunmetal, false) // Grille slats.
-	add_box(parts, {1.6, 0.1, 1.2}, {0, 1.95, -0.5}, .Gunmetal, false) // Roof rack with a jerrycan.
-	add_box(parts, {0.45, 0.3, 0.2}, {0.5, 2.13, -0.5}, .Olive_Paint)
+	add_box(parts, {1.6, 0.06, 1.2}, {0, 1.92, -0.5}, .Gunmetal, false) // Roof rack with a jerrycan.
+	add_box(parts, {0.45, 0.3, 0.2}, {0.5, 2.06, -0.5}, .Olive_Paint)
 	spec.seat = {0.4, 1.7, -0.3}
 	spec.armor = 1
 	spec.handling = World.Vehicle_Handling{
