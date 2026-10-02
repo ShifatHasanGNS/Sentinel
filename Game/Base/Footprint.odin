@@ -2,6 +2,7 @@ package Base
 
 import "../Catalogue"
 import "../../Engine/Procedural"
+import World "../../Engine/World"
 import "core:math"
 
 // An object placed on the plateau. Positions are on the ground plane (x east, z south); yaw turns the object about +Y, so at
@@ -75,22 +76,14 @@ Placements_May_Overlap :: proc(a, b: Catalogue.Object_Kind) -> bool {
 	return covers(a, b) || covers(b, a)
 }
 
-// The collision boxes of a placement in world axes, relative to the ground height (y = 0 is the plateau surface).
-// Each box is rotated about +Y with the object and re-bounded, so it stays axis-aligned.
-Placement_Collision_Boxes :: proc(placement: Placement) -> (boxes: [dynamic]Procedural.Collision_Box) {
+// A placement's collision as solids turned with the object. Boxes are in the object's own frame (y = 0 is its ground point),
+// so `ground_height_meters` lifts them onto the terrain.
+Placement_Solids :: proc(placement: Placement, ground_height_meters: f32 = 0) -> (solids: [dynamic]World.Solid) {
 	yaw := math.to_radians(placement.yaw_degrees)
 	for box in Catalogue.Catalogue_Info(placement.kind).collision_boxes {
-		lowest := [3]f32{max(f32), box.lowest.y, max(f32)}
-		highest := [3]f32{min(f32), box.highest.y, min(f32)}
-		for corner_index in 0 ..< 4 {
-			corner := [2]f32{box.lowest.x if corner_index & 1 == 0 else box.highest.x, box.lowest.z if corner_index & 2 == 0 else box.highest.z}
-			world := [2]f32{placement.x, placement.z} + rotate_ground(corner, yaw)
-			lowest.x, lowest.z = min(lowest.x, world.x), min(lowest.z, world.y)
-			highest.x, highest.z = max(highest.x, world.x), max(highest.z, world.y)
-		}
-		append(&boxes, Procedural.Collision_Box{lowest, highest})
+		append(&solids, World.Solid_From_Object_Box(box, {placement.x, ground_height_meters, placement.z}, yaw))
 	}
-	return boxes
+	return solids
 }
 
 @(private = "file")
@@ -113,14 +106,12 @@ project :: proc(corners: [4][2]f32, axis: [2]f32) -> (low, high: f32) {
 	return
 }
 
-// Every placement's collision boxes in world coordinates, lifted onto the ground the base stands on.
-Layout_World_Boxes :: proc(layout: Layout, ground_height_meters: f32) -> (boxes: [dynamic]Procedural.Collision_Box) {
+// Every placement's solids on the plateau.
+Layout_Solids :: proc(layout: Layout, ground_height_meters: f32) -> (solids: [dynamic]World.Solid) {
 	for placement in layout.placements {
-		own := Placement_Collision_Boxes(placement)
+		own := Placement_Solids(placement, ground_height_meters)
 		defer delete(own)
-		for box in own {
-			append(&boxes, Procedural.Collision_Box{box.lowest + {0, ground_height_meters, 0}, box.highest + {0, ground_height_meters, 0}})
-		}
+		for solid in own do append(&solids, solid)
 	}
-	return boxes
+	return solids
 }

@@ -14,10 +14,10 @@ flat :: proc(data: rawptr, x, z: f32) -> f32 {
 }
 
 FLAT_GROUND :: World.Ground{height_at = flat}
-WALL_BETWEEN := []Procedural.Collision_Box{{{-10, 0, 9.5}, {10, 3, 10.5}}}
+WALL_BETWEEN := []World.Solid{{center = {0, 1.5, 10}, half_extents = {10, 1.5, 0.5}}}
 
 // An enemy standing still 20 m ahead (+Z) of a player at the origin, facing the player.
-duel :: proc(boxes: []Procedural.Collision_Box) -> Battle {
+duel :: proc(boxes: []World.Solid) -> Battle {
 	battle := Battle_Create(FLAT_GROUND, boxes, {0, 0, 0}, 42)
 	Battle_Add_Enemy(&battle, .Enemy, {0, 0, 20}, math.PI, nil)
 	return battle
@@ -110,10 +110,9 @@ test_explosion_damage_falls_off_with_distance_and_stops_at_the_radius :: proc(t:
 test_the_player_cannot_walk_through_a_real_barracks :: proc(t: ^testing.T) {
 	layout := Base.Layout_Create(5, 90)
 	defer Base.Layout_Destroy(&layout)
-	boxes := make([dynamic]Procedural.Collision_Box)
-	defer delete(boxes)
 	barracks := Base.Placement{kind = .Barracks, x = 0, z = 0, yaw_degrees = 0}
-	for box in Base.Placement_Collision_Boxes(barracks) do append(&boxes, box)
+	boxes := Base.Placement_Solids(barracks)
+	defer delete(boxes)
 	for heading in 0 ..< 8 {
 		angle := f32(heading) * math.PI / 4
 		start := [3]f32{math.cos(angle) * 25, 0, math.sin(angle) * 25}

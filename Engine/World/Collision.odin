@@ -17,13 +17,16 @@ Ground :: struct {
 	data:      rawptr,
 }
 
-// Static solid boxes (buildings, fences, vehicles) in world axes.
+// Everything solid: `boxes` is the long-lived set (buildings, fences, doors, vehicles) and `temporary` is rebuilt by the game
+// every frame from whatever is near the player (trees, rocks).
 Collision_World :: struct {
-	boxes: [dynamic]Procedural.Collision_Box,
+	boxes:     [dynamic]Solid,
+	temporary: [dynamic]Solid,
 }
 
 Collision_World_Destroy :: proc(world: ^Collision_World) {
 	delete(world.boxes)
+	delete(world.temporary)
 }
 
 // A character body: a vertical cylinder whose bottom (position) is at the feet.
@@ -40,6 +43,7 @@ Controller_Create :: proc(position: [3]f32) -> Controller {
 // Moves the body by wish (horizontal metres per second) over delta_seconds. Each horizontal axis is tried separately, so a wall
 // removes only the part of the motion that pushes into it (sliding). Vertical motion is gravity, jumps and landing.
 Controller_Step :: proc(controller: ^Controller, world: Collision_World, ground: Ground, wish: [2]f32, jump: bool, delta_seconds: f32) {
+	controller.velocity.x, controller.velocity.z = wish.x, wish.y
 	substeps := max(1, int(math.ceil(delta_seconds / SUBSTEP_SECONDS_MAX)))
 	step := delta_seconds / f32(substeps)
 	for _ in 0 ..< substeps {
@@ -73,33 +77,47 @@ move_along_axis :: proc(controller: ^Controller, world: Collision_World, axis: [
 	controller.position += axis * (distance * free)
 }
 
-// A box blocks when it is tall enough to be a wall (its top above step height), reaches into the body's height band,
+// A solid blocks when it is tall enough to be a wall (its top above step height), reaches into the body's height band,
 // and the body's circle overlaps it on the ground plane.
 @(private = "file")
 is_blocked :: proc(world: Collision_World, position: [3]f32) -> bool {
-	for box in world.boxes {
-		if box.highest.y <= position.y + STEP_HEIGHT_METERS || box.lowest.y >= position.y + CONTROLLER_HEIGHT_METERS do continue
-		if circle_overlaps_box(position, box) do return true
-	}
+	for solid in world.boxes do if blocks(solid, position) do return true
+	for solid in world.temporary do if blocks(solid, position) do return true
 	return false
 }
 
 @(private = "file")
-circle_overlaps_box :: proc(position: [3]f32, box: Procedural.Collision_Box) -> bool {
-	nearest_x := max(box.lowest.x - position.x, 0, position.x - box.highest.x)
-	nearest_z := max(box.lowest.z - position.z, 0, position.z - box.highest.z)
+blocks :: proc(solid: Solid, position: [3]f32) -> bool {
+	if solid.disabled do return false
+	top, bottom := solid.center.y + solid.half_extents.y, solid.center.y - solid.half_extents.y
+	if top <= position.y + STEP_HEIGHT_METERS || bottom >= position.y + CONTROLLER_HEIGHT_METERS do return false
+	return circle_overlaps_solid(position, solid)
+}
+
+// The circle is tested in the solid's own axes, where the solid is axis-aligned: distance from the circle's center to the
+// nearest point of the rectangle must be under the radius.
+@(private = "file")
+circle_overlaps_solid :: proc(position: [3]f32, solid: Solid) -> bool {
+	local := to_local(solid, position)
+	nearest_x := max(abs(local.x) - solid.half_extents.x, 0)
+	nearest_z := max(abs(local.z) - solid.half_extents.z, 0)
 	return nearest_x * nearest_x + nearest_z * nearest_z < CONTROLLER_RADIUS_METERS * CONTROLLER_RADIUS_METERS
 }
 
-// The highest thing the feet can stand on here: the terrain, or the top of a box low enough to step onto.
+// The highest thing the feet can stand on here: the terrain, or the top of a solid low enough to step onto.
 @(private = "file")
 support_height :: proc(world: Collision_World, ground: Ground, position: [3]f32) -> f32 {
 	height := ground.height_at(ground.data, position.x, position.z)
-	for box in world.boxes {
-		if box.highest.y > position.y + STEP_HEIGHT_METERS + 1e-4 || box.highest.y <= height do continue
-		if circle_overlaps_box(position, box) do height = box.highest.y
-	}
+	for solid in world.boxes do height = raised_by(solid, position, height)
+	for solid in world.temporary do height = raised_by(solid, position, height)
 	return height
+}
+
+@(private = "file")
+raised_by :: proc(solid: Solid, position: [3]f32, height: f32) -> f32 {
+	top := solid.center.y + solid.half_extents.y
+	if solid.disabled || top > position.y + STEP_HEIGHT_METERS + 1e-4 || top <= height do return height
+	return top if circle_overlaps_solid(position, solid) else height
 }
 
 @(private = "file")

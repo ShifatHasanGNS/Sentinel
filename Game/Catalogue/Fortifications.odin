@@ -7,6 +7,7 @@ import "../Materials"
 @(private = "package")
 fence_section :: proc() -> (parts: Parts) {
 	for x in ([2]f32{-1.5, 1.5}) do add_cylinder(&parts, 0.05, 2.4, {x, 1.2, 0}, .Rusted_Metal, true, 8)
+	add_collision_box(&parts, {3, 2.6, 0.1}, {0, 1.3, 0})
 	add_cylinder_x(&parts, 0.03, 3, {0, 2.3, 0}, .Rusted_Metal, true, 6)
 	add_cylinder_x(&parts, 0.03, 3, {0, 0.3, 0}, .Rusted_Metal, true, 6)
 	for index in 0 ..< 19 do add_box(&parts, {0.02, 2, 0.02}, {-1.35 + f32(index) * 0.15, 1.3, 0}, .Rusted_Metal, false)

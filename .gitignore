@@ -28,3 +28,14 @@
 .claude/
 CLAUDE.local.md
 .mcp.json
+/Base
+/Catalogue
+/Characters
+/Gameplay
+/GPU
+/Procedural
+/Render
+/Weapons
+/World
+/Materials
+/Sandbox

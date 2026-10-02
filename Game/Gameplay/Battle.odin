@@ -71,11 +71,11 @@ Battle :: struct {
 	noise_this_frame: bool, // The player fired this frame: enemies within hearing range notice.
 }
 
-Battle_Create :: proc(ground: World.Ground, boxes: []Procedural.Collision_Box, spawn: [3]f32, seed: u32) -> (battle: Battle) {
+Battle_Create :: proc(ground: World.Ground, solids: []World.Solid, spawn: [3]f32, seed: u32) -> (battle: Battle) {
 	battle.ground = ground
 	battle.seed = seed
 	battle.player = Player_Create(spawn)
-	for box in boxes do append(&battle.collision.boxes, box)
+	for solid in solids do append(&battle.collision.boxes, solid)
 	return battle
 }
 

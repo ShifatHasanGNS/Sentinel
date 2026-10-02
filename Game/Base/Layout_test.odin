@@ -1,6 +1,7 @@
 package Base
 
 import "../Catalogue"
+import World "../../Engine/World"
 import "../../Engine/Procedural"
 import "core:math"
 import "core:slice"
@@ -102,19 +103,24 @@ test_the_base_has_everything_it_needs :: proc(t: ^testing.T) {
 	for kind in Catalogue.Object_Kind do testing.expectf(t, counts[kind] >= minimums[kind], "%v: %d placed, need at least %d", kind, counts[kind], minimums[kind])
 }
 
-// Rotating a placement by 90 degrees swaps the extents of its collision boxes in the world: a barracks long along X becomes long along Z.
+// A placement turned 90 degrees keeps its solids' sizes, carries their yaw, and puts the object where it was placed: a barracks
+// long along X becomes long along Z.
 @(test)
-test_collision_boxes_follow_the_placement_rotation :: proc(t: ^testing.T) {
-	upright := Placement_Collision_Boxes(Placement{kind = .Barracks, x = 0, z = 0, yaw_degrees = 0})
+test_solids_follow_the_placement_rotation :: proc(t: ^testing.T) {
+	upright := Placement_Solids(Placement{kind = .Barracks, x = 0, z = 0, yaw_degrees = 0})
 	defer delete(upright)
-	turned := Placement_Collision_Boxes(Placement{kind = .Barracks, x = 10, z = -5, yaw_degrees = 90})
+	turned := Placement_Solids(Placement{kind = .Barracks, x = 10, z = -5, yaw_degrees = 90})
 	defer delete(turned)
 	testing.expect(t, len(upright) > 0 && len(turned) == len(upright))
-	extent :: proc(boxes: []Procedural.Collision_Box) -> (size, center: [3]f32) {
-		lowest, highest := boxes[0].lowest, boxes[0].highest
-		for box in boxes {
-			lowest = {min(lowest.x, box.lowest.x), min(lowest.y, box.lowest.y), min(lowest.z, box.lowest.z)}
-			highest = {max(highest.x, box.highest.x), max(highest.y, box.highest.y), max(highest.z, box.highest.z)}
+	extent :: proc(solids: []World.Solid) -> (size, center: [3]f32) {
+		lowest, highest := [3]f32{max(f32), max(f32), max(f32)}, [3]f32{min(f32), min(f32), min(f32)}
+		for solid in solids {
+			for corner in 0 ..< 8 {
+				local := [3]f32{solid.half_extents.x * (1 if corner & 1 != 0 else -1), solid.half_extents.y * (1 if corner & 2 != 0 else -1), solid.half_extents.z * (1 if corner & 4 != 0 else -1)}
+				world := solid.center + World.rotate_about_y(local, solid.yaw_radians)
+				lowest = {min(lowest.x, world.x), min(lowest.y, world.y), min(lowest.z, world.z)}
+				highest = {max(highest.x, world.x), max(highest.y, world.y), max(highest.z, world.z)}
+			}
 		}
 		return highest - lowest, (highest + lowest) / 2
 	}
@@ -125,20 +131,20 @@ test_collision_boxes_follow_the_placement_rotation :: proc(t: ^testing.T) {
 }
 
 @(test)
-test_layout_collision_boxes_cover_every_placement_at_the_ground_height :: proc(t: ^testing.T) {
+test_layout_solids_cover_every_placement_at_the_ground_height :: proc(t: ^testing.T) {
 	layout := Layout_Create(7, PLATEAU_RADIUS_METERS)
 	defer Layout_Destroy(&layout)
-	boxes := Layout_World_Boxes(layout, 10)
-	defer delete(boxes)
+	solids := Layout_Solids(layout, 10)
+	defer delete(solids)
 	expected := 0
 	for placement in layout.placements {
-		own := Placement_Collision_Boxes(placement)
+		own := Placement_Solids(placement)
 		expected += len(own)
 		delete(own)
 	}
-	testing.expect_value(t, len(boxes), expected)
-	for box in boxes {
-		testing.expect(t, box.lowest.y >= 10 - 0.3 - 1e-3) // On the plateau, allowing the catalogue's footings 0.3 m into it.
-		testing.expect(t, box.highest.y > box.lowest.y)
+	testing.expect_value(t, len(solids), expected)
+	for solid in solids {
+		testing.expect(t, solid.center.y - solid.half_extents.y >= 10 - 0.3 - 1e-3) // On the plateau, allowing the catalogue's footings 0.3 m into it.
+		testing.expect(t, solid.half_extents.y > 0)
 	}
 }

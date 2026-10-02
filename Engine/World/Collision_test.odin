@@ -1,6 +1,5 @@
 package World
 
-import "../Procedural"
 import "core:math"
 import "core:testing"
 
@@ -23,7 +22,7 @@ walk :: proc(controller: ^Controller, world: ^Collision_World, ground: Ground, w
 test_a_wall_stops_the_controller :: proc(t: ^testing.T) {
 	world: Collision_World
 	defer Collision_World_Destroy(&world)
-	append(&world.boxes, Procedural.Collision_Box{{5, 0, -10}, {6, 3, 10}})
+	append(&world.boxes, Box_Solid({5, 0, -10}, {6, 3, 10}))
 	controller := Controller_Create({0, 0, 0})
 	walk(&controller, &world, FLAT, {5, 0}, 3)
 	testing.expect(t, controller.position.x + CONTROLLER_RADIUS_METERS <= 5.001)
@@ -34,7 +33,7 @@ test_a_wall_stops_the_controller :: proc(t: ^testing.T) {
 test_the_controller_slides_along_a_wall :: proc(t: ^testing.T) {
 	world: Collision_World
 	defer Collision_World_Destroy(&world)
-	append(&world.boxes, Procedural.Collision_Box{{5, 0, -10}, {6, 3, 30}})
+	append(&world.boxes, Box_Solid({5, 0, -10}, {6, 3, 30}))
 	controller := Controller_Create({4, 0, 0})
 	walk(&controller, &world, FLAT, {5, 5}, 2) // Diagonally into the wall.
 	testing.expect(t, controller.position.x + CONTROLLER_RADIUS_METERS <= 5.001)
@@ -45,8 +44,8 @@ test_the_controller_slides_along_a_wall :: proc(t: ^testing.T) {
 test_small_ledges_are_stepped_onto_and_tall_ones_block :: proc(t: ^testing.T) {
 	world: Collision_World
 	defer Collision_World_Destroy(&world)
-	append(&world.boxes, Procedural.Collision_Box{{3, 0, -5}, {6, 0.3, 5}}) // A kerb.
-	append(&world.boxes, Procedural.Collision_Box{{-6, 0, -5}, {-3, 1.0, 5}}) // A wall-high block.
+	append(&world.boxes, Box_Solid({3, 0, -5}, {6, 0.3, 5})) // A kerb.
+	append(&world.boxes, Box_Solid({-6, 0, -5}, {-3, 1.0, 5})) // A wall-high block.
 	over_kerb := Controller_Create({0, 0, 0})
 	walk(&over_kerb, &world, FLAT, {3, 0}, 1.5)
 	testing.expect(t, over_kerb.position.x > 3.5 && abs(over_kerb.position.y - 0.3) < 1e-3 && over_kerb.on_ground)
@@ -91,7 +90,7 @@ test_a_jump_follows_the_analytic_parabola :: proc(t: ^testing.T) {
 test_a_huge_step_does_not_tunnel_through_a_thin_wall :: proc(t: ^testing.T) {
 	world: Collision_World
 	defer Collision_World_Destroy(&world)
-	append(&world.boxes, Procedural.Collision_Box{{5, 0, -10}, {5.1, 3, 10}})
+	append(&world.boxes, Box_Solid({5, 0, -10}, {5.1, 3, 10}))
 	controller := Controller_Create({0, 0, 0})
 	for _ in 0 ..< 10 do Controller_Step(&controller, world, FLAT, {30, 0}, false, 0.2) // 6 m per step, far more than the wall is thick.
 	testing.expect(t, controller.position.x + CONTROLLER_RADIUS_METERS <= 5.001)
@@ -101,7 +100,7 @@ test_a_huge_step_does_not_tunnel_through_a_thin_wall :: proc(t: ^testing.T) {
 test_the_controller_cannot_walk_into_a_building :: proc(t: ^testing.T) {
 	world: Collision_World
 	defer Collision_World_Destroy(&world)
-	for box in ([]Procedural.Collision_Box{{{-9, 0, -3}, {9, 3, 3}}}) do append(&world.boxes, box)
+	append(&world.boxes, Box_Solid({-9, 0, -3}, {9, 3, 3}))
 	for heading in 0 ..< 24 {
 		angle := f32(heading) * math.PI / 12
 		controller := Controller_Create({math.cos(angle) * 20, 0, math.sin(angle) * 20})
@@ -115,7 +114,7 @@ test_the_controller_cannot_walk_into_a_building :: proc(t: ^testing.T) {
 test_controller_is_deterministic :: proc(t: ^testing.T) {
 	world: Collision_World
 	defer Collision_World_Destroy(&world)
-	append(&world.boxes, Procedural.Collision_Box{{5, 0, -10}, {6, 3, 10}})
+	append(&world.boxes, Box_Solid({5, 0, -10}, {6, 3, 10}))
 	first, second := Controller_Create({0, 0, 1}), Controller_Create({0, 0, 1})
 	walk(&first, &world, FLAT, {4, 2}, 2)
 	walk(&second, &world, FLAT, {4, 2}, 2)

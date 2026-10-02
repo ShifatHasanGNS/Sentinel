@@ -99,8 +99,8 @@ test_rays_against_the_terrain :: proc(t: ^testing.T) {
 test_the_world_ray_returns_the_nearest_of_box_and_terrain :: proc(t: ^testing.T) {
 	world: Collision_World
 	defer Collision_World_Destroy(&world)
-	append(&world.boxes, Procedural.Collision_Box{{8, 0, -2}, {9, 4, 2}})
-	append(&world.boxes, Procedural.Collision_Box{{3, 0, -2}, {4, 4, 2}})
+	append(&world.boxes, Box_Solid({8, 0, -2}, {9, 4, 2}))
+	append(&world.boxes, Box_Solid({3, 0, -2}, {4, 4, 2}))
 	ground := Ground{height_at = flat_ground}
 	level := Raycast_World(world, ground, {0, 1, 0}, {1, 0, 0}, 50)
 	testing.expect(t, level.hit && level.kind == .Box && level.box_index == 1 && abs(level.distance - 3) < 1e-4) // The nearer box, not the one behind.

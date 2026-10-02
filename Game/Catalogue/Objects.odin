@@ -129,6 +129,12 @@ add_box :: proc(parts: ^Parts, size, position: [3]f32, material: Materials.Surfa
 	append(parts, Procedural.Part{primitive = Procedural.Box(size), position = position, rotation_degrees = rotation, material = layer(material), emission = emission, solid = solid})
 }
 
+// An invisible collision box: the volume a body cannot enter (a chain-link panel is mostly air, but you cannot walk through it).
+@(private = "package")
+add_collision_box :: proc(parts: ^Parts, size, position: [3]f32) {
+	append(parts, Procedural.Part{primitive = Procedural.Box(size), position = position, collision_only = true})
+}
+
 @(private = "package")
 add_part :: proc(parts: ^Parts, part: Procedural.Part) {
 	append(parts, part)

@@ -115,3 +115,7 @@
 | Per-chunk prop culling (in view, or near enough to cast a shadow into view) | `Game/Sandbox/Sandbox.odin` : `collect_instances`, `chunk_matters` |
 | The player's own body and held weapon | `Game/Sandbox/Play.odin` : `animate_body`, `add_held_weapon` |
 | Player health regeneration | `Game/Gameplay/Battle.odin` : `regenerate_player` |
+| Oriented solid boxes (exact at any heading), ray and body tests against them | `Engine/World/Solid.odin` : `Solid`, `Ray_Solid`, `Solid_From_Object_Box`; `Engine/World/Collision.odin` |
+| Temporary solids (trees, rocks near the player) | `Game/Sandbox/Play.odin` : `fill_prop_solids` |
+| Invisible collision boxes for thin objects (fence panel) | `Engine/Procedural/Assembly.odin` : `Part.collision_only`; `Game/Catalogue/Objects.odin` : `add_collision_box` |
+| Placement and layout solids | `Game/Base/Footprint.odin` : `Placement_Solids`, `Layout_Solids` |

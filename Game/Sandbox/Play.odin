@@ -15,6 +15,11 @@ import la "core:math/linalg"
 import "core:strings"
 
 PLAY_FIELD_OF_VIEW_DEGREES :: 72.0
+PROP_COLLISION_RADIUS_METERS :: 30.0 // Trees and rocks within this distance of the player are solid.
+TREE_TRUNK_HALF_WIDTH_METERS :: 0.2
+TREE_HEIGHT_METERS :: 4.0
+ROCK_HALF_WIDTH_METERS :: 0.8
+ROCK_HEIGHT_METERS :: 1.0
 PLAY_NEAR_PLANE_METERS :: 0.1
 BODY_BACK_METERS :: 0.25 // The body stands this far behind the eye so the head is not in the camera,
 BODY_RIGHT_METERS :: 0.2 // a little to the right so the held weapon enters the view from the lower right,
@@ -67,7 +72,7 @@ terrain_height :: proc(data: rawptr, x, z: f32) -> f32 {
 play_create :: proc(sandbox: ^Sandbox, demo: bool, fly: bool) -> (ok: bool) {
 	play := &sandbox.play
 	base_height := sandbox.terrain.base_height_meters
-	boxes := Base.Layout_World_Boxes(sandbox.base.layout, base_height)
+	boxes := Base.Layout_Solids(sandbox.base.layout, base_height)
 	defer delete(boxes)
 	ground := World.Ground{height_at = terrain_height, data = sandbox.terrain}
 	spawn := [3]f32{0, 0, 100}
@@ -136,6 +141,7 @@ spawn_garrison :: proc(battle: ^Gameplay.Battle, terrain: ^Procedural.Terrain) {
 // Tab flips between playing and the free debug camera; then the simulation advances one frame.
 play_update :: proc(sandbox: ^Sandbox, input: ^Platform.Input, delta_seconds: f32) {
 	play := &sandbox.play
+	fill_prop_solids(sandbox)
 	tab_down := Platform.Input_Key_Down(input, .Tab)
 	if tab_down && !play.tab_was_down do play.mode = .Fly if play.mode == .Play else .Play
 	play.tab_was_down = tab_down
@@ -162,6 +168,7 @@ play_update :: proc(sandbox: ^Sandbox, input: ^Platform.Input, delta_seconds: f3
 
 // The benchmark flies a fixed circuit but the soldiers still think, so their cost is measured.
 play_update_idle :: proc(sandbox: ^Sandbox, delta_seconds: f32) {
+	fill_prop_solids(sandbox)
 	battle_update_unattended(&sandbox.play.battle, delta_seconds)
 }
 
@@ -386,4 +393,33 @@ draw_death_screen :: proc(hud: ^Render.Hud, w, h, scale: f32) {
 	title, hint := "YOU DIED", "PRESS ENTER TO RESPAWN"
 	Render.Hud_Text(hud, (w - Render.Hud_Text_Width(title, scale * 3)) / 2, h / 2 - 16 * scale, title, scale * 3, {0.9, 0.15, 0.1, 1})
 	Render.Hud_Text(hud, (w - Render.Hud_Text_Width(hint, scale)) / 2, h / 2 + 12 * scale, hint, scale, {1, 1, 1, 0.9})
+}
+
+// The scattered props near the player become this frame's temporary solids: trunks and boulders block, bushes do not.
+@(private = "file")
+fill_prop_solids :: proc(sandbox: ^Sandbox) {
+	collision := &sandbox.play.battle.collision
+	clear(&collision.temporary)
+	player := sandbox.play.battle.player.controller.position
+	for _, &chunk in sandbox.chunks {
+		for point in chunk.scatter {
+			if abs(point.position.x - player.x) > PROP_COLLISION_RADIUS_METERS || abs(point.position.z - player.z) > PROP_COLLISION_RADIUS_METERS do continue
+			if solid, solid_ok := prop_solid(point); solid_ok do append(&collision.temporary, solid)
+		}
+	}
+}
+
+@(private = "file")
+prop_solid :: proc(point: Procedural.Scatter_Point) -> (solid: World.Solid, ok: bool) {
+	switch {
+	case point.variant < TREE_VARIANT_LIMIT:
+		half := TREE_TRUNK_HALF_WIDTH_METERS * point.scale
+		height := TREE_HEIGHT_METERS * point.scale
+		return World.Solid{center = point.position + {0, height / 2, 0}, half_extents = {half, height / 2, half}, yaw_radians = point.yaw_radians}, true
+	case point.variant < ROCK_VARIANT_LIMIT:
+		half := ROCK_HALF_WIDTH_METERS * point.scale
+		height := ROCK_HEIGHT_METERS * point.scale
+		return World.Solid{center = point.position + {0, height / 2, 0}, half_extents = {half, height / 2, half}, yaw_radians = point.yaw_radians}, true
+	}
+	return {}, false
 }

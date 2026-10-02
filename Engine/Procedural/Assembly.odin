@@ -96,6 +96,7 @@ Part :: struct {
 	material:         i32, // Layer in the baked material arrays.
 	emission:         [3]f32, // Linear radiance the part gives off (lit windows, lamps).
 	solid:            bool, // Contributes a collision box.
+	collision_only:   bool, // The collision box only: nothing is drawn. For thin things whose wires or bars a body must not pass between.
 }
 
 Collision_Box :: struct {
@@ -125,8 +126,8 @@ Assembly_Build :: proc(parts: []Part) -> (assembly: Assembly) {
 			Mesh_Deform(&mesh, deformers[index:index + 1])
 		}
 		transform := part_transform(part)
-		Mesh_Append(&group_for(&assembly, part.material, part.emission).mesh, mesh, transform)
-		if part.solid do append(&assembly.collision_boxes, transformed_bounds(mesh, transform))
+		if !part.collision_only do Mesh_Append(&group_for(&assembly, part.material, part.emission).mesh, mesh, transform)
+		if part.solid || part.collision_only do append(&assembly.collision_boxes, transformed_bounds(mesh, transform))
 	}
 	return assembly
 }

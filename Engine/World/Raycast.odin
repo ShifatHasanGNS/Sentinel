@@ -124,16 +124,20 @@ World_Hit :: struct {
 	box_index: int,
 }
 
-// The nearest thing a ray strikes: any collision box, or the terrain.
+@(private = "file")
+closer_solid_hit :: proc(result: ^World_Hit, origin, direction: [3]f32, solid: Solid, index: int, nearest: f32) -> f32 {
+	if solid.disabled do return nearest
+	hit := Ray_Solid(origin, direction, solid)
+	if !hit.hit || hit.distance > nearest do return nearest
+	result^ = World_Hit{ray = hit, kind = .Box, box_index = index}
+	return hit.distance
+}
+
+// The nearest thing a ray strikes: any solid, or the terrain. box_index counts the long-lived solids first, then the temporary ones.
 Raycast_World :: proc(world: Collision_World, ground: Ground, origin, direction: [3]f32, max_distance: f32) -> (result: World_Hit) {
 	nearest := max_distance
-	for box, index in world.boxes {
-		hit := Ray_Box(origin, direction, box)
-		if hit.hit && hit.distance <= nearest {
-			nearest = hit.distance
-			result = World_Hit{ray = hit, kind = .Box, box_index = index}
-		}
-	}
+	for solid, index in world.boxes do nearest = closer_solid_hit(&result, origin, direction, solid, index, nearest)
+	for solid, index in world.temporary do nearest = closer_solid_hit(&result, origin, direction, solid, len(world.boxes) + index, nearest)
 	terrain := Ray_Terrain(origin, direction, ground, nearest)
 	if terrain.hit && terrain.distance <= nearest do result = World_Hit{ray = terrain, kind = .Terrain}
 	return result
