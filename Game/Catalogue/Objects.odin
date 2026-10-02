@@ -135,6 +135,12 @@ add_collision_box :: proc(parts: ^Parts, size, position: [3]f32) {
 	append(parts, Procedural.Part{primitive = Procedural.Box(size), position = position, collision_only = true})
 }
 
+// A box with a subdivided surface and a gentle bulge: pressed-sheet body panels are slightly domed, not razor-flat.
+@(private = "package")
+add_rounded_box :: proc(parts: ^Parts, size, position: [3]f32, material: Materials.Surface_Material, bulge := f32(0.05)) {
+	append(parts, Procedural.Part{primitive = Procedural.Box(size, {6, 6, 6}), position = position, deformers = {0 = Procedural.Bulge{bulge}}, material = layer(material), solid = true})
+}
+
 @(private = "package")
 add_part :: proc(parts: ^Parts, part: Procedural.Part) {
 	append(parts, part)

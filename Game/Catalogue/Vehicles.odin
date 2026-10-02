@@ -114,9 +114,9 @@ jeep_spec :: proc() -> (spec: Vehicle_Spec) {
 		for z in ([2]f32{-1.5, 1.5}) do append(&spec.wheel_mounts, Wheel_Mount{{x, 0.45, z}, z > 0})
 	}
 	parts := &spec.body
-	add_box(parts, {2, 0.55, 4.6}, {0, 0.8, 0}, .Olive_Paint)
-	add_box(parts, {1.9, 0.35, 1.5}, {0, 1.2, 1.5}, .Olive_Paint)
-	add_box(parts, {1.9, 0.7, 2.2}, {0, 1.45, -0.5}, .Olive_Paint)
+	add_rounded_box(parts, {2, 0.55, 4.6}, {0, 0.8, 0}, .Olive_Paint)
+	add_rounded_box(parts, {1.9, 0.35, 1.5}, {0, 1.2, 1.5}, .Olive_Paint, 0.08)
+	add_rounded_box(parts, {1.9, 0.7, 2.2}, {0, 1.45, -0.5}, .Olive_Paint, 0.07)
 	add_box(parts, {1.95, 0.1, 2.3}, {0, 1.85, -0.5}, .Olive_Paint)
 	add_box(parts, {1.8, 0.55, 0.06}, {0, 1.5, 0.62}, .Glass, false)
 	for x in ([2]f32{-0.96, 0.96}) do add_box(parts, {0.05, 0.5, 1.0}, {x, 1.5, -0.5}, .Glass, false)
@@ -153,10 +153,10 @@ cargo_truck_spec :: proc() -> (spec: Vehicle_Spec) {
 	}
 	parts := &spec.body
 	add_box(parts, {2.2, 0.45, 7}, {0, 0.95, 0}, .Olive_Paint)
-	add_box(parts, {2.3, 1.6, 1.9}, {0, 1.95, 2.7}, .Olive_Paint)
+	add_rounded_box(parts, {2.3, 1.6, 1.9}, {0, 1.95, 2.7}, .Olive_Paint, 0.04)
 	add_box(parts, {2.35, 0.1, 1.95}, {0, 2.8, 2.7}, .Olive_Paint, false)
 	add_box(parts, {2.1, 0.7, 0.06}, {0, 2.2, 3.66}, .Glass, false)
-	add_box(parts, {2.1, 0.9, 1.3}, {0, 1.4, 4}, .Olive_Paint)
+	add_rounded_box(parts, {2.1, 0.9, 1.3}, {0, 1.4, 4}, .Olive_Paint, 0.07)
 	add_box(parts, {2.3, 0.25, 0.2}, {0, 0.75, 4.7}, .Rusted_Metal, false)
 	add_box(parts, {2.3, 0.2, 4.7}, {0, 1.3, -1.4}, .Wood)
 	for x in ([2]f32{-1.15, 1.15}) do add_box(parts, {0.1, 0.6, 4.7}, {x, 1.7, -1.4}, .Olive_Paint, false)
@@ -190,9 +190,9 @@ armored_carrier_spec :: proc() -> (spec: Vehicle_Spec) {
 		for z in ([4]f32{-2.4, -0.8, 0.8, 2.4}) do append(&spec.wheel_mounts, Wheel_Mount{{x, 0.5, z}, z > 0})
 	}
 	parts := &spec.body
-	add_box(parts, {2.7, 1.2, 6.2}, {0, 1.2, 0}, .Olive_Paint)
+	add_rounded_box(parts, {2.7, 1.2, 6.2}, {0, 1.2, 0}, .Olive_Paint, 0.04)
 	add_part(parts, Procedural.Part{primitive = Procedural.Wedge({2.7, 1.2, 1.8}), position = {0, 1.2, 4}, material = layer(.Olive_Paint), solid = true})
-	add_box(parts, {2.5, 0.7, 3.5}, {0, 2.15, -0.8}, .Olive_Paint)
+	add_rounded_box(parts, {2.5, 0.7, 3.5}, {0, 2.15, -0.8}, .Olive_Paint, 0.05)
 	add_box(parts, {0.5, 0.15, 0.1}, {-0.7, 2.55, 1.0}, .Glass, false)
 	for x in ([2]f32{-0.8, 0.8}) {
 		add_part(parts, Procedural.Part{primitive = Procedural.Sphere(0.1, 8, 4), position = {x, 0.95, 4.2}, material = layer(.Glass), emission = {1, 0.95, 0.8}})
@@ -225,7 +225,7 @@ battle_tank_spec :: proc() -> (spec: Vehicle_Spec) {
 		for index in 0 ..< 7 do append(&spec.wheel_mounts, Wheel_Mount{{x, 0.4, -2.7 + f32(index) * 0.9}, false})
 	}
 	parts := &spec.body
-	add_box(parts, {3, 0.9, 6.2}, {0, 1.15, 0}, .Olive_Paint)
+	add_rounded_box(parts, {3, 0.9, 6.2}, {0, 1.15, 0}, .Olive_Paint, 0.035)
 	add_part(parts, Procedural.Part{primitive = Procedural.Wedge({3, 0.7, 1.5}), position = {0, 1.25, 3.85}, material = layer(.Olive_Paint), solid = true})
 	for x in ([2]f32{-1.5, 1.5}) do add_box(parts, {0.65, 0.9, 6.9}, {x, 0.45, 0}, .Rubber)
 	add_part(&spec.turret, Procedural.Part{primitive = Procedural.Sphere(1, 20, 10), stretch = {1.6, 0.5, 1.9}, material = layer(.Olive_Paint), solid = true})
