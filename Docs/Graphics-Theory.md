@@ -62,3 +62,6 @@ A foot's path over one cycle: during stance (fraction `duty` of the cycle) it sl
 
 ## Critically damped spring
 x'' = -2 w x' - w^2 x has the exact solution x(t) = (c1 + c2 t) e^(-wt) with c1 = x0 and c2 = v0 + w x0. It returns fastest without overshoot and, being exact, is independent of the time step.
+
+## Bloom
+Real lenses scatter a little light from very bright points into a halo. We approximate the wide point-spread function with a sum of blurs of growing radius: the HDR scene is downsampled through 5 half-resolution levels (13-tap filter, weights 0.5 for the centre 2x2 group and 0.125 for each corner group, which removes the flicker of small bright pixels), then each level is tent-filtered (1 2 1 / 2 4 2 / 1 2 1, divided by 16) and added onto the next larger one. A soft-knee threshold `max(s, L - T)/L` with `s = clamp(L - T + k, 0, 2k)^2 / (4k)` on the first level keeps only radiance above T = 1.2. The tonemap pass adds `strength * bloom` before exposure and ACES, so the halo is tonemapped with the scene.

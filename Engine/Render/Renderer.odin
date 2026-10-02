@@ -25,6 +25,7 @@ Renderer :: struct {
 	gbuffer:         GPU.Framebuffer, // albedo + model, normal + roughness + metallic, emission + occlusion, depth
 	hdr:             GPU.Framebuffer,
 	ldr:             GPU.Framebuffer,
+	bloom:           Bloom,
 	geometry:        GPU.Shader,
 	geometry_instanced: GPU.Shader,
 	base_lighting:   GPU.Shader,
@@ -48,6 +49,7 @@ Renderer_Create :: proc(width, height: i32) -> (renderer: Renderer, ok: bool) {
 	renderer.gbuffer = GPU.Framebuffer_Create({width, height, {.SRGB8_A8, .RGBA16F, .RGBA16F}, .Depth32F})
 	renderer.hdr = GPU.Framebuffer_Create({width, height, {.RGBA16F}, .None})
 	renderer.ldr = GPU.Framebuffer_Create({width, height, {.RGBA8}, .None})
+	renderer.bloom = Bloom_Create(width, height) or_return
 	renderer.fullscreen = GPU.Fullscreen_Pass_Create()
 	renderer.shadows = Shadow_Map_Create(SHADOW_MAP_SIZE) or_return
 	renderer.sky_lut = Sky_Lut_Create()
@@ -64,6 +66,7 @@ Renderer_Destroy :: proc(renderer: ^Renderer) {
 	Shadow_Map_Destroy(&renderer.shadows)
 	Mesh_Destroy(&renderer.light_volume)
 	GPU.Fullscreen_Pass_Destroy(&renderer.fullscreen)
+	Bloom_Destroy(&renderer.bloom)
 	GPU.Framebuffer_Destroy(&renderer.ldr)
 	GPU.Framebuffer_Destroy(&renderer.hdr)
 	GPU.Framebuffer_Destroy(&renderer.gbuffer)
@@ -222,10 +225,13 @@ bind_gbuffer :: proc(shader: ^GPU.Shader, renderer: ^Renderer, camera: Camera) {
 @(private = "file")
 post_pass :: proc(renderer: ^Renderer, frame: Frame) {
 	width, height := renderer.gbuffer.width, renderer.gbuffer.height
+	if frame.bloom_strength > 0 do Bloom_Render(&renderer.bloom, &renderer.hdr.colors[0], width, height, &renderer.fullscreen)
 	GPU.Framebuffer_Bind(&renderer.ldr)
 	GPU.Shader_Use(&renderer.tonemap)
 	GPU.Texture_Units_Reset()
 	GPU.Shader_Set(&renderer.tonemap, "u_Hdr", GPU.Texture_Bind_Next(&renderer.hdr.colors[0], GPU.Sampler_Linear_Clamp))
+	GPU.Shader_Set(&renderer.tonemap, "u_Bloom", GPU.Texture_Bind_Next(&renderer.bloom.levels[0].colors[0], GPU.Sampler_Linear_Clamp))
+	GPU.Shader_Set(&renderer.tonemap, "u_BloomStrength", frame.bloom_strength)
 	GPU.Shader_Set(&renderer.tonemap, "u_Exposure", frame.exposure)
 	GPU.Shader_Set(&renderer.tonemap, "u_VignetteStrength", frame.vignette_strength)
 	GPU.Fullscreen_Pass_Draw(&renderer.fullscreen)

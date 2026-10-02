@@ -15,6 +15,7 @@ BASE_SEED :: 5
 LOAD_RADIUS_CHUNKS :: 4
 UNLOAD_RADIUS_CHUNKS :: 6
 CHUNK_BUILDS_PER_FRAME_MAX :: 1
+BLOOM_STRENGTH :: 0.06
 SHADOW_DISTANCE_METERS :: 140.0
 HOURS_PER_REAL_SECOND :: 0.02 // A full day passes in twenty minutes.
 FIELD_OF_VIEW_DEGREES :: 65.0
@@ -128,6 +129,7 @@ Sandbox_Render :: proc(sandbox: ^Sandbox, window: Platform.Window) {
 		sun = daylight.sun,
 		local_lights = lights[:],
 		sky = daylight.sky,
+		bloom_strength = BLOOM_STRENGTH,
 		sun_shadows = true,
 		shadow_distance_meters = SHADOW_DISTANCE_METERS,
 		materials = &sandbox.materials,
