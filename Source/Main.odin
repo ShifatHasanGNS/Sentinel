@@ -21,6 +21,7 @@ main :: proc() {
 	switch config.scene {
 	case "showroom": run_showroom(&window, &input, config)
 	case "catalogue": run_catalogue(&window, &input, config)
+	case "soldiers": run_soldiers(&window, &input, config)
 	case: run_sandbox(&window, &input, config)
 	}
 }
@@ -69,6 +70,21 @@ run_catalogue :: proc(window: ^Platform.Window, input: ^Platform.Input, config: 
 		},
 		render = proc(user: rawptr, window: Platform.Window) {
 			Showroom.Catalogue_View_Render((^Showroom.Catalogue_View)(user), window)
+		},
+	})
+}
+
+run_soldiers :: proc(window: ^Platform.Window, input: ^Platform.Input, config: Config) {
+	lineup, ok := Showroom.Soldier_Lineup_Create(window.framebuffer_width, window.framebuffer_height, config.time_hours)
+	if !ok do os.exit(1)
+	defer Showroom.Soldier_Lineup_Destroy(&lineup)
+	Run_Loop(window, input, config, Scene{
+		user = &lineup,
+		update = proc(user: rawptr, clock: Platform.Clock, input: ^Platform.Input, scripted_seconds: f32) {
+			Showroom.Soldier_Lineup_Update((^Showroom.Soldier_Lineup)(user), clock)
+		},
+		render = proc(user: rawptr, window: Platform.Window) {
+			Showroom.Soldier_Lineup_Render((^Showroom.Soldier_Lineup)(user), window)
 		},
 	})
 }

@@ -3,7 +3,7 @@ package main
 import "core:strconv"
 
 Config :: struct {
-	scene:            string, // "sandbox", "showroom" or "catalogue".
+	scene:            string, // "sandbox", "showroom", "catalogue" or "soldiers".
 	view:             string, // Sandbox starting camera: base, gate, yard, airfield, command (default: overview).
 	object:           string, // With --scene catalogue: show only this object (e.g. Jeep).
 	capture_frames:   int,

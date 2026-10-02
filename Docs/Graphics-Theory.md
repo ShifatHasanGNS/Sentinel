@@ -53,3 +53,12 @@ Gribb-Hartmann: each of the six frustum planes is the fourth row of the view-pro
 
 ## Eye adaptation
 The exposure multiplies scene radiance before tone mapping. It rises exponentially as the sun sinks (exposure = 10^darkness), so night scenes stay readable the way the eye adapts.
+
+## Two-bone IK
+Place the middle joint (elbow, knee) so the end reaches a target. The two bones and the root-to-target line form a triangle with sides upper, lower and d = |target - root|; the law of cosines gives the angle at the root, cos(a) = (upper^2 + d^2 - lower^2) / (2 upper d). The joint lies that far along the line and off it toward a pole vector. d is clamped to [|upper - lower|, upper + lower], so an unreachable target gives a straight limb pointing at it.
+
+## Gait
+A foot's path over one cycle: during stance (fraction `duty` of the cycle) it slides back relative to the body at exactly the body's speed, so it stays fixed on the ground; during swing it eases forward along a raised arc. Stance covers `stride` in `duty * T` seconds at relative speed `speed`, hence T = stride / (duty * speed). With duty above 0.5 one foot is always planted.
+
+## Critically damped spring
+x'' = -2 w x' - w^2 x has the exact solution x(t) = (c1 + c2 t) e^(-wt) with c1 = x0 and c2 = v0 + w x0. It returns fastest without overshoot and, being exact, is independent of the time step.

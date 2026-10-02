@@ -81,4 +81,13 @@
 | Base ready to draw (instanced per object kind and material) | `Game/Base/BaseScene.odin` : `Base_Scene_Create`, `Base_Scene_Items`, `Base_Scene_Shadow_Items` |
 | Catalogue viewer (`--scene catalogue [--object Name]`) | `Game/Showroom/CatalogueView.odin` |
 | Sandbox camera presets (`--view base|gate|yard|airfield|command`) | `Game/Sandbox/Sandbox.odin` : `camera_for_view` |
+| Critically damped spring (hit reactions) | `Engine/World/Spring.odin` : `Spring_Step`, `Spring3_Step` |
+| Two-bone IK with pole vector | `Game/Characters/Ik.odin` : `Two_Bone_Ik` |
+| Gait: stride, cadence, foot paths without skating | `Game/Characters/Gait.odin` : `Gait_Foot`, `Gait_Cycle_Seconds` |
+| Humanoid skeleton and pose solver | `Game/Characters/Skeleton.odin` : `Pose_Solve`, `Rest_Pose`, `BONES` |
+| Soldier variants (palettes), body-segment part tables, frames onto the skeleton | `Game/Characters/Soldier.odin` : `Soldier_Segment_Assembly`, `Segment_Matrix`, `Weapon_Matrix` |
+| A character's animation state, hit reaction | `Game/Characters/Character.odin` : `Character_Step`, `Character_Hit`, `Character_Pose` |
+| Instanced rendering of any number of soldiers | `Game/Characters/CharacterRender.odin` : `Character_Renderer_Items` |
+| Weapon models | `Game/Weapons/Weapons.odin` : `Weapon_Build` |
+| Soldier line-up scene (`--scene soldiers`) | `Game/Showroom/SoldierLineup.odin` |
 
