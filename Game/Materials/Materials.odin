@@ -3,7 +3,7 @@ package Materials
 import "../../Engine/Procedural"
 import "core:slice"
 
-MATERIAL_TEXTURE_SIZE :: 512
+MATERIAL_TEXTURE_SIZE :: 1024
 
 // The enum value is the layer index in the baked arrays.
 Surface_Material :: enum i32 {

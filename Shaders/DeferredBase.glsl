@@ -16,6 +16,7 @@ out vec4 color;
 uniform Light u_Sun;
 uniform vec3 u_CameraForward;
 uniform bool u_SunShadows;
+const float FOG_DENSITY_PER_METER = 0.00035;
 uniform sampler2D u_Ssao;
 uniform bool u_SsaoEnabled;
 
@@ -39,5 +40,11 @@ void main() {
 	vec3 bounce_normal = normalize(mix(surface.normal, vec3(0.0, 1.0, 0.0), 0.6 * in_room));
 	occlusion *= room_scale;
 	vec3 ambient = ambient_light(surface.albedo, surface.roughness, surface.metallic, bounce_normal, view, occlusion);
-	color = vec4(sun + ambient + surface.emission, 1.0);
+	vec3 lit = sun + ambient + surface.emission;
+	// Aerial perspective: with distance d the surface's light is extinguished by exp(-k d) and the air in front adds its own
+	// in-scattered sky light, so far hills fade to the sky behind them (Beer-Lambert, one constant density).
+	float distance_meters = length(surface.position - u_CameraPosition);
+	float transmittance = exp(-FOG_DENSITY_PER_METER * distance_meters);
+	vec3 haze = sky_radiance(normalize(vec3(view.x, 0.0, view.z) * -1.0 + vec3(0.0, 0.02, 0.0)));
+	color = vec4(mix(haze, lit, transmittance), 1.0);
 }

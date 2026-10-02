@@ -57,12 +57,13 @@ Base_Scene_Destroy :: proc(scene: ^Base_Scene) {
 	Layout_Destroy(&scene.layout)
 }
 
-// Draw items for every group; the instances carry transform and material, the item carries emission.
-Base_Scene_Items :: proc(scene: ^Base_Scene, allocator := context.temp_allocator) -> (items: [dynamic]Render.Draw_Item) {
+// Draw items for every group; the instances carry transform and material, the item carries emission (scaled: lit windows and lamps
+// barely glow in daylight, where their light is lost against the sun).
+Base_Scene_Items :: proc(scene: ^Base_Scene, emission_scale: f32 = 1, allocator := context.temp_allocator) -> (items: [dynamic]Render.Draw_Item) {
 	items = make([dynamic]Render.Draw_Item, allocator)
 	for &kind_groups in scene.groups {
 		for &group in kind_groups {
-			append(&items, Render.Draw_Item{mesh = &group.mesh, model = la.MATRIX4F32_IDENTITY, uv_scale = {1, 1}, triplanar = true, illumination_model = .Cook_Torrance, emission = group.emission})
+			append(&items, Render.Draw_Item{mesh = &group.mesh, model = la.MATRIX4F32_IDENTITY, uv_scale = {1, 1}, triplanar = true, illumination_model = .Cook_Torrance, emission = group.emission * emission_scale})
 		}
 	}
 	return items

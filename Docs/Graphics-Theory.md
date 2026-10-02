@@ -77,3 +77,6 @@ A spot light renders the casters' depth through a perspective frustum along its 
 
 ## Indoor light (one-bounce radiosity stand-in)
 Direct light is exact (sun with cascaded shadows, point and spot lamps with shadow maps, emissive panels). Indirect light inside a room is approximated: daylight enters by windows and doors and bounces between walls until it arrives from every direction, so the sky ambient term inside a room is scaled by 0.5 and its normal is blended 60% toward up (outdoors a ceiling faces the dark ground and would be black; indoors the lit floor and walls light it). Lamps light only the room they are in (room box test in `Shaders/Include/Interior.glsl`). Full global illumination or ray tracing is not possible in OpenGL 4.1 on macOS (no compute shaders or ray queries); this is the cheap substitute.
+
+## Aerial perspective
+Light from a surface at distance d is attenuated by Beer-Lambert, T = exp(-k d), while the air in front adds in-scattered sky light: color = mix(haze, lit, T). The haze is the atmosphere's radiance toward the horizon (so it matches the sky), k = 0.00035 per meter (about 3 km visibility).
