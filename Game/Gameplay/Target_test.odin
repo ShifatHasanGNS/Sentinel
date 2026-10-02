@@ -62,3 +62,15 @@ test_a_destroyed_target_is_ignored_by_later_shots :: proc(t: ^testing.T) {
 	result := Resolve_Hitscan(&battle, {0, 1.5, 0}, {0, 0, 1}, 50, 100)
 	testing.expect(t, result.kind != .Target)
 }
+
+@(test)
+test_an_alarm_turns_idle_soldiers_within_range_toward_the_spot :: proc(t: ^testing.T) {
+	battle := Battle_Create(FLAT_GROUND, nil, {0, 0, -100}, 3)
+	defer Battle_Destroy(&battle)
+	Battle_Add_Enemy(&battle, .Enemy, {10, 0, 0}, 0, nil)
+	Battle_Add_Enemy(&battle, .Enemy, {200, 0, 0}, 0, nil)
+	testing.expect_value(t, battle.enemies[0].ai.state, Ai_State.Patrol)
+	Battle_Alert_Nearby(&battle, {0, 0, 0}, 50)
+	testing.expect_value(t, battle.enemies[0].ai.state, Ai_State.Alert)
+	testing.expect_value(t, battle.enemies[1].ai.state, Ai_State.Patrol) // Too far to hear it.
+}

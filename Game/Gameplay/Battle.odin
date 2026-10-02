@@ -124,6 +124,14 @@ Battle_Fire_Bullet :: proc(battle: ^Battle, origin, direction: [3]f32, damage, r
 	if result.kind != .None do append(&battle.effects, Effect{kind = .Impact, position = result.point, end = result.normal, lifetime = EFFECT_IMPACT_SECONDS})
 }
 
+// Everyone within `radius` of `position` who is not already fighting turns toward it (an alarm, a shout).
+Battle_Alert_Nearby :: proc(battle: ^Battle, position: [3]f32, radius: f32) {
+	for &enemy in battle.enemies {
+		if !Enemy_Is_Alive(enemy) do continue
+		if la.length(enemy.controller.position - position) <= radius do Enemy_Ai_Notice(&enemy.ai, position)
+	}
+}
+
 // A rocket or grenade-like shell in flight; it detonates on impact or at the end of its life like the player's.
 Battle_Spawn_Projectile :: proc(battle: ^Battle, kind: Weapons.Weapon_Kind, position, velocity: [3]f32) {
 	battle.noise_this_frame = true
@@ -223,6 +231,7 @@ update_player :: proc(battle: ^Battle, input: Player_Input, delta_seconds: f32) 
 	}
 	Player_Look(player, input.look)
 	if kind, chosen := input.select.?; chosen do player.current = kind
+	World.Controller_Set_Crouch(&player.controller, battle.collision, input.crouch)
 	World.Controller_Step(&player.controller, battle.collision, battle.ground, Player_Wish_Velocity(player^, input), input.jump, delta_seconds)
 	stats := Weapons.Weapon_Stats_For(player.current)
 	if Weapons.Weapon_Update(&player.weapons[player.current], stats, input.fire, input.reload, delta_seconds) do fire_player_weapon(battle, stats)
@@ -294,8 +303,8 @@ enemy_senses :: proc(battle: ^Battle, enemy: Enemy) -> (senses: Ai_Senses) {
 		blocker := World.Raycast_World(battle.collision, battle.ground, eye, to_player / distance, distance)
 		clear = !blocker.hit || blocker.distance > distance - 0.5
 	}
-	senses.sees_player = Can_See(eye, Enemy_Forward(enemy), player_eye, clear)
-	senses.heard_shot = battle.noise_this_frame && la.length(senses.player_position - enemy.controller.position) < HEARING_RANGE_METERS
+	senses.sees_player = Can_See(eye, Enemy_Forward(enemy), player_eye, clear, Player_Visibility(battle.player))
+	senses.heard_shot = la.length(senses.player_position - enemy.controller.position) < Player_Noise_Radius(battle.player, battle.noise_this_frame)
 	return senses
 }
 

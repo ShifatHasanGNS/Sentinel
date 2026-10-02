@@ -18,6 +18,7 @@ import "core:strings"
 
 PLAY_FIELD_OF_VIEW_DEGREES :: 72.0
 PROP_COLLISION_RADIUS_METERS :: 30.0 // Trees and rocks within this distance of the player are solid.
+CROUCHED_BODY :: 0.6 // How far the body model sinks into its crouch pose.
 TREE_TRUNK_HALF_WIDTH_METERS :: 0.2
 TREE_HEIGHT_METERS :: 4.0
 ROCK_HALF_WIDTH_METERS :: 0.8
@@ -53,6 +54,11 @@ Weapon_View_Group :: struct {
 Play :: struct {
 	battle:        Gameplay.Battle,
 	mission:       Mission_Play,
+	cameras:       [dynamic]Camera_Instance,
+	camera_meshes: Camera_Meshes,
+	alarm:         Mission.Alarm,
+	alarm_refresh_seconds: f32,
+	clock_seconds: f32,
 	soldiers:      Characters.Character_Renderer,
 	doors:         [dynamic]Base.Door,
 	door_renderer: Base.Door_Renderer,
@@ -95,6 +101,7 @@ play_create :: proc(sandbox: ^Sandbox, demo: bool, fly: bool, drive: string, int
 	spawn.y = terrain_height(sandbox.terrain, spawn.x, spawn.z)
 	play.battle = Gameplay.Battle_Create(ground, boxes[:], spawn, 99)
 	mission_create(play, sandbox, interactive && !demo && !fly)
+	cameras_create(play, sandbox)
 	play.doors = Base.Layout_Doors(sandbox.base.layout, base_height)
 	Base.Doors_Register(play.doors[:], &play.battle.collision)
 	play.door_renderer = Base.Door_Renderer_Create(play.doors[:])
@@ -118,6 +125,7 @@ play_create :: proc(sandbox: ^Sandbox, demo: bool, fly: bool, drive: string, int
 }
 
 play_destroy :: proc(play: ^Play) {
+	cameras_destroy(play)
 	mission_destroy(&play.mission)
 	vehicles_destroy(play)
 	Base.Door_Renderer_Destroy(&play.door_renderer)
@@ -199,7 +207,10 @@ play_update :: proc(sandbox: ^Sandbox, input: ^Platform.Input, delta_seconds: f3
 		}
 	}
 	update_vehicles(sandbox, delta_seconds)
-	if play.mode == .Play do mission_update(sandbox, interact_down, interact_pressed, delta_seconds)
+	if play.mode == .Play {
+		mission_update(sandbox, interact_down, interact_pressed, delta_seconds)
+		cameras_update(sandbox, delta_seconds)
+	}
 	if play.battle.player.shots_fired != play.shots_seen {
 		play.shots_seen = play.battle.player.shots_fired
 		play.recoil = RECOIL_KICK_METERS
@@ -235,6 +246,7 @@ collect_input :: proc(input: ^Platform.Input) -> (result: Gameplay.Player_Input)
 	result.fire = Platform.Input_Mouse_Down(input, .Left)
 	result.reload = Platform.Input_Key_Down(input, .R)
 	result.sprint = Platform.Input_Key_Down(input, .Left_Shift)
+	result.crouch = Platform.Input_Key_Down(input, .C)
 	result.jump = Platform.Input_Key_Down(input, .Space)
 	result.respawn = Platform.Input_Key_Down(input, .Enter)
 	keys := [5]Platform.Key{.Num_1, .Num_2, .Num_3, .Num_4, .Num_5}
@@ -297,6 +309,7 @@ play_items :: proc(sandbox: ^Sandbox, items, shadow_items: ^[dynamic]Render.Draw
 	}
 	for effect in play.battle.effects do add_effect(play, effect, items, &lights)
 	mission_items(play, items, &lights)
+	cameras_items(play, items)
 	if play.flashlight_on && play.mode == .Play {
 		player := play.battle.player
 		flashlight := Render.Light_Spot(Gameplay.Player_Eye(player) + Gameplay.Player_Forward(player) * 0.3, Gameplay.Player_Forward(player), {1, 0.95, 0.85}, FLASHLIGHT_INTENSITY, FLASHLIGHT_RANGE_METERS, 10, 24)
@@ -371,6 +384,7 @@ animate_body :: proc(play: ^Play, delta_seconds: f32) {
 	body.position = player.controller.position - flat * BODY_BACK_METERS + right * BODY_RIGHT_METERS + {0, BODY_RAISE_METERS, 0}
 	body.heading_radians = player.yaw_radians + math.PI
 	body.speed = la.length([2]f32{player.controller.velocity.x, player.controller.velocity.z})
+	body.crouch = CROUCHED_BODY if player.controller.crouching else 0
 	body.aim_direction = forward
 	Characters.Character_Step(body, delta_seconds)
 }
@@ -414,6 +428,7 @@ play_draw_hud :: proc(sandbox: ^Sandbox, width, height: i32) {
 	if _, can_board := play.boardable.?; play.mode == .Play && play.driving == nil && can_board && !Gameplay.Health_Is_Dead(player.health) do Render.Hud_Text(hud, (w - Render.Hud_Text_Width("E  ENTER VEHICLE", scale)) / 2, h * 0.62, "E  ENTER VEHICLE", scale, {1, 1, 1, 0.9})
 	else if play.mode == .Play && play.door_in_reach && !Gameplay.Health_Is_Dead(player.health) do Render.Hud_Text(hud, (w - Render.Hud_Text_Width("E  OPEN / CLOSE", scale)) / 2, h * 0.62, "E  OPEN / CLOSE", scale, {1, 1, 1, 0.9})
 	if Gameplay.Health_Is_Dead(player.health) do draw_death_screen(hud, w, h, scale)
+	cameras_draw_hud(play, w, scale)
 	mission_draw_hud(play, w, h, scale)
 	Render.Hud_Flush(hud, width, height)
 }

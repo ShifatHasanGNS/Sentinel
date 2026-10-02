@@ -137,3 +137,7 @@
 | Mission objectives state machine (enter, hack, radar, hostage, extraction) | `Game/Mission/Mission.odin` : `Mission_Update`, `Mission_Current_Objective` |
 | Destructible targets (the radar dish): bullets, blasts, shells | `Game/Gameplay/Target.odin`; `Game/Gameplay/Battle.odin` : `Battle_Add_Target`, `damage_target` |
 | Mission in the sandbox: hostage following, hack and rescue prompts, briefing and completion screens, extraction beacon | `Game/Sandbox/MissionPlay.odin` |
+| Security cameras: sweeping cone, range and line-of-sight sight test, suspicion timer, base-wide alarm | `Game/Mission/SecurityCamera.odin` : `Camera_Sees`, `Camera_Update`, `Alarm_Raise` |
+| Cameras in the world: placement on towers, HQ and guard posts, shootable, disabled by the hack, drawn sweeping; alarm alerts soldiers | `Game/Sandbox/SecurityCameras.odin` |
+| Stealth numbers: visibility and noise by stance and speed | `Game/Gameplay/Stealth.odin` : `Visibility`, `Noise_Radius` |
+| Crouching body (shorter, fits under beams, stands up only where clear) | `Engine/World/Collision.odin` : `Controller_Set_Crouch`, `Controller_Height` |

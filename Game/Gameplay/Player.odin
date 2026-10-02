@@ -6,6 +6,7 @@ import "core:math"
 import la "core:math/linalg"
 
 PLAYER_EYE_HEIGHT_METERS :: 1.65
+PLAYER_CROUCH_EYE_HEIGHT_METERS :: 0.95
 WALK_SPEED :: 4.0
 SPRINT_SPEED :: 6.5
 PLAYER_HEALTH :: 100
@@ -38,6 +39,7 @@ Player_Input :: struct {
 	fire:    bool,
 	reload:  bool,
 	sprint:  bool,
+	crouch:  bool, // Held: stay low (slower, quieter, harder to see).
 	respawn: bool,
 	select:  Maybe(Weapons.Weapon_Kind),
 }
@@ -62,7 +64,8 @@ Player_Respawn :: proc(player: ^Player) {
 }
 
 Player_Eye :: proc(player: Player) -> [3]f32 {
-	return player.controller.position + {0, PLAYER_EYE_HEIGHT_METERS, 0}
+	height: f32 = PLAYER_CROUCH_EYE_HEIGHT_METERS if player.controller.crouching else PLAYER_EYE_HEIGHT_METERS
+	return player.controller.position + {0, height, 0}
 }
 
 Player_Forward :: proc(player: Player) -> [3]f32 {
@@ -75,6 +78,7 @@ Player_Wish_Velocity :: proc(player: Player, input: Player_Input) -> [2]f32 {
 	right := [2]f32{math.cos(player.yaw_radians), -math.sin(player.yaw_radians)}
 	direction := forward * input.move.y + right * input.move.x
 	if la.length(direction) > 1 do direction = la.normalize(direction)
+	if player.controller.crouching do return direction * (WALK_SPEED * CROUCH_SPEED_FACTOR)
 	return direction * (SPRINT_SPEED if input.sprint else WALK_SPEED)
 }
 

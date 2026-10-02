@@ -7,6 +7,7 @@ GRAVITY_METERS_PER_SECOND_SQUARED :: 9.81
 JUMP_SPEED_METERS_PER_SECOND :: 4.6
 CONTROLLER_RADIUS_METERS :: 0.35
 CONTROLLER_HEIGHT_METERS :: 1.8
+CONTROLLER_CROUCH_HEIGHT_METERS :: 1.1
 STEP_HEIGHT_METERS :: 0.35 // Ledges up to this tall are stepped onto; taller ones are walls.
 GROUND_SNAP_METERS :: 0.35 // On the ground, drops up to this far are walked down; larger ones are falls.
 SUBSTEP_SECONDS_MAX :: 1.0 / 60 // Longer steps are split, so fast motion cannot skip over a thin wall.
@@ -34,6 +35,7 @@ Controller :: struct {
 	position:  [3]f32,
 	velocity:  [3]f32,
 	on_ground: bool,
+	crouching: bool, // A crouching body is shorter, so it fits under low beams and ceilings.
 }
 
 Controller_Create :: proc(position: [3]f32) -> Controller {
@@ -62,16 +64,17 @@ move_horizontally :: proc(controller: ^Controller, world: Collision_World, displ
 // so the body ends against the wall instead of up to one step short of it.
 @(private = "file")
 move_along_axis :: proc(controller: ^Controller, world: Collision_World, axis: [3]f32, distance: f32) {
+	height := Controller_Height(controller^)
 	if distance == 0 do return
 	full := controller.position + axis * distance
-	if !is_blocked(world, full) {
+	if !is_blocked(world, full, height) {
 		controller.position = full
 		return
 	}
 	free, blocked: f32 = 0, 1
 	for _ in 0 ..< 6 {
 		middle := (free + blocked) / 2
-		if is_blocked(world, controller.position + axis * (distance * middle)) do blocked = middle
+		if is_blocked(world, controller.position + axis * (distance * middle), height) do blocked = middle
 		else do free = middle
 	}
 	controller.position += axis * (distance * free)
@@ -80,17 +83,17 @@ move_along_axis :: proc(controller: ^Controller, world: Collision_World, axis: [
 // A solid blocks when it is tall enough to be a wall (its top above step height), reaches into the body's height band,
 // and the body's circle overlaps it on the ground plane.
 @(private = "file")
-is_blocked :: proc(world: Collision_World, position: [3]f32) -> bool {
-	for solid in world.boxes do if blocks(solid, position) do return true
-	for solid in world.temporary do if blocks(solid, position) do return true
+is_blocked :: proc(world: Collision_World, position: [3]f32, height: f32) -> bool {
+	for solid in world.boxes do if blocks(solid, position, height) do return true
+	for solid in world.temporary do if blocks(solid, position, height) do return true
 	return false
 }
 
 @(private = "file")
-blocks :: proc(solid: Solid, position: [3]f32) -> bool {
+blocks :: proc(solid: Solid, position: [3]f32, height: f32) -> bool {
 	if solid.disabled do return false
 	top, bottom := solid.center.y + solid.half_extents.y, solid.center.y - solid.half_extents.y
-	if top <= position.y + STEP_HEIGHT_METERS || bottom >= position.y + CONTROLLER_HEIGHT_METERS do return false
+	if top <= position.y + STEP_HEIGHT_METERS || bottom >= position.y + height do return false
 	return circle_overlaps_solid(position, solid)
 }
 
@@ -144,5 +147,18 @@ resolve_vertically :: proc(controller: ^Controller, world: Collision_World, grou
 
 // Whether a standing body at this position would overlap any solid (the same test the controller uses when it walks).
 Body_Blocked :: proc(world: Collision_World, position: [3]f32) -> bool {
-	return is_blocked(world, position)
+	return is_blocked(world, position, CONTROLLER_HEIGHT_METERS)
+}
+
+Controller_Height :: proc(controller: Controller) -> f32 {
+	return CONTROLLER_CROUCH_HEIGHT_METERS if controller.crouching else CONTROLLER_HEIGHT_METERS
+}
+
+// Crouching is always allowed; standing up only where the full height is clear, so a body under a low beam stays crouched.
+Controller_Set_Crouch :: proc(controller: ^Controller, world: Collision_World, crouch: bool) {
+	if crouch {
+		controller.crouching = true
+		return
+	}
+	if controller.crouching && !is_blocked(world, controller.position, CONTROLLER_HEIGHT_METERS) do controller.crouching = false
 }

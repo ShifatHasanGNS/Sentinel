@@ -71,10 +71,10 @@ Enemy_Ai_Notice :: proc(ai: ^Enemy_Ai, position: [3]f32) {
 }
 
 // The geometric part of sight: within range, within the cone about the facing direction (or very close), and nothing in the way.
-Can_See :: proc(eye, forward, target: [3]f32, line_is_clear: bool) -> bool {
+Can_See :: proc(eye, forward, target: [3]f32, line_is_clear: bool, range_scale: f32 = 1) -> bool {
 	to_target := target - eye
 	distance := la.length(to_target)
-	if !line_is_clear || distance > SIGHT_RANGE_METERS do return false
+	if !line_is_clear || distance > SIGHT_RANGE_METERS * range_scale do return false
 	if distance <= NEAR_AWARENESS_METERS do return true
 	return la.dot(to_target / distance, la.normalize(forward)) >= math.cos(math.to_radians(f32(FIELD_OF_VIEW_DEGREES) / 2))
 }

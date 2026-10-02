@@ -46,4 +46,4 @@ Folders and files are PascalCase. One package per folder. One feature per file, 
 
 ## Playing
 The game is a mini Project I.G.I.-style mission (`Game/Mission`): enter the compound, hack the HQ computer (hold E), destroy the radar, rescue the hostage in the middle barracks (E), reach the green extraction beacon. A briefing shows first; Enter begins.
-Sandbox starts in Play mode: WASD move, mouse look, Space jump, Shift sprint, left mouse fire, R reload, 1-5 weapons, F flashlight, E open/close doors and board/exit vehicles (V seat or chase view, Space brakes; helicopter: Space climb, Ctrl descend, W/S pitch, A/D turn, Q/E strafe, land to get out), Enter respawn, Tab toggles the fly camera. `--view` starts in fly mode.
+Sandbox starts in Play mode: WASD move, mouse look, Space jump, Shift sprint, left mouse fire, R reload, 1-5 weapons, F flashlight, C crouch (slower, quieter, harder to see), E open/close doors and board/exit vehicles (V seat or chase view, Space brakes; helicopter: Space climb, Ctrl descend, W/S pitch, A/D turn, Q/E strafe, land to get out), Enter respawn, Tab toggles the fly camera. `--view` starts in fly mode.

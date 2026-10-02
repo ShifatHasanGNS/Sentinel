@@ -120,3 +120,24 @@ test_controller_is_deterministic :: proc(t: ^testing.T) {
 	walk(&second, &world, FLAT, {4, 2}, 2)
 	testing.expect_value(t, first, second)
 }
+
+// A crouching body fits under a 1.4 m beam, cannot stand up beneath it, and stands again once clear.
+@(test)
+test_a_crouching_controller_fits_under_a_low_beam_and_cannot_stand_there :: proc(t: ^testing.T) {
+	world: Collision_World
+	defer Collision_World_Destroy(&world)
+	append(&world.boxes, Box_Solid({5, 1.4, -10}, {9, 1.6, 10})) // A beam 1.4 m above the ground.
+	standing := Controller_Create({0, 0, 0})
+	walk(&standing, &world, FLAT, {4, 0}, 3)
+	testing.expect(t, standing.position.x < 5) // Blocked.
+	crouching := Controller_Create({0, 0, 0})
+	Controller_Set_Crouch(&crouching, world, true)
+	walk(&crouching, &world, FLAT, {4, 0}, 1.75)
+	testing.expect(t, crouching.position.x > 6 && crouching.position.x < 8.5) // Underneath.
+	Controller_Set_Crouch(&crouching, world, false)
+	testing.expect(t, crouching.crouching) // Cannot stand under the beam.
+	walk(&crouching, &world, FLAT, {4, 0}, 3)
+	Controller_Set_Crouch(&crouching, world, false)
+	testing.expect(t, !crouching.crouching) // Clear of it: stands up.
+	testing.expect_value(t, Controller_Height(crouching), CONTROLLER_HEIGHT_METERS)
+}
