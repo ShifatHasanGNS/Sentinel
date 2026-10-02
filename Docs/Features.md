@@ -109,3 +109,4 @@
 | Program entry, scene table, loop | `Source/Main.odin`, `Source/Loop.odin`, `Source/Config.odin` |
 | BMP to PNG for screenshot review | `Tools/ToPng.sh` |
 | Light shafts (screen-space radial march toward the sun) | `Shaders/PostTonemap.glsl` : `light_shafts`; `Engine/Render/Renderer.odin` : `shaft_inputs` |
+| Night lights: floodlight spots, tower and guard-post lamps, door lights, faded by darkness | `Game/Base/NightLights.odin` : `Layout_Night_Lights`; used in `Game/Sandbox/Sandbox.odin` : `Sandbox_Render` |

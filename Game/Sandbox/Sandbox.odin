@@ -115,6 +115,8 @@ Sandbox_Render :: proc(sandbox: ^Sandbox, window: Platform.Window) {
 	camera := play_camera(sandbox, aspect)
 	items, shadow_items := gather_items(sandbox, camera)
 	lights := play_items(sandbox, &items, &shadow_items)
+	darkness := clamp((0.08 - Gameplay.Sun_Direction_To_Sun(sandbox.hours).y) / 0.2, 0, 1)
+	for light in Base.Layout_Night_Lights(sandbox.base.layout, sandbox.terrain.base_height_meters, darkness) do append(&lights, light)
 	daylight := Gameplay.Daylight_For_Hours(sandbox.hours)
 	frame := Render.Frame{
 		camera = camera,
