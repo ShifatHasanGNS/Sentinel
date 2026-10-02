@@ -126,6 +126,15 @@ jeep_spec :: proc() -> (spec: Vehicle_Spec) {
 		add_part(parts, Procedural.Part{primitive = Procedural.Sphere(0.12, 10, 5), position = {x, 0.95, 2.32}, stretch = {1, 1, 0.6}, material = layer(.Glass), emission = {1, 0.95, 0.8}})
 	}
 	add_cylinder_z(parts, 0.4, 0.25, {0, 0.9, -2.52}, .Rubber, false, 18)
+	for x in ([2]f32{-1.08, 1.08}) { // Wing mirrors on stalks, door handles, and wheel arches over the front wheels.
+		add_box(parts, {0.05, 0.05, 0.25}, {x, 1.55, 0.7}, .Gunmetal, false)
+		add_box(parts, {0.04, 0.22, 0.16}, {x * 1.06, 1.6, 0.85}, .Gunmetal, false)
+		add_box(parts, {0.04, 0.05, 0.22}, {x * 0.99, 1.2, -0.8}, .Gunmetal, false)
+		add_part(parts, Procedural.Part{primitive = Procedural.Cylinder(0.56, 0.12, 20), position = {x, 0.72, 1.5}, rotation_degrees = {0, 0, 90}, material = layer(.Olive_Paint)})
+	}
+	for index in 0 ..< 6 do add_box(parts, {0.9, 0.035, 0.05}, {0, 0.76 + f32(index) * 0.075, 2.31}, .Gunmetal, false) // Grille slats.
+	add_box(parts, {1.6, 0.1, 1.2}, {0, 1.95, -0.5}, .Gunmetal, false) // Roof rack with a jerrycan.
+	add_box(parts, {0.45, 0.5, 0.2}, {0.5, 2.25, -0.5}, .Olive_Paint)
 	spec.seat = {0.4, 1.7, -0.3}
 	spec.armor = 1
 	spec.handling = World.Vehicle_Handling{
@@ -156,6 +165,13 @@ cargo_truck_spec :: proc() -> (spec: Vehicle_Spec) {
 	for x in ([2]f32{-0.8, 0.8}) {
 		add_part(parts, Procedural.Part{primitive = Procedural.Sphere(0.13, 10, 5), position = {x, 1.45, 4.66}, stretch = {1, 1, 0.6}, material = layer(.Glass), emission = {1, 0.95, 0.8}})
 	}
+	for x in ([2]f32{-1.3, 1.3}) { // Mirrors, a vertical exhaust stack behind the cab, and a fuel tank under the bed.
+		add_box(parts, {0.05, 0.4, 0.05}, {x, 2.2, 3.5}, .Gunmetal, false)
+		add_box(parts, {0.05, 0.3, 0.2}, {x * 1.04, 2.2, 3.62}, .Gunmetal, false)
+	}
+	add_cylinder(parts, 0.08, 1.6, {1.25, 2.6, 1.7}, .Gunmetal, false, 10)
+	add_cylinder_x(parts, 0.35, 1.0, {-0.9, 0.7, 1.1}, .Painted_Metal, false, 16)
+	for index in 0 ..< 5 do add_box(parts, {1.7, 0.04, 0.05}, {0, 0.8 + f32(index) * 0.1, 4.67}, .Gunmetal, false)
 	spec.seat = {0.5, 2.5, 2.8}
 	spec.armor = 0.9
 	spec.handling = World.Vehicle_Handling{
@@ -181,6 +197,10 @@ armored_carrier_spec :: proc() -> (spec: Vehicle_Spec) {
 	for x in ([2]f32{-0.8, 0.8}) {
 		add_part(parts, Procedural.Part{primitive = Procedural.Sphere(0.1, 8, 4), position = {x, 0.95, 4.2}, material = layer(.Glass), emission = {1, 0.95, 0.8}})
 	}
+	for x in ([2]f32{-1.0, 1.0}) do add_box(parts, {0.7, 0.12, 5.6}, {x, 0.62, 0}, .Olive_Paint, false) // Side skirts over the wheels.
+	add_cylinder(parts, 0.35, 0.1, {-0.7, 2.55, -1.6}, .Olive_Paint, false, 14) // Driver and rear hatches.
+	add_cylinder(parts, 0.35, 0.1, {0.7, 2.55, -1.9}, .Olive_Paint, false, 14)
+	add_cylinder(parts, 0.015, 2.2, {-1.1, 3.1, -2.6}, .Gunmetal, false, 6) // Antenna.
 	add_cylinder(&spec.turret, 0.65, 0.55, {}, .Olive_Paint, true, 18)
 	add_cylinder_z(&spec.gun, 0.05, 1.8, {0, 0, 0.9}, .Rusted_Metal, false, 10)
 	spec.turret_pivot = {0.5, 2.75, -0.5}
@@ -213,6 +233,15 @@ battle_tank_spec :: proc() -> (spec: Vehicle_Spec) {
 	add_box(&spec.turret, {0.5, 0.08, 0.2}, {-0.9, 0.45, 0.9}, .Glass, false)
 	add_cylinder_z(&spec.gun, 0.12, 3.4, {0, 0, 1.7}, .Olive_Paint, true, 14)
 	add_cylinder_z(&spec.gun, 0.17, 0.4, {0, 0, 3.55}, .Rusted_Metal, false, 14)
+	for x in ([2]f32{-1.5, 1.5}) { // Side skirts, a fender over the tracks, and track links: ribs across the rubber.
+		add_box(parts, {0.12, 0.7, 6.2}, {x * 1.12, 0.9, 0}, .Olive_Paint, false)
+		add_box(parts, {0.8, 0.06, 7.1}, {x, 1.0, 0}, .Olive_Paint, false)
+		for index in 0 ..< 28 do add_box(parts, {0.7, 0.05, 0.14}, {x, 0.92, -3.3 + f32(index) * 0.245}, .Gunmetal, false)
+	}
+	for x in ([2]f32{-0.9, 0.9}) do add_cylinder(parts, 0.17, 0.4, {x, 1.75, -2.6}, .Gunmetal, false, 12) // Exhaust grilles and stowage on the engine deck.
+	add_box(parts, {2.2, 0.12, 1.0}, {0, 1.65, -2.6}, .Gunmetal, false)
+	add_cylinder(&spec.turret, 0.012, 1.0, {-0.9, 0.3, -1.0}, .Gunmetal, false, 6) // Whip antenna.
+	add_cylinder(&spec.turret, 0.22, 0.12, {-0.5, 0.55, 0.2}, .Olive_Paint, false, 14) // Commander hatch.
 	spec.turret_pivot = {0, 2, -0.3}
 	spec.gun_pivot = {0, 0.1, 1.5}
 	spec.muzzle = {0, 0, 3.8}
