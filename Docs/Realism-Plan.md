@@ -15,4 +15,6 @@ Goal: make the whole game look as real as procedural primitives, noise and OpenG
 
 Out of scope (cannot be done under the rules or the platform): scanned or photo textures, ray-traced global illumination (OpenGL 4.1 has no ray queries), audio.
 
+Status: **R1 done** (weathering, `Shaders/Include/Weathering.glsl`). **R3 started**: procedural cloud layer with self-shadowing and silver lining (`Shaders/Include/Sky.glsl`), aerial perspective. R2, R4-R8 not started.
+
 Tracking: this table is the status (update the row when a phase lands). Features land in `Docs/Features.md` as usual.

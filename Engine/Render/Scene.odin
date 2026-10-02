@@ -45,6 +45,7 @@ Frame :: struct {
 	shadow_items:      []Draw_Item, // Shadow casters; when empty, items cast.
 	terrain_shading:   Terrain_Shading,
 	sun:               Light, // The one directional light.
+	ground_level_meters: f32, // Where walls meet the ground, for weathering (splash and grime stay below ~1 m of it).
 	interiors:         []Interior_Volume, // Roofed rooms: sky light does not reach inside them.
 	local_lights:      []Light, // Point, spot and area lights.
 	sky:               Sky,

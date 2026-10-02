@@ -133,6 +133,7 @@ Sandbox_Render :: proc(sandbox: ^Sandbox, window: Platform.Window) {
 			plateau_blend_meters = sandbox.terrain.plateau_blend_meters,
 		},
 		sun = daylight.sun,
+		ground_level_meters = sandbox.terrain.base_height_meters,
 		local_lights = lights[:],
 		interiors = Base.Layout_Interiors(sandbox.base.layout, sandbox.terrain.base_height_meters)[:],
 		sky = daylight.sky,

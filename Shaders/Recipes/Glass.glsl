@@ -9,7 +9,7 @@ Surface recipe_surface(vec2 uv) {
 	Surface surface;
 	surface.albedo = mix(u_ColorA, u_ColorB, smoothstep(0.35, 0.8, grime * 0.6 + streaks * 0.5));
 	surface.height = 0.5 + 0.15 * grime;
-	surface.roughness = mix(0.06, 0.3, smoothstep(0.5, 0.9, grime));
+	surface.roughness = mix(0.05, 0.14, smoothstep(0.5, 0.9, grime));
 	surface.metallic = 0.0;
 	surface.ambient_occlusion = 1.0;
 	return surface;

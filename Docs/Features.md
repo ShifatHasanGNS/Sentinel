@@ -147,3 +147,5 @@
 | Interactions need line of sight (doors, vehicles, hack, rescue) | `Engine/World/Raycast.odin` : `Line_Of_Sight_Clear` |
 | Rooms shut out sky ambient and outside lamps | `Shaders/Include/Interior.glsl`; `Game/Base/InteriorLights.odin` : `Layout_Interiors` |
 | Binocular zoom (Z/X, smooth raise), map objective markers | `Game/Sandbox/Optics.odin` |
+| Weathering and fine detail on surfaces | `Shaders/Include/Weathering.glsl` : `weather_surface`; used in `Shaders/Geometry.glsl` |
+| Cloud layer (fbm plane, self-shadowing, silver lining) | `Shaders/Include/Sky.glsl` : `add_clouds` |
