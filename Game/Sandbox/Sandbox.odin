@@ -208,7 +208,7 @@ gather_items :: proc(sandbox: ^Sandbox, camera: Render.Camera) -> (items, shadow
 		append(&shadow_items, item)
 		if Render.Frustum_Intersects_Aabb(frustum, chunk.lowest, chunk.highest) do append(&items, item)
 	}
-	collect_instances(sandbox)
+	collect_instances(sandbox, frustum, camera.position)
 	for prop_item in prop_items(sandbox) do append(&items, prop_item)
 	for base_item in Base.Base_Scene_Items(&sandbox.base) do append(&items, base_item)
 	for shadow_item in Base.Base_Scene_Shadow_Items(&sandbox.base) do append(&shadow_items, shadow_item)
@@ -238,18 +238,27 @@ shadow_proxy_items :: proc(sandbox: ^Sandbox) -> [4]Render.Draw_Item {
 }
 
 @(private = "file")
-collect_instances :: proc(sandbox: ^Sandbox) {
+// Props are instanced from every chunk that can matter this frame: chunks in view, plus chunks near enough to cast a shadow into view.
+// Chunks that are both behind the camera and beyond the shadow distance cost nothing.
+collect_instances :: proc(sandbox: ^Sandbox, frustum: Render.Frustum, camera_position: [3]f32) {
 	clear(&sandbox.trunk_instances)
 	clear(&sandbox.canopy_instances)
 	clear(&sandbox.rock_instances)
 	clear(&sandbox.bush_instances)
 	for _, &chunk in sandbox.chunks {
-		for point in chunk.scatter do place_prop(sandbox, point)
+		if chunk_matters(chunk, frustum, camera_position) do for point in chunk.scatter do place_prop(sandbox, point)
 	}
 	Render.Mesh_Set_Instances(&sandbox.props.tree_trunk, sandbox.trunk_instances[:min(len(sandbox.trunk_instances), TREE_CAPACITY)])
 	Render.Mesh_Set_Instances(&sandbox.props.tree_canopy, sandbox.canopy_instances[:min(len(sandbox.canopy_instances), TREE_CAPACITY)])
 	Render.Mesh_Set_Instances(&sandbox.props.rock, sandbox.rock_instances[:min(len(sandbox.rock_instances), ROCK_CAPACITY)])
 	Render.Mesh_Set_Instances(&sandbox.props.bush, sandbox.bush_instances[:min(len(sandbox.bush_instances), BUSH_CAPACITY)])
+}
+
+@(private = "file")
+chunk_matters :: proc(chunk: Chunk, frustum: Render.Frustum, camera_position: [3]f32) -> bool {
+	if Render.Frustum_Intersects_Aabb(frustum, chunk.lowest, chunk.highest) do return true
+	nearest := [3]f32{clamp(camera_position.x, chunk.lowest.x, chunk.highest.x), clamp(camera_position.y, chunk.lowest.y, chunk.highest.y), clamp(camera_position.z, chunk.lowest.z, chunk.highest.z)}
+	return la.length(nearest - camera_position) < SHADOW_DISTANCE_METERS
 }
 
 @(private = "file")
