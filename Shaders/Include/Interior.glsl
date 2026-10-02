@@ -3,7 +3,8 @@
 
 const int INTERIORS_MAX = 24;
 uniform int u_InteriorCount;
-uniform vec4 u_InteriorCenter[INTERIORS_MAX]; // xyz center, w yaw
+uniform vec4 u_InteriorCenter[INTERIORS_MAX]; // xyz center, w unused
+uniform vec2 u_InteriorTurn[INTERIORS_MAX]; // cos and sin of the yaw, computed once on the CPU
 uniform vec3 u_InteriorHalf[INTERIORS_MAX];
 const float INTERIOR_AMBIENT_FRACTION = 0.5; // Daylight reaching a room through its windows and door, after bouncing off the walls.
 const float INTERIOR_EDGE_METERS = 0.06;
@@ -12,7 +13,7 @@ const float INTERIOR_SLACK_METERS = 0.08; // The walls, floor and ceiling lie on
 // Distance inside box i along its tightest axis (negative outside it), measured in the box's own axes.
 float interior_depth(int i, vec3 position) {
 	vec3 offset = position - u_InteriorCenter[i].xyz;
-	float c = cos(u_InteriorCenter[i].w), s = sin(u_InteriorCenter[i].w);
+	float c = u_InteriorTurn[i].x, s = u_InteriorTurn[i].y;
 	vec3 local = vec3(offset.x * c - offset.z * s, offset.y, offset.x * s + offset.z * c);
 	vec3 margin = u_InteriorHalf[i] + INTERIOR_SLACK_METERS - abs(local);
 	return min(margin.x, min(margin.y, margin.z));

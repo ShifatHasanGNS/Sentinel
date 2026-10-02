@@ -7,7 +7,7 @@ uniform float u_CascadeTexel[CASCADE_COUNT];
 uniform float u_ShadowMapSize;
 
 const float SHADOW_DEPTH_BIAS = 0.0005;
-const int SHADOW_TAPS = 12;
+const int SHADOW_TAPS = 8;
 const float SHADOW_FILTER_RADIUS_TEXELS = 1.6;
 
 // 1 = fully lit, 0 = fully shadowed. The cascade is picked by view-space distance. The lookup is pushed along the surface

@@ -3,6 +3,7 @@ package Render
 import "../GPU"
 import "../Procedural"
 import "core:fmt"
+import "core:math"
 import la "core:math/linalg"
 import gl "vendor:OpenGL"
 
@@ -302,7 +303,8 @@ set_interior_uniforms :: proc(shader: ^GPU.Shader, interiors: []Interior_Volume)
 	count := min(len(interiors), INTERIORS_MAX)
 	GPU.Shader_Set(shader, "u_InteriorCount", i32(count))
 	for volume, index in interiors[:count] {
-		GPU.Shader_Set(shader, fmt.tprintf("u_InteriorCenter[%d]", index), [4]f32{volume.center.x, volume.center.y, volume.center.z, volume.yaw_radians})
+		GPU.Shader_Set(shader, fmt.tprintf("u_InteriorCenter[%d]", index), [4]f32{volume.center.x, volume.center.y, volume.center.z, 0})
+		GPU.Shader_Set(shader, fmt.tprintf("u_InteriorTurn[%d]", index), [2]f32{math.cos(volume.yaw_radians), math.sin(volume.yaw_radians)})
 		GPU.Shader_Set(shader, fmt.tprintf("u_InteriorHalf[%d]", index), volume.half_extents)
 	}
 }
