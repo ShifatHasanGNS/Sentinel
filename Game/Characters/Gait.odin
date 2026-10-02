@@ -6,7 +6,7 @@ GAIT_DUTY_FACTOR :: 0.6 // Fraction of the cycle a foot is on the ground; above 
 
 // How far a foot travels along the ground in stance: grows with speed, as people take longer steps when they hurry.
 Gait_Stride_Meters :: proc(speed: f32) -> f32 {
-	return clamp(0.6 + 0.28 * speed, 0.6, 1.6)
+	return clamp(0.35 + 0.15 * speed, 0.35, 0.9)
 }
 
 // During stance the foot moves back relative to the body at exactly the body's speed, covering `stride` in duty * T, so
