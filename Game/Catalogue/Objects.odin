@@ -172,13 +172,23 @@ add_gable_roof :: proc(parts: ^Parts, length, depth, rise, base_y: f32, position
 	add_part(parts, Procedural.Part{primitive = Procedural.Wedge({length, rise, half}), position = {0, base_y + rise / 2, position_z - half / 2}, rotation_degrees = {0, 180, 0}, material = layer(material), solid = true})
 }
 
-// A row of lit windows on a wall facing +Z: `count` windows centred about x = 0, spaced `spacing` apart.
+// A window on a wall facing +Z: the glowing pane, a frame of four bars standing proud of the wall, a mullion across the middle,
+// and a sill underneath that sheds water past the wall face.
+@(private = "package")
+add_window :: proc(parts: ^Parts, size: [2]f32, x, y, z: f32) {
+	add_box(parts, {size.x, size.y, 0.1}, {x, y, z}, .Glass, false, {}, {0.9, 0.65, 0.3})
+	bar := f32(0.07)
+	add_box(parts, {size.x + 2 * bar, bar, 0.16}, {x, y + size.y / 2 + bar / 2, z + 0.03}, .Painted_Metal, false)
+	add_box(parts, {size.x + 2 * bar, bar, 0.16}, {x, y - size.y / 2 - bar / 2, z + 0.03}, .Painted_Metal, false)
+	for side in ([2]f32{-1, 1}) do add_box(parts, {bar, size.y, 0.16}, {x + side * (size.x / 2 + bar / 2), y, z + 0.03}, .Painted_Metal, false)
+	add_box(parts, {size.x, 0.04, 0.14}, {x, y, z + 0.04}, .Painted_Metal, false)
+	add_box(parts, {size.x + 0.3, 0.07, 0.3}, {x, y - size.y / 2 - bar - 0.035, z + 0.1}, .Concrete, false)
+}
+
+// A row of windows on a wall facing +Z: `count` windows centred about x = 0, spaced `spacing` apart.
 @(private = "package")
 add_front_windows :: proc(parts: ^Parts, count: int, spacing: f32, y, z: f32, size: [2]f32) {
-	for index in 0 ..< count {
-		x := (f32(index) - f32(count - 1) / 2) * spacing
-		add_box(parts, {size.x, size.y, 0.1}, {x, y, z}, .Glass, false, {}, {0.9, 0.65, 0.3})
-	}
+	for index in 0 ..< count do add_window(parts, size, (f32(index) - f32(count - 1) / 2) * spacing, y, z)
 }
 
 @(private = "package")

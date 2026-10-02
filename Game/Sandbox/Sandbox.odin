@@ -224,7 +224,7 @@ gather_items :: proc(sandbox: ^Sandbox, camera: Render.Camera) -> (items, shadow
 	collect_instances(sandbox, frustum, camera.position)
 	for prop_item in prop_items(sandbox) do append(&items, prop_item)
 	night_amount := clamp((0.08 - Gameplay.Sun_Direction_To_Sun(sandbox.hours).y) / 0.2, 0, 1)
-	for base_item in Base.Base_Scene_Items(&sandbox.base, 0.08 + 0.92 * night_amount) do append(&items, base_item)
+	for base_item in Base.Base_Scene_Items(&sandbox.base, night_amount) do append(&items, base_item)
 	for shadow_item in Base.Base_Scene_Shadow_Items(&sandbox.base) do append(&shadow_items, shadow_item)
 	for proxy_item in shadow_proxy_items(sandbox) do append(&shadow_items, proxy_item)
 	return
