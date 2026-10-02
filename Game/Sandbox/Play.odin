@@ -81,6 +81,8 @@ Play :: struct {
 	tab_was_down:  bool,
 	flashlight_on: bool,
 	binoculars:    bool,
+	binocular_zoom: f32,
+	binocular_raise: f32, // 0 down .. 1 fully up.
 	binoculars_was_down: bool,
 	map_open:      bool,
 	map_was_down:  bool,
@@ -126,6 +128,8 @@ play_create :: proc(sandbox: ^Sandbox, demo: bool, fly: bool, drive: string, ove
 	play.mode = .Fly if fly else .Play
 	if drive != "" do board_named_vehicle(play, drive)
 	play.map_open, play.binoculars = overlay == "map", overlay == "binoculars"
+	play.binocular_zoom = BINOCULAR_ZOOM_START
+	play.binocular_raise = 1 if play.binoculars else 0
 	return true
 }
 
@@ -193,7 +197,7 @@ play_update :: proc(sandbox: ^Sandbox, input: ^Platform.Input, delta_seconds: f3
 	play.interact_was_down = interact_down
 	if play.mode == .Play && play.driving == nil do interact_on_foot(play, interact_pressed)
 	Base.Doors_Update(play.doors[:], &play.battle.collision, delta_seconds)
-	update_optics_keys(play, input)
+	update_optics_keys(play, input, delta_seconds)
 	flashlight_down := Platform.Input_Key_Down(input, .F)
 	if flashlight_down && !play.flashlight_was_down do play.flashlight_on = !play.flashlight_on
 	play.flashlight_was_down = flashlight_down
@@ -209,7 +213,7 @@ play_update :: proc(sandbox: ^Sandbox, input: ^Platform.Input, delta_seconds: f3
 		} else {
 			player_input := demo_input(play.battle, delta_seconds) if play.demo else collect_input(input)
 			player_input.look *= binocular_look_scale(play)
-			if play.binoculars do player_input.fire = false
+			if play.binocular_raise > 0.5 do player_input.fire = false
 			Gameplay.Battle_Update(&play.battle, player_input, delta_seconds)
 			sync_camera_to_player(sandbox)
 			animate_body(play, delta_seconds)
@@ -412,7 +416,7 @@ add_held_weapon :: proc(play: ^Play, items: ^[dynamic]Render.Draw_Item) {
 
 play_camera :: proc(sandbox: ^Sandbox, aspect: f32) -> Render.Camera {
 	if sandbox.play.mode == .Play {
-		fov: f32 = BINOCULAR_FIELD_OF_VIEW_DEGREES if sandbox.play.binoculars else PLAY_FIELD_OF_VIEW_DEGREES
+		fov := Render.Zoomed_Field_Of_View_Degrees(PLAY_FIELD_OF_VIEW_DEGREES, binocular_current_zoom(&sandbox.play))
 		return Render.Camera_Look_At(sandbox.camera.position, sandbox.camera.position + Fly_Camera_Forward(sandbox.camera), fov, aspect, PLAY_NEAR_PLANE_METERS, 1200)
 	}
 	return Render.Camera_Look_At(sandbox.camera.position, sandbox.camera.position + Fly_Camera_Forward(sandbox.camera), FIELD_OF_VIEW_DEGREES, aspect, 0.3, 1200)

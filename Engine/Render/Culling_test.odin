@@ -67,3 +67,13 @@ test_interior_index_finds_the_room_a_point_is_in :: proc(t: ^testing.T) {
 	testing.expect_value(t, Interior_Index_At(rooms, {0, 3, 0}), -1) // Above the ceiling.
 	testing.expect_value(t, Interior_Index_At(nil, {0, 0, 0}), -1)
 }
+
+// Seam: Zoomed_Field_Of_View_Degrees. Zoom 1 changes nothing; zoom 2 halves the image width, i.e. tan(fov/2); more zoom is narrower.
+@(test)
+test_zoom_narrows_the_field_of_view_by_the_tangent_rule :: proc(t: ^testing.T) {
+	testing.expect(t, abs(Zoomed_Field_Of_View_Degrees(72, 1) - 72) < 1e-3)
+	narrow := Zoomed_Field_Of_View_Degrees(90, 2) // tan(45) = 1 -> tan = 0.5 -> 2 * 26.565 degrees.
+	testing.expect(t, abs(narrow - 53.130) < 0.01)
+	testing.expect(t, Zoomed_Field_Of_View_Degrees(72, 2.5) < Zoomed_Field_Of_View_Degrees(72, 2))
+	testing.expect(t, Zoomed_Field_Of_View_Degrees(72, 10) > 0)
+}

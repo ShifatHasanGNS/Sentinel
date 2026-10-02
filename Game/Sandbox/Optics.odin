@@ -6,19 +6,26 @@ import World "../../Engine/World"
 import "../Base"
 import "../Catalogue"
 import "../Gameplay"
+import "../Mission"
 import "../Vehicles"
 import "core:fmt"
 import "core:math"
+import la "core:math/linalg"
 
-BINOCULAR_FIELD_OF_VIEW_DEGREES :: 12.0
+BINOCULAR_ZOOM_START :: 2.5 // Times the normal view: a gentle first look.
+BINOCULAR_ZOOM_MIN :: 1.5
+BINOCULAR_ZOOM_MAX :: 10.0
+BINOCULAR_ZOOM_RATE :: 1.2 // Natural-log units per second while Z or X is held: x3.3 each second.
+BINOCULAR_RAISE_PER_SECOND :: 5.0 // The lenses come up in a fifth of a second.
 BINOCULAR_RANGE_METERS :: 1500.0
 MAP_RADIUS_METERS :: 100.0 // Half the width of the world shown on the map.
 MAP_MIN_OBJECT_SIZE_METERS :: 2.0 // Smaller objects (crates, barrels) are left off the map.
 MAP_RING_SEGMENTS :: 64
 MAP_DOT_METERS :: 2.6
 
-// B raises and lowers the binoculars, M the map; both only on foot.
-update_optics_keys :: proc(play: ^Play, input: ^Platform.Input) {
+// B raises and lowers the binoculars (smoothly), Z and X zoom in and out while held, M shows the map; the first two only on foot.
+// Zoom is multiplicative, so the same hold changes it by the same proportion at any level (an exponential approach feels even).
+update_optics_keys :: proc(play: ^Play, input: ^Platform.Input, delta_seconds: f32) {
 	binoculars_down := Platform.Input_Key_Down(input, .B)
 	if binoculars_down && !play.binoculars_was_down && play.driving == nil do play.binoculars = !play.binoculars
 	play.binoculars_was_down = binoculars_down
@@ -26,16 +33,27 @@ update_optics_keys :: proc(play: ^Play, input: ^Platform.Input) {
 	if map_down && !play.map_was_down do play.map_open = !play.map_open
 	play.map_was_down = map_down
 	if play.driving != nil do play.binoculars = false
+	if play.binoculars {
+		change := f32(int(Platform.Input_Key_Down(input, .Z))) - f32(int(Platform.Input_Key_Down(input, .X)))
+		play.binocular_zoom = clamp(play.binocular_zoom * math.exp(change * BINOCULAR_ZOOM_RATE * delta_seconds), BINOCULAR_ZOOM_MIN, BINOCULAR_ZOOM_MAX)
+	}
+	target: f32 = 1 if play.binoculars else 0
+	play.binocular_raise += clamp(target - play.binocular_raise, -BINOCULAR_RAISE_PER_SECOND * delta_seconds, BINOCULAR_RAISE_PER_SECOND * delta_seconds)
+}
+
+// How magnified the view is now: 1 normally, the chosen zoom with the binoculars up, blended in log space while they move.
+binocular_current_zoom :: proc(play: ^Play) -> f32 {
+	return math.pow(play.binocular_zoom, play.binocular_raise)
 }
 
 // The mouse turns the view more slowly the more it is zoomed, so a binocular view is not twitchy.
 binocular_look_scale :: proc(play: ^Play) -> f32 {
-	return BINOCULAR_FIELD_OF_VIEW_DEGREES / PLAY_FIELD_OF_VIEW_DEGREES if play.binoculars else 1
+	return 1 / binocular_current_zoom(play)
 }
 
 // Range readout and mask: the world is darkened outside a circle-ish window, with tick marks and the distance to what is centred.
 binoculars_draw_hud :: proc(play: ^Play, width, height, scale: f32) {
-	if !play.binoculars do return
+	if play.binocular_raise < 0.02 do return
 	hud := &play.hud
 	player := play.battle.player
 	eye := Gameplay.Player_Eye(player)
@@ -44,8 +62,8 @@ binoculars_draw_hud :: proc(play: ^Play, width, height, scale: f32) {
 	enemy_distance := nearest_enemy_in_line(play, eye, direction)
 	distance := hit.distance if hit.hit else math.INF_F32
 	if enemy_distance < distance do distance = enemy_distance
-	range_text := fmt.tprintf("RANGE %d M", int(distance)) if distance < BINOCULAR_RANGE_METERS else "RANGE ---"
-	radius := min(width, height) * 0.46
+	range_text := fmt.tprintf("RANGE %d M   ZOOM %.1fX   Z/X", int(distance), binocular_current_zoom(play)) if distance < BINOCULAR_RANGE_METERS else fmt.tprintf("RANGE ---   ZOOM %.1fX   Z/X", binocular_current_zoom(play))
+	radius := min(width, height) * (0.46 + 0.9 * (1 - play.binocular_raise)) // The mask opens out as the binoculars come down.
 	draw_binocular_mask(hud, width, height, radius)
 	Render.Hud_Text(hud, (width - Render.Hud_Text_Width(range_text, scale * 1.4)) / 2, height / 2 + radius + 4 * scale, range_text, scale * 1.4, {0.7, 1, 0.7, 0.95})
 	tick := 6 * scale
@@ -110,6 +128,7 @@ map_draw_hud :: proc(sandbox: ^Sandbox, width, height, scale: f32) {
 	player := play.battle.player
 	draw_map_arrow(hud, to_screen(center, meters_to_pixels, player.controller.position.x, player.controller.position.z), {-math.sin(player.yaw_radians), -math.cos(player.yaw_radians)}, 4.5 * scale, {1, 1, 0.3, 1})
 	Render.Hud_Text(hud, center.x - half, center.y - half - 10 * scale, "TACTICAL MAP    M CLOSE    N IS UP", scale, {0.8, 1, 0.8, 0.95})
+	Render.Hud_Text(hud, center.x - half, center.y + half + 3 * scale, "ARROW YOU   RED SOLDIER   AMBER CAMERA   BLUE VEHICLE   GLOWING YELLOW NEXT GOAL", scale * 0.9, {0.8, 1, 0.8, 0.9})
 }
 
 @(private = "file")
@@ -135,7 +154,30 @@ draw_map_ring :: proc(hud: ^Render.Hud, center: [2]f32, radius: f32, color: [4]f
 	}
 }
 
-// Soldiers (red), cameras (amber, grey when broken), the objectives, and vehicles.
+// Where each objective is on the ground: the gate for "get inside", then the thing itself.
+mission_objective_position :: proc(play: ^Play, objective: Mission.Objective) -> [3]f32 {
+	mission := &play.mission
+	switch objective {
+	case .Enter_Compound: return {0, mission.extraction.y, Base.PERIMETER_RADIUS_METERS - 4}
+	case .Hack_Cameras: return mission.terminal_position
+	case .Destroy_Radar: return mission.radar_dish
+	case .Rescue_Hostage: return mission.hostage.controller.position
+	case .Reach_Extraction: return mission.extraction
+	}
+	return {}
+}
+
+@(private = "file")
+OBJECTIVE_LABELS := [Mission.Objective]string{
+	.Enter_Compound = "1 GATE",
+	.Hack_Cameras = "2 COMPUTER",
+	.Destroy_Radar = "3 RADAR",
+	.Rescue_Hostage = "4 HOSTAGE",
+	.Reach_Extraction = "5 EXTRACT",
+}
+
+// Soldiers (red), cameras (amber, grey when broken), vehicles, and the five objectives: numbered like the list, the current one
+// pulsing with a ring, a line from the player and its distance; finished ones grey with a check; later ones dim.
 @(private = "file")
 draw_map_markers :: proc(play: ^Play, center: [2]f32, factor, scale: f32) {
 	hud := &play.hud
@@ -150,14 +192,53 @@ draw_map_markers :: proc(play: ^Play, center: [2]f32, factor, scale: f32) {
 	for instance in play.cameras {
 		dot(hud, center, factor, instance.camera.position, 0.9, {0.5, 0.5, 0.5, 0.9} if instance.camera.disabled else {1, 0.75, 0.1, 1})
 	}
-	mission := &play.mission
-	if !mission.state.done[.Hack_Cameras] do dot(hud, center, factor, mission.terminal_position, 1.3, {0.3, 1, 1, 1})
-	if !play.battle.targets[mission.radar_target].destroyed do dot(hud, center, factor, mission.radar_dish, 1.6, {1, 0.4, 0.1, 1})
-	if !mission.hostage.rescued do dot(hud, center, factor, mission.hostage.controller.position, 1.4, {1, 1, 0.4, 1})
-	dot(hud, center, factor, mission.extraction, 2.2, {0.3, 1, 0.4, 1})
 	for vehicle in play.vehicles {
 		position, _, _, _ := vehicle_position(vehicle)
 		dot(hud, center, factor, position, 1.1, {0.4, 0.6, 1, 1})
+	}
+	draw_objective_markers(play, center, factor, scale)
+}
+
+@(private = "file")
+draw_objective_markers :: proc(play: ^Play, center: [2]f32, factor, scale: f32) {
+	hud := &play.hud
+	mission := &play.mission.state
+	current, any := Mission.Mission_Current_Objective(mission^)
+	player := play.battle.player.controller.position
+	pulse := 0.5 + 0.5 * math.sin(play.clock_seconds * 5)
+	for objective in Mission.Objective {
+		position := mission_objective_position(play, objective)
+		at := center + {position.x, position.z} * factor
+		done := mission.done[objective]
+		is_current := any && objective == current
+		color := [4]f32{0.55, 0.55, 0.55, 0.9} if done else ([4]f32{1, 0.9, 0.2, 1} if is_current else [4]f32{0.9, 0.9, 0.9, 0.55})
+		size := MAP_DOT_METERS * factor * (1.7 if is_current else 1.2)
+		if is_current {
+			draw_map_ring(hud, at, size * (1.2 + pulse), {1, 0.9, 0.2, 0.5 + 0.5 * pulse}, scale)
+			player_at := center + {player.x, player.z} * factor
+			draw_dashed_line(hud, player_at, at, {1, 0.9, 0.2, 0.7}, scale)
+		}
+		Render.Hud_Rect(hud, at.x - size / 2, at.y - size / 2, size, size, color)
+		label := OBJECTIVE_LABELS[objective]
+		if done do label = fmt.tprintf("%s OK", label)
+		Render.Hud_Text(hud, at.x + size, at.y - 4 * scale, label, scale, color)
+		if is_current {
+			meters := int(la.length([2]f32{position.x - player.x, position.z - player.z}))
+			Render.Hud_Text(hud, at.x + size, at.y + 5 * scale, fmt.tprintf("%d M", meters), scale, color)
+		}
+	}
+}
+
+// A line of small squares between two screen points, so it reads as a route without needing line primitives.
+@(private = "file")
+draw_dashed_line :: proc(hud: ^Render.Hud, from, to: [2]f32, color: [4]f32, scale: f32) {
+	span := to - from
+	length := la.length(span)
+	if length < 1 do return
+	step := 8 * scale
+	for distance := f32(0); distance < length; distance += step {
+		at := from + span / length * distance
+		Render.Hud_Rect(hud, at.x - scale * 0.5, at.y - scale * 0.5, scale, scale, color)
 	}
 }
 

@@ -176,7 +176,7 @@ mission_draw_hud :: proc(play: ^Play, width, height, scale: f32) {
 	switch mission.state.status {
 	case .Briefing: draw_briefing(hud, width, height, scale)
 	case .Complete: draw_mission_complete(hud, mission, width, height, scale)
-	case .Active: draw_objectives(play, width, height, scale)
+	case .Active: if !play.map_open do draw_objectives(play, width, height, scale)
 	}
 }
 
@@ -192,7 +192,13 @@ draw_objectives :: proc(play: ^Play, width, height, scale: f32) {
 		done := mission.state.done[objective]
 		mark := "[X] " if done else "[ ] "
 		color := [4]f32{0.6, 1, 0.6, 0.85} if done else {1, 1, 1, 0.9 if any && objective == current else 0.55}
-		Render.Hud_Text(hud, 16, y, fmt.tprintf("%s%s", mark, Mission.Objective_Text(objective)), scale, color)
+		distance_text := ""
+		if !done {
+			target := mission_objective_position(play, objective)
+			player := play.battle.player.controller.position
+			distance_text = fmt.tprintf("  (%d M)", int(la.length([2]f32{target.x - player.x, target.z - player.z})))
+		}
+		Render.Hud_Text(hud, 16, y, fmt.tprintf("%s%s%s", mark, Mission.Objective_Text(objective), distance_text), scale, color)
 	}
 	if mission.terminal_in_reach && !mission.state.done[.Hack_Cameras] {
 		Render.Hud_Text(hud, (width - Render.Hud_Text_Width("HOLD E  HACK COMPUTER", scale)) / 2, height * 0.66, "HOLD E  HACK COMPUTER", scale, {0.5, 1, 0.7, 0.95})
