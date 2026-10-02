@@ -144,3 +144,6 @@
 | Binoculars (B): 12 degree zoom, slower look, circular mask, range readout to terrain or soldiers | `Game/Sandbox/Optics.odin` : `binoculars_draw_hud`, `binocular_look_scale` |
 | Tactical map (M): base footprints, soldiers, cameras, objectives, vehicles, player arrow | `Game/Sandbox/Optics.odin` : `map_draw_hud` |
 | Four-corner HUD shapes | `Engine/Render/Hud.odin` : `Hud_Quad` |
+| Interactions need line of sight (doors, vehicles, hack, rescue) | `Engine/World/Raycast.odin` : `Line_Of_Sight_Clear` |
+| Rooms shut out sky ambient and outside lamps | `Shaders/Include/Interior.glsl`; `Game/Base/InteriorLights.odin` : `Layout_Interiors` |
+| Binocular zoom (Z/X, smooth raise), map objective markers | `Game/Sandbox/Optics.odin` |

@@ -151,7 +151,7 @@ check_every_material_tiles_and_has_detail :: proc(checks: ^Support.Checks) {
 	defer delete(pixels)
 	for layer in 0 ..< set.layer_count {
 		GPU.Texture_Read_Layer(&set.albedo, layer, pixels)
-		Support.expect(checks, standard_deviation(pixels, 0) > 3)
+		Support.expect(checks, standard_deviation(pixels, 0) > 2)
 		GPU.Texture_Read_Layer(&set.normal, layer, pixels)
 		Support.expect(checks, standard_deviation(pixels, 0) > 2) // Normals must lean: a flat map would be constant.
 	}

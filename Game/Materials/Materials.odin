@@ -30,7 +30,7 @@ Surface_Material :: enum i32 {
 // Colours are linear RGB. detail, bump_strength and the three colours mean what each recipe shader says they mean.
 @(private = "file")
 recipes := [Surface_Material]Procedural.Texture_Recipe {
-	.Concrete      = {"Shaders/Recipes/Concrete.glsl", 11, 4, {{0.42, 0.42, 0.40}, {0.30, 0.30, 0.29}, {}}, 0.5, 0.8},
+	.Concrete      = {"Shaders/Recipes/Concrete.glsl", 11, 4, {{0.46, 0.45, 0.43}, {0.38, 0.375, 0.36}, {}}, 0.5, 0.3},
 	.Woodland_Camo = {"Shaders/Recipes/Camo.glsl", 23, 3, {{0.10, 0.15, 0.05}, {0.07, 0.045, 0.02}, {0.30, 0.25, 0.12}}, 0.5, 0.6},
 	.Rusted_Metal  = {"Shaders/Recipes/RustedMetal.glsl", 37, 4, {{0.45, 0.46, 0.48}, {0.25, 0.09, 0.03}, {0.45, 0.20, 0.06}}, 0.55, 0.8},
 	.Sand          = {"Shaders/Recipes/Sand.glsl", 41, 8, {{0.60, 0.48, 0.31}, {0.32, 0.25, 0.14}, {}}, 0.5, 0.5},
@@ -42,7 +42,7 @@ recipes := [Surface_Material]Procedural.Texture_Recipe {
 	.Wood          = {"Shaders/Recipes/Wood.glsl", 103, 4, {{0.28, 0.17, 0.08}, {0.18, 0.1, 0.045}, {0.35, 0.22, 0.11}}, 0.5, 0.8},
 	.Rubber        = {"Shaders/Recipes/Rubber.glsl", 107, 4, {{0.03, 0.03, 0.032}, {0.008, 0.008, 0.009}, {}}, 0.5, 1.5},
 	.Glass         = {"Shaders/Recipes/Glass.glsl", 109, 2, {{0.02, 0.035, 0.05}, {0.06, 0.09, 0.11}, {}}, 0.5, 0.8},
-	.Olive_Paint   = {"Shaders/Recipes/PaintedMetal.glsl", 113, 4, {{0.12, 0.15, 0.07}, {0.45, 0.45, 0.47}, {}}, 0, 1.6},
+	.Olive_Paint   = {"Shaders/Recipes/PaintedMetal.glsl", 113, 4, {{0.12, 0.15, 0.07}, {0.45, 0.45, 0.47}, {}}, 0, 0.35},
 	.Skin          = {"Shaders/Recipes/Skin.glsl", 127, 4, {{0.42, 0.27, 0.19}, {0.36, 0.22, 0.15}, {0.5, 0.25, 0.2}}, 0.5, 0.6},
 	.Fabric_Desert = {"Shaders/Recipes/Canvas.glsl", 131, 8, {{0.38, 0.30, 0.18}, {0.28, 0.22, 0.13}, {}}, 0.5, 0.9},
 	.Fabric_Dark   = {"Shaders/Recipes/Canvas.glsl", 137, 8, {{0.06, 0.07, 0.06}, {0.035, 0.04, 0.035}, {}}, 0.5, 0.9},
