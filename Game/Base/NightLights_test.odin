@@ -1,5 +1,7 @@
 package Base
 
+import "../../Engine/Render"
+import World "../../Engine/World"
 import la "core:math/linalg"
 import "core:testing"
 
@@ -40,4 +42,28 @@ test_lamp_follows_placement_yaw :: proc(t: ^testing.T) {
 	testing.expect_value(t, len(lights), 2)
 	testing.expect(t, lights[0].direction.z > 0 && abs(lights[0].position.x - 0.6) < 1e-4)
 	testing.expect(t, lights[1].direction.x > 0 && abs(lights[1].position.z + 0.6) < 1e-4)
+}
+
+// Seam: Layout_Interiors. A point inside a room is inside exactly one volume; a point just outside its wall is in none; a turned
+// building's volume turns with it.
+@(test)
+test_interior_volumes_contain_the_room_and_not_the_yard :: proc(t: ^testing.T) {
+	layout: Layout
+	defer Layout_Destroy(&layout)
+	append(&layout.placements, Placement{.Headquarters, 20, 10, 90})
+	volumes := Layout_Interiors(layout, 5)
+	testing.expect_value(t, len(volumes), 1)
+	inside :: proc(volume: Render.Interior_Volume, point: [3]f32) -> bool {
+		local := World.rotate_about_y(point - volume.center, -volume.yaw_radians)
+		return abs(local.x) < volume.half_extents.x && abs(local.y) < volume.half_extents.y && abs(local.z) < volume.half_extents.z
+	}
+	room_point := [3]f32{20, 5 + 1.5, 10} // Middle of the room, 1.5 m up.
+	testing.expect(t, inside(volumes[0], room_point))
+	testing.expect(t, !inside(volumes[0], room_point + {0, 3, 0})) // Above the ceiling.
+	// Turned 90 degrees, the 14 m length runs along Z: 6 m along Z is still inside, 6 m along X (the 10 m width) is not.
+	testing.expect(t, inside(volumes[0], room_point + {0, 0, 6}))
+	testing.expect(t, !inside(volumes[0], room_point + {6, 0, 0}))
+	hostile := Placement{.Barrel, 0, 0, 0}
+	append(&layout.placements, hostile)
+	testing.expect_value(t, len(Layout_Interiors(layout, 5)), 1) // Barrels have no room.
 }

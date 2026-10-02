@@ -3,6 +3,7 @@
 #include "Brdf.glsl"
 #include "Lighting.glsl"
 #include "GbufferRead.glsl"
+#include "Interior.glsl"
 #stage vertex
 layout(location = 0) in vec3 a_Position;
 uniform mat4 u_Model;
@@ -16,6 +17,7 @@ uniform Light u_Light;
 uniform vec2 u_ScreenSize;
 uniform sampler2DArrayShadow u_SpotShadows;
 uniform float u_SpotShadowSize;
+uniform int u_LightRoom; // Room the lamp is in, or -1 outside.
 uniform int u_ShadowSlot; // Depth layer for this light, or -1 when it casts no shadow.
 uniform mat4 u_SpotMatrix;
 uniform float u_SpotTexelPerMeter;
@@ -43,6 +45,8 @@ float spot_shadow(vec3 position, vec3 normal) {
 void main() {
 	Gbuffer_Sample surface = gbuffer_read(gl_FragCoord.xy / u_ScreenSize);
 	if (surface.depth >= 1.0) discard;
+	// A lamp lights its own room (or the outdoors) and nothing across a wall.
+	if (interior_index(surface.position) != u_LightRoom) discard;
 	vec3 view = normalize(u_CameraPosition - surface.position);
 	vec3 radiance = shade_light(u_Light, surface.model, surface.position, surface.normal, view, surface.albedo, surface.roughness, surface.metallic);
 	if (u_ShadowSlot >= 0) radiance *= spot_shadow(surface.position, surface.normal);

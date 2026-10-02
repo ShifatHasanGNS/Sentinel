@@ -109,8 +109,14 @@ mission_update :: proc(sandbox: ^Sandbox, interact_down, interact_pressed: bool,
 	}
 	base_center := [2]f32{0, 0}
 	inside := la.length([2]f32{player_position.x, player_position.z} - base_center) < COMPOUND_RADIUS_METERS
-	mission.terminal_in_reach = play.driving == nil && flat_distance(player_position, mission.terminal_position) < TERMINAL_REACH_METERS && abs(player_position.y - mission.terminal_position.y) < 2.5
-	mission.hostage_in_reach = !mission.hostage.rescued && play.driving == nil && flat_distance(player_position, mission.hostage.controller.position) < HOSTAGE_REACH_METERS
+	eye := Gameplay.Player_Eye(play.battle.player)
+	seen :: proc(play: ^Play, eye, target: [3]f32) -> bool {
+		return World.Line_Of_Sight_Clear(play.battle.collision, play.battle.ground, eye, target, 0.5)
+	}
+	terminal_point := mission.terminal_position + {0, 0.9, 0.6}
+	hostage_point := mission.hostage.controller.position + {0, 1.1, 0}
+	mission.terminal_in_reach = play.driving == nil && flat_distance(player_position, mission.terminal_position) < TERMINAL_REACH_METERS && abs(player_position.y - mission.terminal_position.y) < 2.5 && seen(play, eye, terminal_point)
+	mission.hostage_in_reach = !mission.hostage.rescued && play.driving == nil && flat_distance(player_position, mission.hostage.controller.position) < HOSTAGE_REACH_METERS && seen(play, eye, hostage_point)
 	observation := Mission.Observation{
 		inside_compound = inside,
 		terminal_in_reach = mission.terminal_in_reach && !mission.state.done[.Hack_Cameras],

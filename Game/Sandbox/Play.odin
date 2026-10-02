@@ -189,6 +189,7 @@ play_update :: proc(sandbox: ^Sandbox, input: ^Platform.Input, delta_seconds: f3
 	play.tab_was_down = tab_down
 	interact_down := Platform.Input_Key_Down(input, .E)
 	interact_pressed := interact_down && !play.interact_was_down
+	was_driving := play.driving != nil
 	play.interact_was_down = interact_down
 	if play.mode == .Play && play.driving == nil do interact_on_foot(play, interact_pressed)
 	Base.Doors_Update(play.doors[:], &play.battle.collision, delta_seconds)
@@ -204,7 +205,7 @@ play_update :: proc(sandbox: ^Sandbox, input: ^Platform.Input, delta_seconds: f3
 		animate_body(play, delta_seconds)
 	case .Play:
 		if play.driving != nil {
-			drive_vehicle(sandbox, input, interact_pressed, delta_seconds)
+			drive_vehicle(sandbox, input, interact_pressed && was_driving, delta_seconds) // The press that boarded must not also exit.
 		} else {
 			player_input := demo_input(play.battle, delta_seconds) if play.demo else collect_input(input)
 			player_input.look *= binocular_look_scale(play)
@@ -509,7 +510,7 @@ prop_solid :: proc(point: Procedural.Scatter_Point) -> (solid: World.Solid, ok: 
 // reach, for the on-screen prompt.
 @(private = "file")
 interact_on_foot :: proc(play: ^Play, pressed: bool) {
-	index, found := Base.Doors_Nearest(play.doors[:], play.battle.player.controller.position)
+	index, found := Base.Doors_Nearest(play.doors[:], play.battle.collision, play.battle.ground, Gameplay.Player_Eye(play.battle.player))
 	play.door_in_reach = found
 	play.boardable = nearest_boardable(play)
 	if !pressed || play.mission.hostage_in_reach || play.mission.terminal_in_reach do return

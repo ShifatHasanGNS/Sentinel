@@ -142,3 +142,17 @@ test_spread_stays_inside_its_cone_and_is_uniform_over_it :: proc(t: ^testing.T) 
 	}
 	testing.expect(t, abs(cosine_sum / f32(samples) - (1 + math.cos(half_angle)) / 2) < 5e-4) // Mean cosine of a uniform cap.
 }
+
+// Seam: Line_Of_Sight_Clear. A wall between two points blocks; the same points on one side of it do not; a target flush against
+// the near face of a wall is reachable, while one flush against the far face is not.
+@(test)
+test_line_of_sight_is_blocked_by_walls_and_not_by_open_air :: proc(t: ^testing.T) {
+	world: Collision_World
+	defer Collision_World_Destroy(&world)
+	append(&world.boxes, Box_Solid({-5, 0, 9.8}, {5, 3, 10.2})) // A wall across z = 10.
+	testing.expect(t, Line_Of_Sight_Clear(world, FLAT, {0, 1.6, 0}, {0, 1.2, 8}))
+	testing.expect(t, !Line_Of_Sight_Clear(world, FLAT, {0, 1.6, 0}, {0, 1.2, 12})) // Computer on the far side of the wall.
+	testing.expect(t, Line_Of_Sight_Clear(world, FLAT, {0, 1.6, 0}, {0, 1.2, 9.7})) // Flush against the near face.
+	testing.expect(t, !Line_Of_Sight_Clear(world, FLAT, {0, 1.6, 0}, {0, 1.2, 10.5})) // Flush against the far face.
+	testing.expect(t, Line_Of_Sight_Clear(world, FLAT, {0, 1.6, 20}, {0, 1.6, 20.1})) // Degenerate.
+}

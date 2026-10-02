@@ -47,10 +47,12 @@ update_vehicles :: proc(sandbox: ^Sandbox, delta_seconds: f32) {
 // The vehicle the player could climb into from here, the nearest if several.
 nearest_boardable :: proc(play: ^Play) -> Maybe(int) {
 	position := play.battle.player.controller.position
+	eye := Gameplay.Player_Eye(play.battle.player)
 	best := math.INF_F32
 	found: Maybe(int)
 	for vehicle, index in play.vehicles {
 		if !Vehicles.Vehicle_Can_Board(vehicle, position) do continue
+		if !vehicle_in_sight(play, index, eye) do continue
 		vehicle_position, _, _, _ := Vehicles.Vehicle_Pose(vehicle)
 		if distance := la.length(vehicle_position - position); distance < best do best, found = distance, index
 	}
@@ -72,6 +74,18 @@ board_named_vehicle :: proc(play: ^Play, name: string) {
 sync_player_to_seat :: proc(play: ^Play) {
 	vehicle := play.vehicles[play.driving.?]
 	play.battle.player.controller.position = Vehicles.Vehicle_Seat_Position(vehicle) - {0, Gameplay.PLAYER_EYE_HEIGHT_METERS, 0}
+}
+
+// A vehicle can be boarded only if it is seen from the eye (its own hull does not count as in the way).
+@(private = "file")
+vehicle_in_sight :: proc(play: ^Play, index: int, eye: [3]f32) -> bool {
+	vehicle := &play.vehicles[index]
+	position, _, _, _ := Vehicles.Vehicle_Pose(vehicle^)
+	_, _, height, _ := Vehicles.Vehicle_Hull(vehicle^)
+	collision := &play.battle.collision
+	collision.boxes[vehicle.solid_index].disabled = true
+	defer collision.boxes[vehicle.solid_index].disabled = false
+	return World.Line_Of_Sight_Clear(collision^, play.battle.ground, eye, position + {0, height * 0.5, 0}, 0.5)
 }
 
 board_vehicle :: proc(play: ^Play) {

@@ -2,6 +2,7 @@ package Render
 
 import "../GPU"
 import "../Procedural"
+import "core:fmt"
 import la "core:math/linalg"
 import gl "vendor:OpenGL"
 
@@ -210,6 +211,7 @@ light_base :: proc(renderer: ^Renderer, frame: Frame) {
 	Light_Set_Uniforms(shader, "u_Sun", frame.sun)
 	GPU.Shader_Set(shader, "u_CameraForward", frame.camera.forward)
 	GPU.Shader_Set(shader, "u_SunShadows", i32(frame.sun_shadows))
+	set_interior_uniforms(shader, frame.interiors)
 	GPU.Shader_Set(shader, "u_Ssao", GPU.Texture_Bind_Next(&renderer.ssao.blurred.colors[0], GPU.Sampler_Nearest_Clamp))
 	GPU.Shader_Set(shader, "u_SsaoEnabled", i32(frame.ssao_radius_meters > 0))
 	if frame.sun_shadows do Shadow_Map_Bind(shader, &renderer.shadows, renderer.cascades)
@@ -225,8 +227,10 @@ light_volumes :: proc(renderer: ^Renderer, frame: Frame) {
 	GPU.Shader_Set(shader, "u_ScreenSize", [2]f32{f32(renderer.gbuffer.width), f32(renderer.gbuffer.height)})
 	GPU.Shader_Set(shader, "u_SpotShadows", GPU.Texture_Bind_Next(&renderer.spot_shadows.depth, GPU.Sampler_Shadow))
 	GPU.Shader_Set(shader, "u_SpotShadowSize", f32(SPOT_SHADOW_SIZE))
+	set_interior_uniforms(shader, frame.interiors)
 	for light, index in frame.local_lights {
 		set_spot_shadow(shader, renderer.spot_set, light, index)
+		GPU.Shader_Set(shader, "u_LightRoom", i32(Interior_Index_At(frame.interiors, light.position)))
 		volume := la.matrix4_translate_f32(light.position) * la.matrix4_scale_f32({light.range_meters, light.range_meters, light.range_meters})
 		GPU.Shader_Set(shader, "u_Model", volume)
 		Light_Set_Uniforms(shader, "u_Light", light)
@@ -289,4 +293,14 @@ set_spot_shadow :: proc(shader: ^GPU.Shader, set: Spot_Shadow_Set, light: Light,
 	if slot < 0 do return
 	GPU.Shader_Set(shader, "u_SpotMatrix", set.matrices[slot])
 	GPU.Shader_Set(shader, "u_SpotTexelPerMeter", Spot_Shadow_Texel_Per_Meter(light))
+}
+
+@(private = "file")
+set_interior_uniforms :: proc(shader: ^GPU.Shader, interiors: []Interior_Volume) {
+	count := min(len(interiors), INTERIORS_MAX)
+	GPU.Shader_Set(shader, "u_InteriorCount", i32(count))
+	for volume, index in interiors[:count] {
+		GPU.Shader_Set(shader, fmt.tprintf("u_InteriorCenter[%d]", index), [4]f32{volume.center.x, volume.center.y, volume.center.z, volume.yaw_radians})
+		GPU.Shader_Set(shader, fmt.tprintf("u_InteriorHalf[%d]", index), volume.half_extents)
+	}
 }

@@ -1,5 +1,7 @@
 package Render
 
+import "core:math"
+
 import "../Procedural"
 
 Draw_Item :: struct {
@@ -43,6 +45,7 @@ Frame :: struct {
 	shadow_items:      []Draw_Item, // Shadow casters; when empty, items cast.
 	terrain_shading:   Terrain_Shading,
 	sun:               Light, // The one directional light.
+	interiors:         []Interior_Volume, // Roofed rooms: sky light does not reach inside them.
 	local_lights:      []Light, // Point, spot and area lights.
 	sky:               Sky,
 	materials:         ^Procedural.Texture_Set,
@@ -53,4 +56,26 @@ Frame :: struct {
 	ssao_radius_meters: f32, // 0 disables screen-space ambient occlusion.
 	shaft_strength:    f32, // 0 disables light shafts; scales the sun colour added along sky-visible rays.
 	bloom_strength:    f32, // 0 disables bloom; ~0.05 is a soft glow.
+}
+
+// A roofed room as a box turned about +Y. Sky ambient and sky reflection are scaled down inside it (see Shaders/DeferredBase.glsl);
+// direct lights still work, so the lamps in the room are what light it.
+Interior_Volume :: struct {
+	center:       [3]f32,
+	half_extents: [3]f32,
+	yaw_radians:  f32,
+}
+
+INTERIORS_MAX :: 24
+INTERIOR_SLACK_METERS :: 0.08 // Matches Interior.glsl: surfaces on a room's faces count as inside it.
+
+// The room containing the point, or -1 outside every room (the same test the shaders make, in the box's own axes).
+Interior_Index_At :: proc(interiors: []Interior_Volume, point: [3]f32) -> int {
+	for volume, index in interiors[:min(len(interiors), INTERIORS_MAX)] {
+		offset := point - volume.center
+		sine, cosine := math.sin(volume.yaw_radians), math.cos(volume.yaw_radians)
+		local := [3]f32{offset.x * cosine - offset.z * sine, offset.y, offset.x * sine + offset.z * cosine}
+		if abs(local.x) < volume.half_extents.x + INTERIOR_SLACK_METERS && abs(local.y) < volume.half_extents.y + INTERIOR_SLACK_METERS && abs(local.z) < volume.half_extents.z + INTERIOR_SLACK_METERS do return index
+	}
+	return -1
 }

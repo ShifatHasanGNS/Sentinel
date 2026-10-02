@@ -8,6 +8,7 @@
 #include "Sky.glsl"
 #include "Ambient.glsl"
 #include "Shadow.glsl"
+#include "Interior.glsl"
 #include "Fullscreen.glsl"
 #stage fragment
 in vec2 v_uv;
@@ -30,6 +31,7 @@ void main() {
 	if (u_SunShadows) sun *= shadow_factor(surface.position, surface.normal, -u_Sun.direction, u_CameraPosition, u_CameraForward);
 	// Occlusion only dims light that arrives from the sky; direct sun is handled by shadow maps.
 	float occlusion = surface.ambient_occlusion * (u_SsaoEnabled ? texture(u_Ssao, v_uv).r : 1.0);
+	occlusion *= interior_ambient_scale(surface.position);
 	vec3 ambient = ambient_light(surface.albedo, surface.roughness, surface.metallic, surface.normal, view, occlusion);
 	color = vec4(sun + ambient + surface.emission, 1.0);
 }

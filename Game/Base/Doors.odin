@@ -60,14 +60,16 @@ Doors_Toggle :: proc(doors: []Door, index: int) {
 	}
 }
 
-// The door whose leaf is nearest to `position` and within reach, if any.
-Doors_Nearest :: proc(doors: []Door, position: [3]f32) -> (index: int, found: bool) {
+// The door whose leaf is nearest to the player's eye and within reach, if any. The leaf must also be seen from the eye, so a door
+// on the other side of a wall (another building's, or the far side of this one) cannot be used.
+Doors_Nearest :: proc(doors: []Door, collision: World.Collision_World, ground: World.Ground, eye: [3]f32) -> (index: int, found: bool) {
 	best := f32(DOOR_INTERACT_RANGE_METERS)
 	for door, candidate in doors {
-		middle := door.hinge + World.rotate_about_y({door.spec.side * door.spec.width / 2, 0, 0}, door.yaw_radians)
-		offset := position - middle
-		if abs(offset.y) > 2.5 do continue
-		if distance := la.length([2]f32{offset.x, offset.z}); distance < best do best, index, found = distance, candidate, true
+		middle := door.hinge + World.rotate_about_y({door.spec.side * door.spec.width / 2, 0, 0}, door.yaw_radians) + {0, 1.1, 0}
+		distance := la.length(middle - eye)
+		if distance >= best do continue
+		if !World.Line_Of_Sight_Clear(collision, ground, eye, middle, 0.45) do continue
+		best, index, found = distance, candidate, true
 	}
 	return
 }

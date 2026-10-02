@@ -165,3 +165,13 @@ Spread_Direction :: proc(aim: [3]f32, half_angle_radians, u1, u2: f32) -> [3]f32
 	phi := 2 * math.PI * u2
 	return la.normalize(aim * cosine + (right * math.cos(phi) + up * math.sin(phi)) * sine)
 }
+
+// Whether nothing solid (a wall, a closed door, the terrain) stands between two points, ignoring the last `margin` meters before
+// `to` so a target that is itself part of a surface (a leaf, a desk against a wall) counts as reachable from the open side.
+Line_Of_Sight_Clear :: proc(world: Collision_World, ground: Ground, from, to: [3]f32, margin: f32 = 0.35) -> bool {
+	offset := to - from
+	distance := la.length(offset)
+	if distance <= margin do return true
+	hit := Raycast_World(world, ground, from, offset / distance, distance)
+	return !hit.hit || hit.distance > distance - margin
+}

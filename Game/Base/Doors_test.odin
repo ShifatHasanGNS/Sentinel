@@ -2,7 +2,6 @@ package Base
 
 import "../Catalogue"
 import World "../../Engine/World"
-import "core:math"
 import "core:testing"
 
 // Seam: Layout_Doors + Doors_Register + Doors_Update against a body walking through the world.
@@ -96,8 +95,15 @@ test_the_nearest_door_is_found_only_within_reach :: proc(t: ^testing.T) {
 	layout, world, doors := single_building(.Headquarters, 0, 0, 0)
 	defer destroy_building(&layout, &world, &doors)
 	middle := doors[0].hinge + World.rotate_about_y({doors[0].spec.width / 2, 0, 0}, 0)
-	_, near := Doors_Nearest(doors[:], middle + {0, 0, 1.5})
-	_, far := Doors_Nearest(doors[:], middle + {0, 0, 6})
+	_, near := Doors_Nearest(doors[:], world, World.Ground{height_at = flat}, middle + {0, 1.6, 1.5})
+	_, far := Doors_Nearest(doors[:], world, World.Ground{height_at = flat}, middle + {0, 1.6, 6})
 	testing.expect(t, near && !far)
-	_ = math.PI
+	// From inside the room the same door is just as usable (it is in the wall's opening, not behind it).
+	_, from_inside := Doors_Nearest(doors[:], world, World.Ground{height_at = flat}, middle + {0, 1.6, -1.2})
+	testing.expect(t, from_inside)
+	// A second building's wall between the eye and the door blocks it: stand behind a barracks placed in the way.
+	append(&world.boxes, World.Box_Solid(middle + {-3, 0, 0.8}, middle + {3, 3, 1.2}))
+	_, behind_wall := Doors_Nearest(doors[:], world, World.Ground{height_at = flat}, middle + {0, 1.6, 2.0})
+	testing.expect(t, !behind_wall)
+
 }

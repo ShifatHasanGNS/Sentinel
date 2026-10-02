@@ -134,6 +134,7 @@ Sandbox_Render :: proc(sandbox: ^Sandbox, window: Platform.Window) {
 		},
 		sun = daylight.sun,
 		local_lights = lights[:],
+		interiors = Base.Layout_Interiors(sandbox.base.layout, sandbox.terrain.base_height_meters)[:],
 		sky = daylight.sky,
 		bloom_strength = BLOOM_STRENGTH,
 		shaft_strength = SHAFT_STRENGTH,
