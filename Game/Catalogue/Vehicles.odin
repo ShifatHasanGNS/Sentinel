@@ -16,6 +16,17 @@ Vehicle_Weapon :: enum {
 
 // A drivable vehicle taken apart into the pieces that move: the hull, one wheel (mounted many times), and a turret carrying a gun.
 // Everything is in its own frame, built around the origin; the mounts and pivots say where each piece sits.
+// A caterpillar track: an endless belt of links circling the road wheels, in the vehicle's y-z plane at each x in `sides`. The belt is
+// two straight runs joined by two half-circle arcs of `radius` around the end wheels; links are spaced `pitch` apart along it.
+Track_Spec :: struct {
+	sides:   [2]f32,
+	centre_y: f32,
+	half_run: f32, // Half the distance between the end wheels' axles.
+	radius:  f32,
+	pitch:   f32,
+	link:    Parts,
+}
+
 Vehicle_Spec :: struct {
 	body:         Parts,
 	wheel:        Parts,
@@ -30,6 +41,7 @@ Vehicle_Spec :: struct {
 	seat:         [3]f32, // The occupant's eye, in the vehicle frame.
 	armor:        f32, // Fraction of incoming damage the occupant takes.
 	handling:     World.Vehicle_Handling,
+	track:        Maybe(Track_Spec),
 	is_aircraft:  bool,
 	aircraft:     World.Aircraft_Handling,
 	main_rotor:   Parts,
@@ -45,6 +57,7 @@ Vehicle_Spec_Destroy :: proc(spec: ^Vehicle_Spec) {
 	delete(spec.turret)
 	delete(spec.gun)
 	delete(spec.main_rotor)
+	if track, has_track := spec.track.?; has_track do delete(track.link)
 	delete(spec.tail_rotor)
 	spec^ = {}
 }
@@ -93,6 +106,12 @@ compose :: proc(spec: Vehicle_Spec) -> (parts: Parts) {
 	append_offset(&parts, spec.gun, spec.turret_pivot + spec.gun_pivot)
 	append_offset(&parts, spec.main_rotor, spec.main_rotor_pivot)
 	append_offset(&parts, spec.tail_rotor, spec.tail_rotor_pivot)
+	if track, has_track := spec.track.?; has_track { // At rest (the catalogue and showroom) the belt is a solid band; in play the links move.
+		for x in track.sides {
+			add_box(&parts, {0.66, 2 * track.radius, 2 * track.half_run}, {x, track.centre_y, 0}, .Rubber, false)
+			for z in ([2]f32{-track.half_run, track.half_run}) do add_cylinder_x(&parts, track.radius, 0.66, {x, track.centre_y, z}, .Rubber, false, 18)
+		}
+	}
 	return parts
 }
 
@@ -227,16 +246,19 @@ battle_tank_spec :: proc() -> (spec: Vehicle_Spec) {
 	parts := &spec.body
 	add_rounded_box(parts, {3, 0.9, 6.2}, {0, 1.15, 0}, .Olive_Paint, 0.035)
 	add_part(parts, Procedural.Part{primitive = Procedural.Wedge({3, 0.7, 1.5}), position = {0, 1.25, 3.85}, material = layer(.Olive_Paint), solid = true})
-	for x in ([2]f32{-1.5, 1.5}) do add_box(parts, {0.65, 0.9, 6.9}, {x, 0.45, 0}, .Rubber)
+	for x in ([2]f32{-1.5, 1.5}) do add_box(parts, {0.55, 0.5, 5.4}, {x, 0.42, 0}, .Gunmetal) // The sprocket-side core the moving links wrap.
+	track := Track_Spec{sides = {-1.5, 1.5}, centre_y = 0.4, half_run = 2.7, radius = 0.4, pitch = 0.2}
+	add_box(&track.link, {0.66, 0.04, 0.17}, {0, 0, 0}, .Rubber, false)
+	add_box(&track.link, {0.66, 0.035, 0.05}, {0, 0.035, 0}, .Gunmetal, false)
+	spec.track = track
 	add_part(&spec.turret, Procedural.Part{primitive = Procedural.Sphere(1, 20, 10), stretch = {1.6, 0.5, 1.9}, material = layer(.Olive_Paint), solid = true})
 	add_cylinder(&spec.turret, 0.3, 0.25, {0.7, 0.6, -0.3}, .Olive_Paint, false, 12)
 	add_box(&spec.turret, {0.5, 0.08, 0.2}, {-0.9, 0.45, 0.9}, .Glass, false)
 	add_cylinder_z(&spec.gun, 0.12, 3.4, {0, 0, 1.7}, .Olive_Paint, true, 14)
 	add_cylinder_z(&spec.gun, 0.17, 0.4, {0, 0, 3.55}, .Rusted_Metal, false, 14)
-	for x in ([2]f32{-1.5, 1.5}) { // Side skirts, a fender over the tracks, and track links: ribs across the rubber.
+	for x in ([2]f32{-1.5, 1.5}) { // Side skirts and a fender over the tracks (the links themselves move: see Game/Vehicles/VehicleRender.odin).
 		add_box(parts, {0.12, 0.7, 6.2}, {x * 1.12, 0.9, 0}, .Olive_Paint, false)
 		add_box(parts, {0.8, 0.06, 7.1}, {x, 1.0, 0}, .Olive_Paint, false)
-		for index in 0 ..< 28 do add_box(parts, {0.7, 0.05, 0.14}, {x, 0.92, -3.3 + f32(index) * 0.245}, .Gunmetal, false)
 	}
 	for x in ([2]f32{-0.9, 0.9}) do add_cylinder(parts, 0.17, 0.4, {x, 1.75, -2.6}, .Gunmetal, false, 12) // Exhaust grilles and stowage on the engine deck.
 	add_box(parts, {2.2, 0.12, 1.0}, {0, 1.65, -2.6}, .Gunmetal, false)

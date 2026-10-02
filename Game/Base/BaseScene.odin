@@ -23,6 +23,7 @@ Base_Scene :: struct {
 Base_Scene_Create :: proc(layout: Layout, ground_height_meters: f32) -> (scene: Base_Scene) {
 	scene.layout = layout
 	for kind in Catalogue.Object_Kind {
+		if Catalogue.Is_Drivable(kind) do continue // Vehicles are drawn by Game/Vehicles, where they can move; drawing them here too left a copy behind.
 		instances := make([dynamic]Render.Instance, context.temp_allocator)
 		placed_model := proc(placement: Placement, ground: f32) -> matrix[4, 4]f32 {
 			return la.matrix4_translate_f32({placement.x, ground, placement.z}) * la.matrix4_rotate_f32(la.to_radians(placement.yaw_degrees), {0, 1, 0})
