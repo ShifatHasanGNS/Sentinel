@@ -140,3 +140,50 @@ test_running_over_enemies_needs_speed_and_a_footprint_hit :: proc(t: ^testing.T)
 	testing.expect(t, !Gameplay.Enemy_Is_Alive(battle.enemies[0]))
 	testing.expect_value(t, battle.enemies[1].health.current, battle.enemies[1].health.maximum)
 }
+
+@(test)
+test_a_helicopter_lifts_off_only_when_occupied_and_comes_back_down_when_abandoned :: proc(t: ^testing.T) {
+	battle, vehicles := make_battle({.Helicopter})
+	defer Gameplay.Battle_Destroy(&battle)
+	defer delete(vehicles)
+	heli := &vehicles[0]
+	testing.expect(t, heli.spec.is_aircraft)
+	for _ in 0 ..< 60 * 3 do Vehicle_Update(heli, Vehicle_Controls{fly = {collective = 1}}, &battle.collision, GROUND, 1.0 / 60) // Nobody in it.
+	testing.expect_value(t, heli.air.position.y, 0)
+	heli.occupied = true
+	for _ in 0 ..< 60 * 8 do Vehicle_Update(heli, Vehicle_Controls{fly = {collective = 1}}, &battle.collision, GROUND, 1.0 / 60)
+	testing.expect(t, heli.air.position.y > 10)
+	testing.expect_value(t, battle.collision.boxes[heli.solid_index].center.y > heli.air.position.y, true) // The hull solid rides with it.
+	heli.occupied = false
+	for _ in 0 ..< 60 * 20 do Vehicle_Update(heli, {}, &battle.collision, GROUND, 1.0 / 60)
+	testing.expect_value(t, heli.air.position.y, 0)
+	testing.expect_value(t, heli.air.rotor, 0)
+}
+
+@(test)
+test_a_helicopter_in_the_air_cannot_be_boarded_or_left :: proc(t: ^testing.T) {
+	battle, vehicles := make_battle({.Helicopter})
+	defer Gameplay.Battle_Destroy(&battle)
+	defer delete(vehicles)
+	heli := &vehicles[0]
+	testing.expect(t, Vehicle_Can_Board(heli^, {2.5, 0, 0}))
+	heli.air.position.y, heli.air.on_ground = 8, false
+	testing.expect(t, !Vehicle_Can_Board(heli^, {2.5, 0, 0}))
+	testing.expect(t, !Vehicle_Is_Settled(heli^))
+	heli.air.position.y, heli.air.on_ground = 0, true
+	testing.expect(t, Vehicle_Is_Settled(heli^))
+}
+
+// The hull rectangle is centred behind the pose point (the tail boom), so boarding is measured from it, and a helicopter turned
+// 90 degrees is boarded from the matching side.
+@(test)
+test_the_helicopter_hull_is_offset_along_its_heading :: proc(t: ^testing.T) {
+	battle, vehicles := make_battle({.Helicopter})
+	defer Gameplay.Battle_Destroy(&battle)
+	defer delete(vehicles)
+	heli := &vehicles[0]
+	testing.expect(t, Vehicle_Can_Board(heli^, {0, 0, -9})) // 9 m behind the pose point is beside the tail boom's end (hull reaches -7.4).
+	testing.expect(t, !Vehicle_Can_Board(heli^, {0, 0, 9})) // 9 m ahead is far from the nose (hull reaches 3).
+	heli.air.yaw_radians = math.PI / 2
+	testing.expect(t, Vehicle_Can_Board(heli^, {-9, 0, 0})) // Now the tail points toward -X.
+}

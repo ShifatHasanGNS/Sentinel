@@ -14,6 +14,7 @@ CHASE_DISTANCE_MIN_METERS :: 8.0
 CHASE_HEIGHT_FRACTION :: 0.8 // Camera pivot height as a fraction of the vehicle's height.
 CHASE_CLEARANCE_METERS :: 0.4
 RECENTER_IDLE_SECONDS :: 1.2
+AIRCRAFT_CHASE_DISTANCE_METERS :: 16.0
 RECENTER_RATE :: 1.6 // Radians per second.
 RECENTER_SPEED_MIN :: 2.0
 METERS_PER_SECOND_TO_KMH :: 3.6
@@ -22,7 +23,7 @@ METERS_PER_SECOND_TO_KMH :: 3.6
 vehicles_create :: proc(play: ^Play, sandbox: ^Sandbox) {
 	placed := make([dynamic]Vehicles.Placed, context.temp_allocator)
 	for placement in sandbox.base.layout.placements {
-		if Catalogue.Is_Ground_Vehicle(placement.kind) do append(&placed, Vehicles.Placed{placement.kind, placement.x, placement.z, math.to_radians(placement.yaw_degrees)})
+		if Catalogue.Is_Drivable(placement.kind) do append(&placed, Vehicles.Placed{placement.kind, placement.x, placement.z, math.to_radians(placement.yaw_degrees)})
 	}
 	base_ground := World.Ground{height_at = terrain_height, data = sandbox.terrain}
 	play.vehicles = Vehicles.Vehicles_Create(placed[:], base_ground, &play.battle.collision)
@@ -50,7 +51,8 @@ nearest_boardable :: proc(play: ^Play) -> Maybe(int) {
 	found: Maybe(int)
 	for vehicle, index in play.vehicles {
 		if !Vehicles.Vehicle_Can_Board(vehicle, position) do continue
-		if distance := la.length(vehicle.body.position - position); distance < best do best, found = distance, index
+		vehicle_position, _, _, _ := Vehicles.Vehicle_Pose(vehicle)
+		if distance := la.length(vehicle_position - position); distance < best do best, found = distance, index
 	}
 	return found
 }
@@ -82,7 +84,8 @@ board_vehicle :: proc(play: ^Play) {
 	play.mouse_idle_seconds = 0
 	play.battle.player.armor = 1 - vehicle.spec.armor
 	play.battle.player.pitch_radians = -0.2
-	play.battle.player.yaw_radians = vehicle.body.yaw_radians - math.PI
+	_, yaw, _, _ := Vehicles.Vehicle_Pose(vehicle^)
+	play.battle.player.yaw_radians = yaw - math.PI
 	play.boardable = nil
 }
 
@@ -110,16 +113,22 @@ drive_vehicle :: proc(sandbox: ^Sandbox, input: ^Platform.Input, exit_pressed: b
 	view_down := Platform.Input_Key_Down(input, .V)
 	if view_down && !play.view_was_down do play.seat_view = !play.seat_view
 	play.view_was_down = view_down
-	drive_input := World.Vehicle_Input{throttle = key_axis(input, .W, .S), steer = key_axis(input, .D, .A), brake = Platform.Input_Key_Down(input, .Space)}
-	if play.demo do drive_input = World.Vehicle_Input{throttle = 1, steer = 0.25 * math.sin(play.demo_seconds * 0.8)}
-	controls := Vehicles.Vehicle_Controls{
-		drive = drive_input,
-		aim_yaw = player.yaw_radians + math.PI,
-		aim_pitch = player.pitch_radians,
+	controls := Vehicles.Vehicle_Controls{aim_yaw = player.yaw_radians + math.PI, aim_pitch = player.pitch_radians}
+	if vehicle.spec.is_aircraft {
+		controls.fly = World.Aircraft_Input{
+			collective = key_axis(input, .Space, .Left_Control), pitch = key_axis(input, .W, .S), roll = key_axis(input, .E, .Q), yaw = key_axis(input, .D, .A),
+		}
+	} else {
+		controls.drive = World.Vehicle_Input{throttle = key_axis(input, .W, .S), steer = key_axis(input, .D, .A), brake = Platform.Input_Key_Down(input, .Space)}
+		if play.demo do controls.drive = World.Vehicle_Input{throttle = 1, steer = 0.25 * math.sin(play.demo_seconds * 0.8)}
 	}
+	if play.demo && vehicle.spec.is_aircraft do controls.fly = World.Aircraft_Input{collective = 1 if play.demo_seconds < 8 else 0, pitch = 0.6 if play.demo_seconds > 6 else 0}
 	Vehicles.Vehicle_Update(vehicle, controls, &play.battle.collision, play.battle.ground, delta_seconds)
-	handling := vehicle.spec.handling
-	Gameplay.Battle_Run_Over(&play.battle, vehicle.body.position, handling.half_width, handling.half_length, vehicle.body.yaw_radians, vehicle.body.speed)
+	if vehicle.spec.is_aircraft do apply_hard_landing(play, vehicle.air.impact_speed)
+	else {
+		handling := vehicle.spec.handling
+		Gameplay.Battle_Run_Over(&play.battle, vehicle.body.position, handling.half_width, handling.half_length, vehicle.body.yaw_radians, vehicle.body.speed)
+	}
 	play.demo_seconds += delta_seconds
 	firing := Platform.Input_Mouse_Down(input, .Left) || (play.demo && int(play.demo_seconds * 2) % 3 == 0)
 	if firing && Vehicles.Vehicle_Fire(vehicle, &play.battle) do play.recoil = 0
@@ -128,7 +137,7 @@ drive_vehicle :: proc(sandbox: ^Sandbox, input: ^Platform.Input, exit_pressed: b
 	player.controller.position = seat - {0, Gameplay.PLAYER_EYE_HEIGHT_METERS, 0}
 	player.controller.velocity = {}
 	sandbox.camera = vehicle_camera(play, vehicle^)
-	if exit_pressed && abs(vehicle.body.speed) <= Vehicles.EXIT_SPEED_MAX do leave_vehicle(sandbox)
+	if exit_pressed && Vehicles.Vehicle_Is_Settled(vehicle^) do leave_vehicle(sandbox)
 }
 
 @(private = "file")
@@ -139,9 +148,10 @@ key_axis :: proc(input: ^Platform.Input, positive, negative: Platform.Key) -> f3
 // Without a turret to aim, the camera swings back behind a moving vehicle once the mouse has been still for a moment.
 @(private = "file")
 recenter_camera :: proc(play: ^Play, vehicle: Vehicles.Vehicle, delta_seconds: f32) {
-	if vehicle.spec.weapon != .None || play.mouse_idle_seconds < RECENTER_IDLE_SECONDS || abs(vehicle.body.speed) < RECENTER_SPEED_MIN do return
+	if vehicle.spec.weapon != .None || play.mouse_idle_seconds < RECENTER_IDLE_SECONDS || abs(vehicle_speed(vehicle)) < RECENTER_SPEED_MIN do return
 	player := &play.battle.player
-	behind := vehicle.body.yaw_radians - math.PI
+	_, heading, _, _ := Vehicles.Vehicle_Pose(vehicle)
+	behind := heading - math.PI
 	player.yaw_radians += clamp(Vehicles.wrap_angle(behind - player.yaw_radians), -RECENTER_RATE * delta_seconds, RECENTER_RATE * delta_seconds)
 	player.pitch_radians += clamp(-0.2 - player.pitch_radians, -RECENTER_RATE * delta_seconds, RECENTER_RATE * delta_seconds)
 }
@@ -155,9 +165,11 @@ vehicle_camera :: proc(play: ^Play, vehicle: Vehicles.Vehicle) -> Fly_Camera {
 	if play.seat_view {
 		return Fly_Camera{position = Vehicles.Vehicle_Seat_Position(vehicle), yaw_radians = player.yaw_radians, pitch_radians = player.pitch_radians}
 	}
-	handling := vehicle.spec.handling
-	pivot := vehicle.body.position + {0, handling.height * CHASE_HEIGHT_FRACTION, 0}
-	distance := max(CHASE_DISTANCE_MIN_METERS, handling.half_length * 2.4)
+	vehicle_position, _, _, _ := Vehicles.Vehicle_Pose(vehicle)
+	_, half_length, height, _ := Vehicles.Vehicle_Hull(vehicle)
+	pivot := vehicle_position + {0, height * CHASE_HEIGHT_FRACTION, 0}
+	distance := max(CHASE_DISTANCE_MIN_METERS, half_length * 2.4)
+	if vehicle.spec.is_aircraft do distance = AIRCRAFT_CHASE_DISTANCE_METERS
 	collision := play.battle.collision
 	own := &play.battle.collision.boxes[vehicle.solid_index]
 	own.disabled = true
@@ -170,17 +182,38 @@ vehicle_camera :: proc(play: ^Play, vehicle: Vehicles.Vehicle) -> Fly_Camera {
 	return Fly_Camera_Looking_At(position, pivot + forward * 20)
 }
 
-// The speed readout and the controls hint, and the gun's state, along the bottom of the screen.
+// Horizontal speed in m/s, signed for ground vehicles (negative is reverse).
+@(private = "file")
+vehicle_speed :: proc(vehicle: Vehicles.Vehicle) -> f32 {
+	if vehicle.spec.is_aircraft do return la.length([2]f32{vehicle.air.velocity.x, vehicle.air.velocity.z})
+	return vehicle.body.speed
+}
+
+// A helicopter that lands hard hurts its pilot: damage grows with the sink rate above the safe speed.
+@(private = "file")
+apply_hard_landing :: proc(play: ^Play, impact_speed: f32) {
+	if impact_speed <= Vehicles.HARD_LANDING_SPEED do return
+	Gameplay.Health_Apply_Damage(&play.battle.player.health, (impact_speed - Vehicles.HARD_LANDING_SPEED) * Vehicles.HARD_LANDING_DAMAGE_PER_SPEED, .Torso)
+	play.battle.player.damage_flash = 1
+}
+
+// The speed readout and the controls hint, and the gun's or rotor's state, along the bottom of the screen.
 draw_vehicle_hud :: proc(play: ^Play, width, height, scale: f32) {
 	hud := &play.hud
 	vehicle := play.vehicles[play.driving.?]
-	speed := fmt.tprintf("%d KM/H", int(abs(vehicle.body.speed) * METERS_PER_SECOND_TO_KMH))
+	speed := fmt.tprintf("%d KM/H", int(abs(vehicle_speed(vehicle)) * METERS_PER_SECOND_TO_KMH))
 	hud_text_right(hud, width - 16, height - 16 - 12 * scale * 1.5, speed, scale * 1.5, {1, 0.95, 0.6, 0.95})
-	if vehicle.spec.weapon == .Cannon {
+	hint := "E EXIT   V VIEW   SPACE BRAKE"
+	if vehicle.spec.is_aircraft {
+		ground := play.battle.ground.height_at(play.battle.ground.data, vehicle.air.position.x, vehicle.air.position.z)
+		status := fmt.tprintf("ALT %d M   ROTOR %d%%", int(vehicle.air.position.y - ground), int(vehicle.air.rotor * 100))
+		hud_text_right(hud, width - 16, height - 16 - 24 * scale * 1.5, status, scale, {1, 1, 1, 0.9})
+		hint = "SPACE UP  CTRL DOWN  W/S PITCH  A/D TURN  Q/E STRAFE  V VIEW  E EXIT ON GROUND"
+	} else if vehicle.spec.weapon == .Cannon {
 		status := "CANNON READY" if vehicle.cooldown_seconds <= 0 else "RELOADING"
 		hud_text_right(hud, width - 16, height - 16 - 24 * scale * 1.5, status, scale, {1, 1, 1, 0.85})
 	}
-	hud_text_right(hud, width - 16, height - 16 - 36 * scale * 1.5, "E EXIT   V VIEW   SPACE BRAKE", scale, {1, 1, 1, 0.6})
+	hud_text_right(hud, width - 16, height - 16 - 36 * scale * 1.5, hint, scale, {1, 1, 1, 0.6})
 }
 
 @(private = "file")

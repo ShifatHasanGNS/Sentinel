@@ -30,6 +30,12 @@ Vehicle_Spec :: struct {
 	seat:         [3]f32, // The occupant's eye, in the vehicle frame.
 	armor:        f32, // Fraction of incoming damage the occupant takes.
 	handling:     World.Vehicle_Handling,
+	is_aircraft:  bool,
+	aircraft:     World.Aircraft_Handling,
+	main_rotor:   Parts,
+	main_rotor_pivot: [3]f32,
+	tail_rotor:   Parts,
+	tail_rotor_pivot: [3]f32,
 }
 
 Vehicle_Spec_Destroy :: proc(spec: ^Vehicle_Spec) {
@@ -38,6 +44,8 @@ Vehicle_Spec_Destroy :: proc(spec: ^Vehicle_Spec) {
 	delete(spec.wheel_mounts)
 	delete(spec.turret)
 	delete(spec.gun)
+	delete(spec.main_rotor)
+	delete(spec.tail_rotor)
 	spec^ = {}
 }
 
@@ -59,6 +67,11 @@ Is_Ground_Vehicle :: proc(kind: Object_Kind) -> bool {
 	return false
 }
 
+// Anything you can get into and move: the ground vehicles and the helicopter.
+Is_Drivable :: proc(kind: Object_Kind) -> bool {
+	return Is_Ground_Vehicle(kind) || kind == .Helicopter
+}
+
 @(private = "file")
 vehicle_spec_for :: proc(kind: Object_Kind) -> Vehicle_Spec {
 	#partial switch kind {
@@ -66,6 +79,7 @@ vehicle_spec_for :: proc(kind: Object_Kind) -> Vehicle_Spec {
 	case .Cargo_Truck: return cargo_truck_spec()
 	case .Armored_Carrier: return armored_carrier_spec()
 	case .Battle_Tank: return battle_tank_spec()
+	case .Helicopter: return helicopter_spec()
 	}
 	panic("Catalogue_Vehicle_Spec: not a ground vehicle")
 }
@@ -77,6 +91,8 @@ compose :: proc(spec: Vehicle_Spec) -> (parts: Parts) {
 	for mount in spec.wheel_mounts do append_offset(&parts, spec.wheel, mount.position)
 	append_offset(&parts, spec.turret, spec.turret_pivot)
 	append_offset(&parts, spec.gun, spec.turret_pivot + spec.gun_pivot)
+	append_offset(&parts, spec.main_rotor, spec.main_rotor_pivot)
+	append_offset(&parts, spec.tail_rotor, spec.tail_rotor_pivot)
 	return parts
 }
 
@@ -230,22 +246,41 @@ battle_tank :: proc() -> Parts {
 	return compose(Catalogue_Vehicle_Spec(.Battle_Tank)^)
 }
 
-// A light utility helicopter: egg fuselage with a glass nose, tapering tail boom, two-blade rotor and skids.
-@(private = "package")
-helicopter :: proc() -> (parts: Parts) {
-	add_part(&parts, Procedural.Part{primitive = Procedural.Sphere(1.2, 20, 10), position = {0, 1.9, 0.2}, stretch = {0.9, 1, 2.1}, material = layer(.Olive_Paint), solid = true})
-	add_part(&parts, Procedural.Part{primitive = Procedural.Sphere(0.8, 16, 8), position = {0, 2.0, 1.9}, stretch = {0.9, 0.75, 1}, material = layer(.Glass), solid = true})
-	add_part(&parts, Procedural.Part{primitive = Procedural.Cylinder(0.35, 4.8, 12, 4), position = {0, 2.2, -4.7}, rotation_degrees = {90, 0, 0}, deformers = {0 = Procedural.Taper{0.35, 1}}, material = layer(.Olive_Paint), solid = true})
-	add_box(&parts, {0.08, 1.2, 0.9}, {0, 2.7, -6.9}, .Olive_Paint, false)
-	add_box(&parts, {0.05, 1.2, 0.12}, {0.15, 2.7, -7}, .Rusted_Metal, false)
-	add_cylinder(&parts, 0.1, 0.7, {0, 3.3, 0.2}, .Rusted_Metal, false, 8)
-	add_cylinder(&parts, 0.25, 0.15, {0, 3.65, 0.2}, .Rusted_Metal, false, 10)
-	add_box(&parts, {13, 0.05, 0.4}, {0, 3.7, 0.2}, .Rusted_Metal)
-	add_part(&parts, Procedural.Part{primitive = Procedural.Box({13, 0.05, 0.4}), position = {0, 3.7, 0.2}, rotation_degrees = {0, 90, 0}, material = layer(.Rusted_Metal), solid = true})
+// A light utility helicopter: egg fuselage with a glass nose, tapering tail boom, a two-blade main rotor and a tail rotor, skids.
+@(private = "file")
+helicopter_spec :: proc() -> (spec: Vehicle_Spec) {
+	parts := &spec.body
+	add_part(parts, Procedural.Part{primitive = Procedural.Sphere(1.2, 20, 10), position = {0, 1.9, 0.2}, stretch = {0.9, 1, 2.1}, material = layer(.Olive_Paint), solid = true})
+	add_part(parts, Procedural.Part{primitive = Procedural.Sphere(0.8, 16, 8), position = {0, 2.0, 1.9}, stretch = {0.9, 0.75, 1}, material = layer(.Glass), solid = true})
+	add_part(parts, Procedural.Part{primitive = Procedural.Cylinder(0.35, 4.8, 12, 4), position = {0, 2.2, -4.7}, rotation_degrees = {90, 0, 0}, deformers = {0 = Procedural.Taper{0.35, 1}}, material = layer(.Olive_Paint), solid = true})
+	add_box(parts, {0.08, 1.2, 0.9}, {0, 2.7, -6.9}, .Olive_Paint, false)
+	add_cylinder(parts, 0.1, 0.7, {0, 3.3, 0.2}, .Rusted_Metal, false, 8)
 	for x in ([2]f32{-1.1, 1.1}) {
-		add_cylinder_z(&parts, 0.05, 3.4, {x, 0.15, 0.3}, .Rusted_Metal, true, 8)
-		add_cylinder(&parts, 0.04, 1.4, {x, 0.85, 1.2}, .Rusted_Metal, false, 6)
-		add_cylinder(&parts, 0.04, 1.4, {x, 0.85, -0.6}, .Rusted_Metal, false, 6)
+		add_cylinder_z(parts, 0.05, 3.4, {x, 0.15, 0.3}, .Rusted_Metal, true, 8)
+		add_cylinder(parts, 0.04, 1.4, {x, 0.85, 1.2}, .Rusted_Metal, false, 6)
+		add_cylinder(parts, 0.04, 1.4, {x, 0.85, -0.6}, .Rusted_Metal, false, 6)
 	}
-	return parts
+	add_cylinder(&spec.main_rotor, 0.25, 0.15, {}, .Rusted_Metal, false, 10)
+	add_box(&spec.main_rotor, {13, 0.05, 0.4}, {}, .Rusted_Metal)
+	add_part(&spec.main_rotor, Procedural.Part{primitive = Procedural.Box({13, 0.05, 0.4}), rotation_degrees = {0, 90, 0}, material = layer(.Rusted_Metal), solid = true})
+	add_box(&spec.tail_rotor, {0.03, 1.4, 0.12}, {}, .Rusted_Metal, false)
+	add_box(&spec.tail_rotor, {0.03, 0.12, 1.4}, {}, .Rusted_Metal, false)
+	spec.main_rotor_pivot = {0, 3.7, 0.2}
+	spec.tail_rotor_pivot = {0.2, 2.7, -7.0}
+	spec.seat = {-0.45, 2.15, 1.3}
+	spec.armor = 0.5
+	spec.is_aircraft = true
+	spec.aircraft = World.Aircraft_Handling{
+		climb_speed_max = 7, descent_speed_max = 5, vertical_acceleration = 4,
+		forward_speed_max = 36, strafe_speed_max = 14, horizontal_acceleration = 9,
+		yaw_rate_max = 1.5, tilt_max = 0.32, tilt_follow_per_second = 4,
+		spool_up_seconds = 4, spool_down_seconds = 8, lift_rotor_threshold = 0.92,
+		half_width = 1.3, half_length = 5.2, hull_center_z = -2.2, height = 3.7,
+	}
+	return spec
+}
+
+@(private = "package")
+helicopter :: proc() -> Parts {
+	return compose(Catalogue_Vehicle_Spec(.Helicopter)^)
 }

@@ -131,3 +131,6 @@
 | Vehicle drawing (hull, turret, gun, instanced steered and spinning wheels) | `Game/Vehicles/VehicleRender.odin` |
 | Driving in play: E boards and exits, WASD drive, mouse aims, V seat or chase view, chase camera pull-in, HUD | `Game/Sandbox/Driving.odin` : `drive_vehicle`, `vehicle_camera` |
 | Gun fire from vehicles, shells, running enemies over | `Game/Gameplay/Battle.odin` : `Battle_Fire_Bullet`, `Battle_Spawn_Projectile`, `Battle_Run_Over` |
+| Helicopter flight model (rotor spool-up, collective climb and hover, pitch/roll/yaw, hull-vs-solid blocking, terrain touchdown and impact speed) | `Engine/World/Aircraft.odin` : `Aircraft_Step` |
+| Helicopter spec (hull, main and tail rotors, seat, handling) and rotor drawing | `Game/Catalogue/Vehicles.odin` : `helicopter_spec`; `Game/Vehicles/VehicleRender.odin` |
+| Flying in play (Space/Ctrl climb and descend, W/S pitch, A/D turn, Q/E strafe, hard-landing damage, altitude and rotor HUD) | `Game/Sandbox/Driving.odin` : `drive_vehicle`, `apply_hard_landing`, `draw_vehicle_hud` |

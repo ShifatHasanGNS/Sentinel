@@ -6,6 +6,8 @@ import "../../Engine/Render"
 import "core:math"
 import la "core:math/linalg"
 
+TAIL_ROTOR_SPEED_RATIO :: 1.7 // The small rotor turns faster than the main one.
+
 Part_Group :: struct {
 	mesh:     Render.Mesh,
 	material: i32,
@@ -19,6 +21,8 @@ Kind_Render :: struct {
 	wheel:  [dynamic]Part_Group,
 	turret: [dynamic]Part_Group,
 	gun:    [dynamic]Part_Group,
+	main_rotor: [dynamic]Part_Group,
+	tail_rotor: [dynamic]Part_Group,
 	present: bool,
 }
 
@@ -37,13 +41,15 @@ Vehicle_Renderer_Create :: proc(vehicles: []Vehicle) -> (renderer: Vehicle_Rende
 		upload(&render.wheel, vehicle.spec.wheel, wheels)
 		upload(&render.turret, vehicle.spec.turret, 0)
 		upload(&render.gun, vehicle.spec.gun, 0)
+		upload(&render.main_rotor, vehicle.spec.main_rotor, 0)
+		upload(&render.tail_rotor, vehicle.spec.tail_rotor, 0)
 	}
 	return renderer
 }
 
 Vehicle_Renderer_Destroy :: proc(renderer: ^Vehicle_Renderer) {
 	for &render in renderer.kinds {
-		for groups in ([4]^[dynamic]Part_Group{&render.body, &render.wheel, &render.turret, &render.gun}) {
+		for groups in ([6]^[dynamic]Part_Group{&render.body, &render.wheel, &render.turret, &render.gun, &render.main_rotor, &render.tail_rotor}) {
 			for &group in groups do Render.Mesh_Destroy(&group.mesh)
 			delete(groups^)
 		}
@@ -75,6 +81,8 @@ Vehicle_Renderer_Items :: proc(renderer: ^Vehicle_Renderer, vehicles: []Vehicle,
 			add_group_items(&items, render.body[:], hull)
 			add_group_items(&items, render.turret[:], Vehicle_Turret_Matrix(vehicle))
 			add_group_items(&items, render.gun[:], Vehicle_Gun_Matrix(vehicle))
+			add_group_items(&items, render.main_rotor[:], hull * la.matrix4_translate_f32(vehicle.spec.main_rotor_pivot) * la.matrix4_rotate_f32(vehicle.air.rotor_angle_radians, {0, 1, 0}))
+			add_group_items(&items, render.tail_rotor[:], hull * la.matrix4_translate_f32(vehicle.spec.tail_rotor_pivot) * la.matrix4_rotate_f32(vehicle.air.rotor_angle_radians * TAIL_ROTOR_SPEED_RATIO, {1, 0, 0}))
 			for mount in vehicle.spec.wheel_mounts do append(&wheels, Render.Instance{model = wheel_matrix(vehicle, hull, mount)})
 		}
 		for &group in render.wheel {
