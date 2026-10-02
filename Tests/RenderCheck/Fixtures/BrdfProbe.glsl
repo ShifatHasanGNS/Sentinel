@@ -32,14 +32,14 @@ void main() {
 		color = vec4(brdf_evaluate(u_Model, u_Albedo, u_Roughness, u_Metallic, NORMAL, view, below), 0.0);
 	} else if (u_Mode == 2) {
 		// Directional albedo: sum f * cos * sin over a (theta, phi) grid, theta uniform in [0, pi/2] (sin is the solid-angle Jacobian).
-		float theta = 1.5707963 * (gl_FragCoord.y + 0.5) / u_GridSize;
-		float angle = 6.2831853 * (gl_FragCoord.x + 0.5) / u_GridSize;
+		float theta = 1.5707963 * gl_FragCoord.y / u_GridSize;
+		float angle = 6.2831853 * gl_FragCoord.x / u_GridSize;
 		vec3 sample_light = vec3(sin(theta) * cos(angle), sin(theta) * sin(angle), cos(theta));
 		float z = cos(theta) * sin(theta);
 		vec3 fixed_view = vec3(sqrt(1.0 - u_ViewCosine * u_ViewCosine), 0.0, u_ViewCosine);
 		color = vec4(brdf_evaluate(u_Model, u_Albedo, u_Roughness, u_Metallic, NORMAL, fixed_view, sample_light) * z, 0.0);
 	} else {
-		float cosine = mix(-1.0, 1.0, (gl_FragCoord.x + 0.5) / 64.0);
+		float cosine = mix(-1.0, 1.0, gl_FragCoord.x / 64.0);
 		vec3 sample_light = vec3(sqrt(1.0 - cosine * cosine), 0.0, cosine);
 		color = vec4(light_cosine(MODEL_SUBSURFACE, NORMAL, sample_light), light_cosine(MODEL_LAMBERT, NORMAL, sample_light), cosine, 0.0);
 	}

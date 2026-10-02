@@ -19,6 +19,7 @@ main :: proc() {
 	check_normal_encoding_round_trip(&checks)
 	check_tonemap_is_monotonic_and_bounded(&checks)
 	check_illumination_models(&checks)
+	check_light_falloff_and_shapes(&checks)
 	fmt.printfln("%d checks passed, %d failed", checks.passed, checks.failed)
 	if checks.failed > 0 do os.exit(1)
 }
@@ -131,4 +132,48 @@ check_white_furnace :: proc(checks: ^Support.Checks, shader: ^GPU.Shader, model:
 		Support.expect(checks, albedo < 1e-4 if diffuse_only_metal else albedo > 0.05)
 		if model == .Lambert && metallic == 0 do Support.expect(checks, abs(albedo - 1) < 0.01)
 	}
+}
+
+check_light_falloff_and_shapes :: proc(checks: ^Support.Checks) {
+	shader, ok := GPU.Shader_Create("Tests/RenderCheck/Fixtures/LightProbe.glsl", nil, true)
+	Support.expect(checks, ok)
+	if !ok do return
+	defer GPU.Shader_Destroy(&shader)
+
+	GPU.Shader_Set(&shader, "u_Mode", i32(0))
+	attenuation := Support.Probe_Render(&shader, 64, 1)
+	defer delete(attenuation)
+	Support.expect(checks, attenuation[0].x > 0.97 && attenuation[0].x <= 1) // Finite at the light itself (first sample is 0.16 m away: 1 / (1 + 0.16^2) = 0.976).
+	for sample, index in attenuation {
+		if index > 0 do Support.expect(checks, sample.x <= attenuation[index - 1].x)
+		if sample.y >= 10 do Support.expect_value(checks, sample.x, 0) // Exactly zero at and beyond range.
+		if sample.y < 9.5 do Support.expect(checks, sample.x > 0)
+	}
+
+	GPU.Shader_Set(&shader, "u_Mode", i32(1))
+	cone := Support.Probe_Render(&shader, 64, 1)
+	defer delete(cone)
+	for sample, index in cone {
+		if index > 0 do Support.expect(checks, sample.x >= cone[index - 1].x)
+		if sample.y >= 0.9 do Support.expect_value(checks, sample.x, 1)
+		if sample.y <= 0.7 do Support.expect_value(checks, sample.x, 0)
+	}
+
+	GPU.Shader_Set(&shader, "u_Mode", i32(2))
+	far_field := Support.Probe_Render(&shader, 64, 1)
+	defer delete(far_field)
+	for sample in far_field {
+		Support.expect(checks, sample.x > 0 && abs(sample.y / sample.x - 1) < 0.03) // Seen on axis from afar, a small emitter is a point source.
+	}
+
+	GPU.Shader_Set(&shader, "u_Mode", i32(3))
+	for sample in Support.Probe_Render(&shader, 64, 1) {
+		Support.expect_value(checks, sample.x, 0) // Behind the emitter: nothing.
+		Support.expect(checks, sample.y > 0 && sample.y < 1e4) // Close to the emitter: bright but finite.
+	}
+
+	GPU.Shader_Set(&shader, "u_Mode", i32(4))
+	sun := Support.Probe_Render(&shader, 64, 1)
+	defer delete(sun)
+	for sample in sun do Support.expect(checks, abs(sample.x - sun[0].x) < 1e-6 && sample.x > 0) // Directional light does not depend on position.
 }
