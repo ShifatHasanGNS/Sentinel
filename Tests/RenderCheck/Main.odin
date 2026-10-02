@@ -296,9 +296,9 @@ check_instancing :: proc(checks: ^Support.Checks) {
 	proxy_source := Procedural.Box_Create({0.25, 0.25, 0.25})
 	defer Procedural.Mesh_Destroy(&proxy_source)
 	mesh := Render.Mesh_Upload_Instanced(source, 8)
-	defer Render.Mesh_Destroy(&mesh)
 	proxy := Render.Mesh_Upload_Instanced_Sharing(proxy_source, &mesh)
 	defer Render.Mesh_Destroy(&proxy)
+	defer Render.Mesh_Destroy(&mesh)
 	shader, ok := GPU.Shader_Create("Tests/RenderCheck/Fixtures/InstanceProbe.glsl", nil, true)
 	Support.expect(checks, ok)
 	if !ok do return
@@ -311,9 +311,11 @@ check_instancing :: proc(checks: ^Support.Checks) {
 	centers := [5]int{6, 19, 32, 44, 57}
 	gaps := [4]int{12, 25, 38, 51}
 
+	// Structs are copied when procs return them, so the proxy must not point into the owner's struct: move the owner and update through the copy.
+	moved := mesh
 	for count in ([3]int{5, 3, 0}) {
-		Render.Mesh_Set_Instances(&mesh, instances[:count])
-		for drawn in ([2]^Render.Mesh{&mesh, &proxy}) {
+		Render.Mesh_Set_Instances(&moved, instances[:count])
+		for drawn in ([2]^Render.Mesh{&moved, &proxy}) {
 			row := draw_instance_strip(&target, &shader, drawn)
 			for center, index in centers {
 				expected: f32 = f32(index + 1) / 10 if index < count else 0

@@ -4,6 +4,7 @@ import "core:strconv"
 
 Config :: struct {
 	scene:            string, // "sandbox", "showroom" or "catalogue".
+	view:             string, // Sandbox starting camera: base, gate, yard, airfield, command (default: overview).
 	object:           string, // With --scene catalogue: show only this object (e.g. Jeep).
 	capture_frames:   int,
 	capture_path:     string,
@@ -11,13 +12,15 @@ Config :: struct {
 	time_hours:       f32, // Negative: let the day cycle run.
 }
 
-// Flags: --scene <name>, --object <name>, --capture <frames> <path>, --benchmark <frames>, --time <hours>
+// Flags: --scene <name>, --view <name>, --object <name>, --capture <frames> <path>, --benchmark <frames>, --time <hours>
 Config_Parse :: proc(arguments: []string) -> (config: Config) {
 	config = Config{scene = "sandbox", time_hours = -1}
 	for index := 0; index < len(arguments); index += 1 {
 		switch arguments[index] {
 		case "--scene":
 			if index + 1 < len(arguments) {config.scene = arguments[index + 1]; index += 1}
+		case "--view":
+			if index + 1 < len(arguments) {config.view = arguments[index + 1]; index += 1}
 		case "--object":
 			if index + 1 < len(arguments) {config.object = arguments[index + 1]; index += 1}
 		case "--capture":

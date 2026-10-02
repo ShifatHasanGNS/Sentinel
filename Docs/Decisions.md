@@ -29,3 +29,8 @@
 - Captures ignore input (the fly camera used to read the real mouse). Remaining run-to-run noise is 0.18% of bytes, from map iteration order.
 - Shadow casters outside the camera frustum are kept (all loaded chunks and props), so a tree behind the camera still shades the scene. Terrain chunks are not culled against cascade boxes yet (2.4 ms total, deferred).
 - Deferred to M9: threaded chunk building, per-chunk prop culling and LOD, distance fog from the sky LUT, bloom.
+- Objects are `Part` tables (primitive, deformers, stretch, rotation, position, material, emission, solid). `Part.deformers` is a fixed `[3]Deformer` stored inline: a slice literal inside a returning proc dangled and crashed.
+- Instanced meshes keep their instance count in a heap cell shared by the owner and its shadow proxies. A pointer from a proxy to its owner struct dangled when structs were copied by value returns; a regression check moves the owner and updates it through the copy.
+- Collision boxes are the AABBs of parts marked `solid`; the same parts form the shadow-caster mesh, so thin wires, bars and window panes cost nothing in the shadow pass.
+- Base layout: a fixed plan, with seeded jitter only for loose props and parked vehicles. The perimeter is 128 equal slots (one watchtower, three gate, the rest fence) so it is closed by construction; footprints are oriented rectangles tested with the separating axis theorem. Overlap is allowed only for a helicopter on its pad and a camouflage net over what it shelters.
+- Catalogue validity (normals, tangents, uv, winding) is `Mesh_Find_Problem`, an engine function, so game code and tests share one definition of a sound mesh.

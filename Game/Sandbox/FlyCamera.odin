@@ -37,3 +37,10 @@ Fly_Camera_Update :: proc(camera: ^Fly_Camera, input: ^Platform.Input, delta_sec
 	if Platform.Input_Key_Down(input, .Left_Control) || Platform.Input_Key_Down(input, .Q) do move.y -= 1
 	camera.position += move * speed * delta_seconds
 }
+
+// A camera at `position` looking at `target`.
+Fly_Camera_Looking_At :: proc(position, target: [3]f32) -> Fly_Camera {
+	direction := target - position
+	horizontal := math.sqrt(direction.x * direction.x + direction.z * direction.z)
+	return Fly_Camera{position = position, yaw_radians = math.atan2(-direction.x, -direction.z), pitch_radians = math.atan2(direction.y, horizontal)}
+}

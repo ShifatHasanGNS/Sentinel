@@ -26,7 +26,7 @@ main :: proc() {
 }
 
 run_sandbox :: proc(window: ^Platform.Window, input: ^Platform.Input, config: Config) {
-	sandbox, ok := Sandbox.Sandbox_Create(window.framebuffer_width, window.framebuffer_height, config.time_hours)
+	sandbox, ok := Sandbox.Sandbox_Create(window.framebuffer_width, window.framebuffer_height, config.time_hours, config.view)
 	if !ok do os.exit(1)
 	defer Sandbox.Sandbox_Destroy(&sandbox)
 	Run_Loop(window, input, config, Scene{

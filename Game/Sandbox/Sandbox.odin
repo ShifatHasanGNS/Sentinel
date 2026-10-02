@@ -4,12 +4,14 @@ import "../../Engine/Platform"
 import "../../Engine/Procedural"
 import "../../Engine/Render"
 import World "../../Engine/World"
+import "../Base"
 import "../Gameplay"
 import "../Materials"
 import "core:fmt"
 import "core:math"
 import la "core:math/linalg"
 
+BASE_SEED :: 5
 LOAD_RADIUS_CHUNKS :: 4
 UNLOAD_RADIUS_CHUNKS :: 6
 CHUNK_BUILDS_PER_FRAME_MAX :: 1
@@ -26,6 +28,7 @@ Sandbox :: struct {
 	terrain:        Procedural.Terrain,
 	scatter_rules:  Procedural.Scatter_Rules,
 	props:          Props,
+	base:           Base.Base_Scene,
 	chunks:         map[World.Chunk_Coordinate]Chunk,
 	stream:         World.Chunk_Stream,
 	build_queue:    [dynamic]World.Chunk_Coordinate,
@@ -41,7 +44,7 @@ Sandbox :: struct {
 }
 
 // hours < 0 starts the day cycle at 9:00 and lets it run; otherwise time is fixed at the given hour.
-Sandbox_Create :: proc(width, height: i32, hours: f32) -> (sandbox: Sandbox, ok: bool) {
+Sandbox_Create :: proc(width, height: i32, hours: f32, view: string) -> (sandbox: Sandbox, ok: bool) {
 	sandbox.renderer = Render.Renderer_Create(width, height) or_return
 	sandbox.materials = Materials.Materials_Bake() or_return
 	sandbox.terrain = Procedural.Terrain{
@@ -53,9 +56,10 @@ Sandbox_Create :: proc(width, height: i32, hours: f32) -> (sandbox: Sandbox, ok:
 		plateau_radius_meters = 90,
 		plateau_blend_meters = 120,
 	}
-	sandbox.scatter_rules = Procedural.Scatter_Rules{seed = 3, attempts_per_chunk = 120, min_normal_y = 0.93, exclusion_radius_meters = 160, scale_range = {0.8, 1.5}}
+	sandbox.scatter_rules = Procedural.Scatter_Rules{seed = 3, attempts_per_chunk = 120, min_normal_y = 0.93, exclusion_radius_meters = 125, scale_range = {0.8, 1.5}}
 	sandbox.props = Props_Create()
-	sandbox.camera = Fly_Camera{position = {-150, 45, 190}, yaw_radians = -0.67, pitch_radians = -0.15}
+	sandbox.base = Base.Base_Scene_Create(Base.Layout_Create(BASE_SEED, sandbox.terrain.plateau_radius_meters), sandbox.terrain.base_height_meters)
+	sandbox.camera = camera_for_view(view)
 	sandbox.clock_runs = hours < 0
 	sandbox.hours = 9 if hours < 0 else hours
 	update_stream(&sandbox)
@@ -74,6 +78,7 @@ Sandbox_Destroy :: proc(sandbox: ^Sandbox) {
 	delete(sandbox.canopy_instances)
 	delete(sandbox.rock_instances)
 	delete(sandbox.bush_instances)
+	Base.Base_Scene_Destroy(&sandbox.base)
 	Props_Destroy(&sandbox.props)
 	Procedural.Texture_Set_Destroy(&sandbox.materials)
 	Render.Renderer_Destroy(&sandbox.renderer)
@@ -123,6 +128,19 @@ Sandbox_Render :: proc(sandbox: ^Sandbox, window: Platform.Window) {
 	Render.Renderer_Render(&sandbox.renderer, frame, window.framebuffer_width, window.framebuffer_height)
 }
 
+// Named starting points: the default overview, an aerial of the compound, the gate from the road, the motor pool, the airfield.
+@(private = "file")
+camera_for_view :: proc(view: string) -> Fly_Camera {
+	switch view {
+	case "base": return Fly_Camera_Looking_At({-75, 42, 100}, {0, 10, -5})
+	case "gate": return Fly_Camera_Looking_At({0, 14, 100}, {0, 12, 40})
+	case "yard": return Fly_Camera_Looking_At({-34, 16, 70}, {14, 11, 44})
+	case "airfield": return Fly_Camera_Looking_At({60, 26, 50}, {32, 11, -4})
+	case "command": return Fly_Camera_Looking_At({-20, 24, 62}, {-8, 11, -12})
+	}
+	return Fly_Camera{position = {-150, 45, 190}, yaw_radians = -0.67, pitch_radians = -0.15}
+}
+
 @(private = "file")
 update_stream :: proc(sandbox: ^Sandbox) {
 	position := sandbox.camera.position
@@ -165,6 +183,8 @@ gather_items :: proc(sandbox: ^Sandbox, camera: Render.Camera) -> (items, shadow
 	}
 	collect_instances(sandbox)
 	for prop_item in prop_items(sandbox) do append(&items, prop_item)
+	for base_item in Base.Base_Scene_Items(&sandbox.base) do append(&items, base_item)
+	for shadow_item in Base.Base_Scene_Shadow_Items(&sandbox.base) do append(&shadow_items, shadow_item)
 	for proxy_item in shadow_proxy_items(sandbox) do append(&shadow_items, proxy_item)
 	return
 }

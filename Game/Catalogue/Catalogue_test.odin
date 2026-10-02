@@ -132,3 +132,26 @@ test_collision_boxes_hug_the_visible_object :: proc(t: ^testing.T) {
 		}
 	}
 }
+
+// Shadows need only an object's structure, not its bars, wires and panes: the shadow mesh is the solid parts alone.
+@(test)
+test_shadow_meshes_are_a_cheaper_subset_of_each_object :: proc(t: ^testing.T) {
+	for kind in Object_Kind {
+		full, shadow := Catalogue_Build(kind), Catalogue_Build_Shadow(kind)
+		defer Procedural.Assembly_Destroy(&full)
+		defer Procedural.Assembly_Destroy(&shadow)
+		full_triangles, shadow_triangles := 0, 0
+		for group in full.groups do full_triangles += len(group.mesh.indices) / 3
+		for group in shadow.groups do shadow_triangles += len(group.mesh.indices) / 3
+		testing.expectf(t, shadow_triangles > 0, "%s: empty shadow mesh", object_name(kind))
+		testing.expectf(t, shadow_triangles <= full_triangles, "%s: shadow mesh is bigger than the object", object_name(kind))
+	}
+	fence_full, fence_shadow := Catalogue_Build(.Fence_Section), Catalogue_Build_Shadow(.Fence_Section)
+	defer Procedural.Assembly_Destroy(&fence_full)
+	defer Procedural.Assembly_Destroy(&fence_shadow)
+	count :: proc(assembly: Procedural.Assembly) -> (triangles: int) {
+		for group in assembly.groups do triangles += len(group.mesh.indices) / 3
+		return
+	}
+	testing.expect(t, count(fence_shadow) * 3 < count(fence_full)) // The fence's wire mesh and razor coil are most of its triangles.
+}

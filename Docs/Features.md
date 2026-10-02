@@ -71,3 +71,14 @@
 | The open-world scene (stream, gather, day cycle) | `Game/Sandbox/Sandbox.odin` |
 | Frame loop, capture, benchmark | `Source/Loop.odin` |
 | Flags: `--scene`, `--time`, `--capture`, `--benchmark` | `Source/Config.odin` |
+| Parts and assemblies: primitive + deformers + transform + material + emission + solid, grouped per material, collision boxes | `Engine/Procedural/Assembly.odin` : `Assembly_Build`, `Assembly_Bounds` |
+| Mesh validation (normals, tangents, uv, winding) | `Engine/Procedural/MeshValidate.odin` : `Mesh_Find_Problem` |
+| The 33 military objects | `Game/Catalogue/Objects.odin` (enum + dispatch), `Buildings.odin`, `Fortifications.odin`, `Vehicles.odin`, `Props.odin` |
+| Object size and collision boxes without building meshes | `Game/Catalogue/Objects.odin` : `Catalogue_Info` |
+| Shadow-caster meshes (solid parts only) | `Game/Catalogue/Objects.odin` : `Catalogue_Build_Shadow` |
+| Footprints, overlap test (separating axis), rotated collision boxes | `Game/Base/Footprint.odin` |
+| Base plan: perimeter ring, command area, airfield, motor pool, yard, camp, gate approach | `Game/Base/Layout.odin` : `Layout_Create` |
+| Base ready to draw (instanced per object kind and material) | `Game/Base/BaseScene.odin` : `Base_Scene_Create`, `Base_Scene_Items`, `Base_Scene_Shadow_Items` |
+| Catalogue viewer (`--scene catalogue [--object Name]`) | `Game/Showroom/CatalogueView.odin` |
+| Sandbox camera presets (`--view base|gate|yard|airfield|command`) | `Game/Sandbox/Sandbox.odin` : `camera_for_view` |
+

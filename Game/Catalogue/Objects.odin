@@ -58,6 +58,16 @@ Object_Name_Matches :: proc(kind: Object_Kind, name: string) -> bool {
 	return strings.equal_fold(object_name(kind), name)
 }
 
+// The solid parts alone: what must cast a shadow. Cheaper than the full object because thin wires, bars and panes are left out.
+Catalogue_Build_Shadow :: proc(kind: Object_Kind) -> Procedural.Assembly {
+	parts := object_parts(kind)
+	defer delete(parts)
+	solid := make(Parts)
+	defer delete(solid)
+	for part in parts do if part.solid do append(&solid, part)
+	return Procedural.Assembly_Build(solid[:])
+}
+
 @(private = "package")
 Parts :: [dynamic]Procedural.Part
 
