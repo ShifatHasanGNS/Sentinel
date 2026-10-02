@@ -44,9 +44,9 @@ tent :: proc() -> (parts: Parts) {
 // A camouflage net stretched over four poles.
 @(private = "package")
 camo_net :: proc() -> (parts: Parts) {
-	add_part(&parts, Procedural.Part{primitive = Procedural.Box({8, 0.06, 8}, {12, 1, 12}), position = {0, 2.7, 0}, deformers = {0 = Procedural.Noise_Displace{0.25, 0.5, 3, 12}}, material = layer(.Woodland_Camo)})
-	for x in ([2]f32{-3.7, 3.7}) {
-		for z in ([2]f32{-3.7, 3.7}) do add_cylinder(&parts, 0.06, 2.7, {x, 1.35, z}, .Wood, true, 8)
+	add_part(&parts, Procedural.Part{primitive = Procedural.Box({11.5, 0.06, 11.5}, {16, 1, 16}), position = {0, 2.7, 0}, deformers = {0 = Procedural.Noise_Displace{0.25, 0.5, 3, 12}}, material = layer(.Woodland_Camo)})
+	for x in ([2]f32{-5.5, 5.5}) {
+		for z in ([2]f32{-5.5, 5.5}) do add_cylinder(&parts, 0.06, 2.7, {x, 1.35, z}, .Wood, true, 8)
 	}
 	return parts
 }

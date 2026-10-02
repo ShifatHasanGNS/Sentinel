@@ -125,3 +125,9 @@
 | Door leaf drawing and shadows | `Game/Base/DoorRender.odin` |
 | Interior ceiling lights | `Game/Base/InteriorLights.odin` : `Layout_Interior_Lights` |
 | E to open or close a door, on-screen prompt | `Game/Sandbox/Play.odin` : `interact_with_doors` |
+| Ground vehicle physics (throttle, brake, drag, bicycle steering or tracked pivot, hull-vs-solid blocking, terrain pitch and roll) | `Engine/World/GroundVehicle.odin` : `Ground_Vehicle_Step`, `hull_hits_solid`, `rectangles_overlap` |
+| Articulated vehicle specs (hull, wheel mounts, turret, gun, seat, handling) | `Game/Catalogue/Vehicles.odin` : `Catalogue_Vehicle_Spec` |
+| Vehicle entities: update, boarding range, exit spot, turret slew, cannon and machine gun | `Game/Vehicles/Vehicle.odin` |
+| Vehicle drawing (hull, turret, gun, instanced steered and spinning wheels) | `Game/Vehicles/VehicleRender.odin` |
+| Driving in play: E boards and exits, WASD drive, mouse aims, V seat or chase view, chase camera pull-in, HUD | `Game/Sandbox/Driving.odin` : `drive_vehicle`, `vehicle_camera` |
+| Gun fire from vehicles, shells, running enemies over | `Game/Gameplay/Battle.odin` : `Battle_Fire_Bullet`, `Battle_Spawn_Projectile`, `Battle_Run_Over` |

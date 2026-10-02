@@ -19,6 +19,9 @@ EFFECT_EXPLOSION_SECONDS :: 0.6
 DEATH_FALL_FREQUENCY :: 5.0
 DEATH_LEAN_METERS :: 0.55
 SELF_BLAST_FRACTION :: 0.5
+RUN_OVER_SPEED_MIN :: 2.5
+RUN_OVER_MARGIN :: 0.2
+RUN_OVER_DAMAGE_PER_SPEED :: 12.0 // 100 health is gone by about 8 m/s.
 ENEMY_HEAD_CHANCE :: 0.08
 
 Shot_Kind :: enum {
@@ -100,6 +103,36 @@ Battle_Update :: proc(battle: ^Battle, input: Player_Input, delta_seconds: f32) 
 	regenerate_player(&battle.player, health_before, delta_seconds)
 	update_projectiles(battle, delta_seconds)
 	update_effects(battle, delta_seconds)
+}
+
+// A bullet from anything but the player's own hands (a vehicle's gun): traced, with a flash, a tracer and an impact.
+Battle_Fire_Bullet :: proc(battle: ^Battle, origin, direction: [3]f32, damage, range_meters: f32) {
+	battle.noise_this_frame = true
+	result := Resolve_Hitscan(battle, origin, direction, damage, range_meters)
+	end := origin + direction * (result.distance if result.kind != .None else range_meters)
+	append(&battle.effects, Effect{kind = .Muzzle_Flash, position = origin, lifetime = EFFECT_FLASH_SECONDS})
+	append(&battle.effects, Effect{kind = .Tracer, position = origin, end = end, lifetime = EFFECT_TRACER_SECONDS})
+	if result.kind != .None do append(&battle.effects, Effect{kind = .Impact, position = result.point, end = result.normal, lifetime = EFFECT_IMPACT_SECONDS})
+}
+
+// A rocket or grenade-like shell in flight; it detonates on impact or at the end of its life like the player's.
+Battle_Spawn_Projectile :: proc(battle: ^Battle, kind: Weapons.Weapon_Kind, position, velocity: [3]f32) {
+	battle.noise_this_frame = true
+	append(&battle.effects, Effect{kind = .Muzzle_Flash, position = position, lifetime = EFFECT_FLASH_SECONDS})
+	append(&battle.projectiles, Projectile_Entity{body = World.Projectile{position, velocity}, kind = kind})
+}
+
+// A vehicle at `speed` runs over living enemies inside its footprint (a rectangle turned by `yaw`, as in World.Ground_Vehicle).
+Battle_Run_Over :: proc(battle: ^Battle, center: [3]f32, half_width, half_length, yaw, speed: f32) {
+	if abs(speed) < RUN_OVER_SPEED_MIN do return
+	for index in 0 ..< len(battle.enemies) {
+		enemy := battle.enemies[index]
+		if !Enemy_Is_Alive(enemy) do continue
+		local := World.rotate_about_y(enemy.controller.position - center, -yaw)
+		if abs(local.x) < half_width + RUN_OVER_MARGIN && abs(local.z) < half_length + RUN_OVER_MARGIN && abs(local.y) < 2 {
+			damage_enemy(battle, index, RUN_OVER_DAMAGE_PER_SPEED * abs(speed), .Torso, center)
+		}
+	}
 }
 
 // What a bullet strikes: the nearest of the world (walls, terrain) and any living enemy's body parts. Applies the damage.
@@ -266,7 +299,7 @@ enemy_fires :: proc(battle: ^Battle, index: int) {
 	end := player_eye
 	if roll(enemy^, 1) < hit_chance {
 		zone := Hit_Zone.Head if roll(enemy^, 2) < ENEMY_HEAD_CHANCE else .Torso
-		Health_Apply_Damage(&battle.player.health, ENEMY_DAMAGE, zone)
+		Health_Apply_Damage(&battle.player.health, ENEMY_DAMAGE * (1 - battle.player.armor), zone)
 		battle.player.damage_flash = 1
 	} else {
 		end += {roll(enemy^, 3) * 3 - 1.5, roll(enemy^, 4) * 1.5 - 0.5, roll(enemy^, 5) * 3 - 1.5}

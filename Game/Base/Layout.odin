@@ -99,7 +99,7 @@ add_supply_yard :: proc(layout: ^Layout) {
 @(private = "file")
 add_camp :: proc(layout: ^Layout) {
 	for z in ([3]f32{-18, -8, 2}) do place(layout, .Tent, -14, z, 0)
-	place(layout, .Camo_Net, -14, -8, 0)
+	place(layout, .Camo_Net, -15.5, -8, 0)
 	flood_angles := [6]f32{20, 70, 160, 200, 250, 340}
 	for angle_degrees in flood_angles {
 		angle := math.to_radians(angle_degrees)

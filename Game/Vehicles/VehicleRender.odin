@@ -1,0 +1,103 @@
+package Vehicles
+
+import "../Catalogue"
+import "../../Engine/Procedural"
+import "../../Engine/Render"
+import "core:math"
+import la "core:math/linalg"
+
+Part_Group :: struct {
+	mesh:     Render.Mesh,
+	material: i32,
+	emission: [3]f32,
+}
+
+// The meshes of one vehicle kind: hull, turret and gun are drawn once per vehicle; the wheel is instanced across every wheel of
+// every vehicle of the kind.
+Kind_Render :: struct {
+	body:   [dynamic]Part_Group,
+	wheel:  [dynamic]Part_Group,
+	turret: [dynamic]Part_Group,
+	gun:    [dynamic]Part_Group,
+	present: bool,
+}
+
+Vehicle_Renderer :: struct {
+	kinds: [Catalogue.Object_Kind]Kind_Render,
+}
+
+Vehicle_Renderer_Create :: proc(vehicles: []Vehicle) -> (renderer: Vehicle_Renderer) {
+	for vehicle in vehicles {
+		if renderer.kinds[vehicle.kind].present do continue
+		wheels := 0
+		for other in vehicles do if other.kind == vehicle.kind do wheels += len(other.spec.wheel_mounts)
+		render := &renderer.kinds[vehicle.kind]
+		render.present = true
+		upload(&render.body, vehicle.spec.body, 0)
+		upload(&render.wheel, vehicle.spec.wheel, wheels)
+		upload(&render.turret, vehicle.spec.turret, 0)
+		upload(&render.gun, vehicle.spec.gun, 0)
+	}
+	return renderer
+}
+
+Vehicle_Renderer_Destroy :: proc(renderer: ^Vehicle_Renderer) {
+	for &render in renderer.kinds {
+		for groups in ([4]^[dynamic]Part_Group{&render.body, &render.wheel, &render.turret, &render.gun}) {
+			for &group in groups do Render.Mesh_Destroy(&group.mesh)
+			delete(groups^)
+		}
+	}
+}
+
+// `instance_capacity` of zero uploads an ordinary mesh.
+@(private = "file")
+upload :: proc(groups: ^[dynamic]Part_Group, parts: [dynamic]Procedural.Part, instance_capacity: int) {
+	if len(parts) == 0 do return
+	assembly := Procedural.Assembly_Build(parts[:])
+	defer Procedural.Assembly_Destroy(&assembly)
+	for group in assembly.groups {
+		mesh := Render.Mesh_Upload(group.mesh) if instance_capacity == 0 else Render.Mesh_Upload_Instanced(group.mesh, instance_capacity)
+		append(groups, Part_Group{mesh, group.material, group.emission})
+	}
+}
+
+// Draw items for every vehicle: hull, turret and gun with their current angles, and the wheels as instances, steered and spinning.
+Vehicle_Renderer_Items :: proc(renderer: ^Vehicle_Renderer, vehicles: []Vehicle, allocator := context.temp_allocator) -> (items: [dynamic]Render.Draw_Item) {
+	items = make([dynamic]Render.Draw_Item, allocator)
+	for kind in Catalogue.Object_Kind {
+		render := &renderer.kinds[kind]
+		if !render.present do continue
+		wheels := make([dynamic]Render.Instance, allocator)
+		for vehicle in vehicles {
+			if vehicle.kind != kind do continue
+			hull := Vehicle_Hull_Matrix(vehicle)
+			add_group_items(&items, render.body[:], hull)
+			add_group_items(&items, render.turret[:], Vehicle_Turret_Matrix(vehicle))
+			add_group_items(&items, render.gun[:], Vehicle_Gun_Matrix(vehicle))
+			for mount in vehicle.spec.wheel_mounts do append(&wheels, Render.Instance{model = wheel_matrix(vehicle, hull, mount)})
+		}
+		for &group in render.wheel {
+			for &instance in wheels do instance.material_layer = f32(group.material)
+			Render.Mesh_Set_Instances(&group.mesh, wheels[:])
+			append(&items, Render.Draw_Item{mesh = &group.mesh, model = la.MATRIX4F32_IDENTITY, uv_scale = {1, 1}, triplanar = true, illumination_model = .Cook_Torrance, emission = group.emission})
+		}
+	}
+	return items
+}
+
+@(private = "file")
+add_group_items :: proc(items: ^[dynamic]Render.Draw_Item, groups: []Part_Group, model: matrix[4, 4]f32) {
+	for &group in groups {
+		append(items, Render.Draw_Item{mesh = &group.mesh, model = model, material_layer = group.material, uv_scale = {1, 1}, triplanar = true, illumination_model = .Cook_Torrance, emission = group.emission})
+	}
+}
+
+// A wheel: its mount, steered about +Y (right is a negative turn about +Y), spun about its axle by the distance rolled over its radius.
+@(private = "file")
+wheel_matrix :: proc(vehicle: Vehicle, hull: matrix[4, 4]f32, mount: Catalogue.Wheel_Mount) -> matrix[4, 4]f32 {
+	steer: f32 = 0
+	if mount.steered do steer = -vehicle.body.steer * vehicle.spec.handling.steer_angle_max
+	spin := vehicle.body.wheel_spin_radians / vehicle.spec.wheel_radius
+	return hull * la.matrix4_translate_f32(mount.position) * la.matrix4_rotate_f32(steer, {0, 1, 0}) * la.matrix4_rotate_f32(math.mod(spin, 2 * math.PI), {1, 0, 0})
+}

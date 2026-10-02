@@ -106,9 +106,10 @@ project :: proc(corners: [4][2]f32, axis: [2]f32) -> (low, high: f32) {
 	return
 }
 
-// Every placement's solids on the plateau.
+// Every placement's solids on the plateau. Drivable vehicles are left out: they move, so Game/Vehicles gives each its own solid.
 Layout_Solids :: proc(layout: Layout, ground_height_meters: f32) -> (solids: [dynamic]World.Solid) {
 	for placement in layout.placements {
+		if Catalogue.Is_Ground_Vehicle(placement.kind) do continue
 		own := Placement_Solids(placement, ground_height_meters)
 		defer delete(own)
 		for solid in own do append(&solids, solid)

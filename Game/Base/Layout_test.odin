@@ -138,6 +138,7 @@ test_layout_solids_cover_every_placement_at_the_ground_height :: proc(t: ^testin
 	defer delete(solids)
 	expected := 0
 	for placement in layout.placements {
+		if Catalogue.Is_Ground_Vehicle(placement.kind) do continue // Vehicles carry their own, moving solids.
 		own := Placement_Solids(placement)
 		expected += len(own)
 		delete(own)

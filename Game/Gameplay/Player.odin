@@ -25,6 +25,7 @@ Player :: struct {
 	spawn:        [3]f32,
 	damage_flash: f32, // 1 when just hurt, fading to 0.
 	seconds_since_damage: f32,
+	armor:        f32, // Fraction of enemy fire absorbed: 0 on foot, high inside an armored vehicle.
 	hit_marker:   f32, // Seconds left of the hit confirmation.
 	kills:        int,
 	shots_fired:  u32,
@@ -51,7 +52,7 @@ Player_Create :: proc(spawn: [3]f32) -> (player: Player) {
 Player_Respawn :: proc(player: ^Player) {
 	player.controller = World.Controller_Create(player.spawn)
 	player.health = Health_Create(PLAYER_HEALTH)
-	player.damage_flash, player.hit_marker, player.seconds_since_damage = 0, 0, 0
+	player.damage_flash, player.hit_marker, player.seconds_since_damage, player.armor = 0, 0, 0, 0
 	for kind in Weapons.Weapon_Kind {
 		stats := Weapons.Weapon_Stats_For(kind)
 		reserve_magazines := 6 if kind == .Rifle || kind == .Pistol else 4

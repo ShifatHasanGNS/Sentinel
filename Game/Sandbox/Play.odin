@@ -8,6 +8,7 @@ import "../Base"
 import "../Characters"
 import "../Gameplay"
 import "../Materials"
+import "../Vehicles"
 import "../Weapons"
 import "core:fmt"
 import "core:math"
@@ -54,6 +55,14 @@ Play :: struct {
 	doors:         [dynamic]Base.Door,
 	door_renderer: Base.Door_Renderer,
 	door_in_reach: bool,
+	vehicles:      [dynamic]Vehicles.Vehicle,
+	vehicle_renderer: Vehicles.Vehicle_Renderer,
+	driving:       Maybe(int), // Index into `vehicles` of the one the player is in.
+	seat_view:     bool, // V toggles between the chase camera and the seat.
+	view_was_down: bool,
+	mouse_idle_seconds: f32,
+	demo_seconds:  f32,
+	boardable:     Maybe(int), // The vehicle in reach on foot, for the prompt.
 	interact_was_down: bool,
 	body:          Characters.Character, // The player's own body, seen when looking down and in shadows.
 	hud:           Render.Hud,
@@ -73,7 +82,7 @@ terrain_height :: proc(data: rawptr, x, z: f32) -> f32 {
 	return Procedural.Terrain_Height((^Procedural.Terrain)(data)^, x, z)
 }
 
-play_create :: proc(sandbox: ^Sandbox, demo: bool, fly: bool) -> (ok: bool) {
+play_create :: proc(sandbox: ^Sandbox, demo: bool, fly: bool, drive: string) -> (ok: bool) {
 	play := &sandbox.play
 	base_height := sandbox.terrain.base_height_meters
 	boxes := Base.Layout_Solids(sandbox.base.layout, base_height)
@@ -86,6 +95,7 @@ play_create :: proc(sandbox: ^Sandbox, demo: bool, fly: bool) -> (ok: bool) {
 	play.doors = Base.Layout_Doors(sandbox.base.layout, base_height)
 	Base.Doors_Register(play.doors[:], &play.battle.collision)
 	play.door_renderer = Base.Door_Renderer_Create(play.doors[:])
+	vehicles_create(play, sandbox)
 	spawn_garrison(&play.battle, sandbox.terrain)
 	play.soldiers = Characters.Character_Renderer_Create(CHARACTERS_PER_VARIANT)
 	play.hud = Render.Hud_Create() or_return
@@ -100,10 +110,12 @@ play_create :: proc(sandbox: ^Sandbox, demo: bool, fly: bool) -> (ok: bool) {
 	play.demo = demo
 	play.flashlight_on = demo
 	play.mode = .Fly if fly else .Play
+	if drive != "" do board_named_vehicle(play, drive)
 	return true
 }
 
 play_destroy :: proc(play: ^Play) {
+	vehicles_destroy(play)
 	Base.Door_Renderer_Destroy(&play.door_renderer)
 	delete(play.doors)
 	Render.Mesh_Destroy(&play.effect_sphere)
@@ -155,8 +167,9 @@ play_update :: proc(sandbox: ^Sandbox, input: ^Platform.Input, delta_seconds: f3
 	if tab_down && !play.tab_was_down do play.mode = .Fly if play.mode == .Play else .Play
 	play.tab_was_down = tab_down
 	interact_down := Platform.Input_Key_Down(input, .E)
-	if play.mode == .Play do interact_with_doors(play, interact_down && !play.interact_was_down)
+	interact_pressed := interact_down && !play.interact_was_down
 	play.interact_was_down = interact_down
+	if play.mode == .Play && play.driving == nil do interact_on_foot(play, interact_pressed)
 	Base.Doors_Update(play.doors[:], &play.battle.collision, delta_seconds)
 	flashlight_down := Platform.Input_Key_Down(input, .F)
 	if flashlight_down && !play.flashlight_was_down do play.flashlight_on = !play.flashlight_on
@@ -168,11 +181,16 @@ play_update :: proc(sandbox: ^Sandbox, input: ^Platform.Input, delta_seconds: f3
 		battle_update_unattended(&play.battle, delta_seconds)
 		animate_body(play, delta_seconds)
 	case .Play:
-		player_input := demo_input(play.battle, delta_seconds) if play.demo else collect_input(input)
-		Gameplay.Battle_Update(&play.battle, player_input, delta_seconds)
-		sync_camera_to_player(sandbox)
-		animate_body(play, delta_seconds)
+		if play.driving != nil {
+			drive_vehicle(sandbox, input, interact_pressed, delta_seconds)
+		} else {
+			player_input := demo_input(play.battle, delta_seconds) if play.demo else collect_input(input)
+			Gameplay.Battle_Update(&play.battle, player_input, delta_seconds)
+			sync_camera_to_player(sandbox)
+			animate_body(play, delta_seconds)
+		}
 	}
+	update_vehicles(sandbox, delta_seconds)
 	if play.battle.player.shots_fired != play.shots_seen {
 		play.shots_seen = play.battle.player.shots_fired
 		play.recoil = RECOIL_KICK_METERS
@@ -184,6 +202,7 @@ play_update_idle :: proc(sandbox: ^Sandbox, delta_seconds: f32) {
 	fill_prop_solids(sandbox)
 	Base.Doors_Update(sandbox.play.doors[:], &sandbox.play.battle.collision, delta_seconds)
 	battle_update_unattended(&sandbox.play.battle, delta_seconds)
+	update_vehicles(sandbox, delta_seconds)
 }
 
 // While nobody plays (fly camera, benchmark) the soldiers still think and shoot, but the idle player is kept alive.
@@ -198,7 +217,6 @@ sync_camera_to_player :: proc(sandbox: ^Sandbox) {
 	sandbox.camera = Fly_Camera{position = Gameplay.Player_Eye(player), yaw_radians = player.yaw_radians, pitch_radians = player.pitch_radians}
 }
 
-@(private = "file")
 collect_input :: proc(input: ^Platform.Input) -> (result: Gameplay.Player_Input) {
 	axis :: proc(input: ^Platform.Input, positive, negative: Platform.Key) -> f32 {
 		return f32(int(Platform.Input_Key_Down(input, positive))) - f32(int(Platform.Input_Key_Down(input, negative)))
@@ -253,11 +271,15 @@ play_items :: proc(sandbox: ^Sandbox, items, shadow_items: ^[dynamic]Render.Draw
 	lights = make([dynamic]Render.Light, context.temp_allocator)
 	characters := make([dynamic]Characters.Character, context.temp_allocator)
 	for enemy in play.battle.enemies do append(&characters, enemy.character)
-	body_shown := !Gameplay.Health_Is_Dead(play.battle.player.health)
+	body_shown := !Gameplay.Health_Is_Dead(play.battle.player.health) && play.driving == nil
 	if body_shown do append(&characters, play.body)
 	for item in Characters.Character_Renderer_Items(&play.soldiers, characters[:]) {
 		append(items, item)
 		append(shadow_items, item)
+	}
+	for vehicle_item in Vehicles.Vehicle_Renderer_Items(&play.vehicle_renderer, play.vehicles[:]) {
+		append(items, vehicle_item)
+		append(shadow_items, vehicle_item)
 	}
 	for door_item in Base.Door_Renderer_Items(&play.door_renderer, play.doors[:]) {
 		append(items, door_item)
@@ -371,13 +393,15 @@ play_draw_hud :: proc(sandbox: ^Sandbox, width, height: i32) {
 	if play.mode == .Play && player.damage_flash > 0 do Render.Hud_Rect(hud, 0, 0, w, h, {0.8, 0, 0, 0.4 * player.damage_flash})
 	if play.mode == .Play && !Gameplay.Health_Is_Dead(player.health) {
 		draw_crosshair(hud, w / 2, h / 2, scale, player.hit_marker > 0)
-		draw_vitals(hud, player, w, h, scale)
+		if play.driving == nil do draw_vitals(hud, player, w, h, scale)
+		else do draw_vehicle_hud(play, w, h, scale)
 	}
 	living := 0
 	for enemy in play.battle.enemies do if Gameplay.Enemy_Is_Alive(enemy) do living += 1
 	Render.Hud_Text(hud, 16, 16, fmt.tprintf("KILLS %d   ENEMIES %d", player.kills, living), scale, {1, 1, 1, 0.9})
 	if play.mode == .Fly do Render.Hud_Text(hud, w - 16 - Render.Hud_Text_Width("FLY MODE - TAB TO PLAY", scale), 16, "FLY MODE - TAB TO PLAY", scale, {1, 0.9, 0.3, 0.9})
-	if play.mode == .Play && play.door_in_reach && !Gameplay.Health_Is_Dead(player.health) do Render.Hud_Text(hud, (w - Render.Hud_Text_Width("E  OPEN / CLOSE", scale)) / 2, h * 0.62, "E  OPEN / CLOSE", scale, {1, 1, 1, 0.9})
+	if _, can_board := play.boardable.?; play.mode == .Play && play.driving == nil && can_board && !Gameplay.Health_Is_Dead(player.health) do Render.Hud_Text(hud, (w - Render.Hud_Text_Width("E  ENTER VEHICLE", scale)) / 2, h * 0.62, "E  ENTER VEHICLE", scale, {1, 1, 1, 0.9})
+	else if play.mode == .Play && play.door_in_reach && !Gameplay.Health_Is_Dead(player.health) do Render.Hud_Text(hud, (w - Render.Hud_Text_Width("E  OPEN / CLOSE", scale)) / 2, h * 0.62, "E  OPEN / CLOSE", scale, {1, 1, 1, 0.9})
 	if Gameplay.Health_Is_Dead(player.health) do draw_death_screen(hud, w, h, scale)
 	Render.Hud_Flush(hud, width, height)
 }
@@ -446,8 +470,11 @@ prop_solid :: proc(point: Procedural.Scatter_Point) -> (solid: World.Solid, ok: 
 // E toggles the door in reach (a gate's two leaves together); `pressed` is the key's rising edge. Also records whether a door is in
 // reach, for the on-screen prompt.
 @(private = "file")
-interact_with_doors :: proc(play: ^Play, pressed: bool) {
+interact_on_foot :: proc(play: ^Play, pressed: bool) {
 	index, found := Base.Doors_Nearest(play.doors[:], play.battle.player.controller.position)
 	play.door_in_reach = found
-	if found && pressed do Base.Doors_Toggle(play.doors[:], index)
+	play.boardable = nearest_boardable(play)
+	if !pressed do return
+	if _, boardable := play.boardable.?; boardable do board_vehicle(play)
+	else if found do Base.Doors_Toggle(play.doors[:], index)
 }

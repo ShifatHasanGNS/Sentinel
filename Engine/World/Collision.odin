@@ -141,3 +141,8 @@ resolve_vertically :: proc(controller: ^Controller, world: Collision_World, grou
 		controller.on_ground = true
 	}
 }
+
+// Whether a standing body at this position would overlap any solid (the same test the controller uses when it walks).
+Body_Blocked :: proc(world: Collision_World, position: [3]f32) -> bool {
+	return is_blocked(world, position)
+}
