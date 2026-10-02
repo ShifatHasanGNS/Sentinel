@@ -52,7 +52,7 @@ Character_Renderer_Items :: proc(renderer: ^Character_Renderer, characters: []Ch
 		for slot in 0 ..< SLOT_COUNT {
 			instances := make([dynamic]Render.Instance, allocator)
 			for character, index in characters {
-				if character.variant != variant do continue
+				if character.variant != variant || (slot == WEAPON_SLOT && character.hide_weapon) do continue
 				model := Weapon_Matrix(poses[index]) if slot == WEAPON_SLOT else Segment_Matrix(poses[index], Segment(slot))
 				append(&instances, Render.Instance{model = model})
 			}

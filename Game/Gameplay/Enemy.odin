@@ -8,8 +8,8 @@ import la "core:math/linalg"
 
 ENEMY_HEALTH :: 100
 ENEMY_FIRE_INTERVAL_SECONDS :: 0.35 // Enemies fire in bursts slower than the rifle can, so a fight is survivable.
-ENEMY_DAMAGE :: 6
-ENEMY_TURN_RADIANS_PER_SECOND :: 6.0
+ENEMY_DAMAGE :: 4
+ENEMY_TURN_RADIANS_PER_SECOND :: 3.5 // Slow enough that flanking works.
 ENEMY_EYE_HEIGHT_METERS :: 1.6
 HEAD_HIT_RADIUS_METERS :: 0.13
 TORSO_HIT_RADIUS_METERS :: 0.2

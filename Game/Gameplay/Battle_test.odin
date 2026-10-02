@@ -164,3 +164,26 @@ test_a_battle_is_deterministic_for_a_seed :: proc(t: ^testing.T) {
 	}
 	testing.expect_value(t, healths[0], healths[1])
 }
+
+// A player who stops being hit heals after the delay, but not before; being hit again restarts the wait.
+@(test)
+test_player_health_regenerates_after_a_quiet_spell_not_during_a_fight :: proc(t: ^testing.T) {
+	battle := Battle_Create(FLAT_GROUND, nil, {0, 0, 0}, 42)
+	defer Battle_Destroy(&battle)
+	battle.player.health.current = 50
+	for _ in 0 ..< int((PLAYER_REGEN_DELAY_SECONDS - 1) * 30) do Battle_Update(&battle, {}, 1.0 / 30)
+	testing.expect_value(t, battle.player.health.current, 50) // Still inside the delay.
+	for _ in 0 ..< 3 * 30 do Battle_Update(&battle, {}, 1.0 / 30)
+	testing.expect(t, battle.player.health.current > 50 + PLAYER_REGEN_PER_SECOND) // Healing.
+	for _ in 0 ..< 60 * 30 do Battle_Update(&battle, {}, 1.0 / 30)
+	testing.expect_value(t, battle.player.health.current, battle.player.health.maximum) // Never above the maximum.
+}
+
+// 12 enemies in sight must not kill a player in a few seconds: the fight is survivable for at least ten.
+@(test)
+test_a_single_enemy_needs_many_seconds_to_kill_the_player :: proc(t: ^testing.T) {
+	battle := duel(nil)
+	defer Battle_Destroy(&battle)
+	for _ in 0 ..< 10 * 30 do Battle_Update(&battle, {}, 1.0 / 30)
+	testing.expect(t, !Health_Is_Dead(battle.player.health))
+}

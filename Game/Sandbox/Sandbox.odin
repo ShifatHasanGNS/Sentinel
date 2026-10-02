@@ -155,6 +155,7 @@ camera_for_view :: proc(view: string) -> Fly_Camera {
 	case "gate": return Fly_Camera_Looking_At({0, 14, 100}, {0, 12, 40})
 	case "yard": return Fly_Camera_Looking_At({-34, 16, 70}, {14, 11, 44})
 	case "airfield": return Fly_Camera_Looking_At({60, 26, 50}, {32, 11, -4})
+	case "player": return Fly_Camera_Looking_At({4, 12.4, 107}, {0, 11.2, 100})
 	case "command": return Fly_Camera_Looking_At({-20, 24, 62}, {-8, 11, -12})
 	}
 	return Fly_Camera{position = {-150, 45, 190}, yaw_radians = -0.67, pitch_radians = -0.15}

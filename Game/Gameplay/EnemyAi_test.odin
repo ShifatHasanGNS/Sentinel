@@ -36,6 +36,16 @@ test_vision_needs_range_field_of_view_and_a_clear_line :: proc(t: ^testing.T) {
 	testing.expect(t, Can_See(eye, forward, eye + edge * 20, true)) // Just inside the cone's edge.
 }
 
+// Peripheral and rear awareness: only a very close player is noticed from outside the cone, and nobody is seen beyond the range.
+@(test)
+test_enemies_notice_the_player_behind_them_only_at_close_range :: proc(t: ^testing.T) {
+	eye, forward := [3]f32{0, 1.6, 0}, [3]f32{0, 0, 1}
+	testing.expect(t, Can_See(eye, forward, {0, 1.6, -(NEAR_AWARENESS_METERS - 1)}, true))
+	testing.expect(t, !Can_See(eye, forward, {0, 1.6, -(NEAR_AWARENESS_METERS + 1)}, true))
+	testing.expect(t, !Can_See(eye, forward, {0, 1.6, SIGHT_RANGE_METERS + 0.5}, true))
+	testing.expect(t, Can_See(eye, forward, {0, 1.6, SIGHT_RANGE_METERS - 0.5}, true))
+}
+
 @(test)
 test_an_unalerted_enemy_patrols_its_waypoints_in_a_loop :: proc(t: ^testing.T) {
 	ai := Enemy_Ai_Create({0, 0, 0}, 1)
@@ -81,11 +91,12 @@ test_a_distant_player_is_chased_until_in_range_then_shot_at :: proc(t: ^testing.
 		output := Enemy_Ai_Update(&ai, seen(player), WAYPOINTS[:], STEP)
 		ai.position += output.move_direction * output.speed * STEP
 		if ai.state == .Attack {
-			testing.expect(t, output.speed == 0 && output.shoot)
+			testing.expect(t, output.speed == 0 && !output.shoot) // Aiming first.
 			break
 		}
 	}
 	testing.expect_value(t, ai.state, Ai_State.Attack)
+	testing.expect(t, run(&ai, seen(player), AIM_SECONDS + 0.2).shoot) // Then firing.
 	testing.expect(t, linalg.length(player - ai.position) <= ATTACK_RANGE_METERS + 1)
 }
 

@@ -17,6 +17,7 @@ Character :: struct {
 	aim_direction:   [3]f32,
 	crouch:          f32,
 	hit_lean:        World.Spring3, // The chest's displacement from a hit, springing back to zero.
+	hide_weapon:     bool, // The owner draws the weapon itself (the player's body holds whichever weapon is selected).
 }
 
 // Advances animation state: the gait runs with speed, the hit spring relaxes.

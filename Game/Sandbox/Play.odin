@@ -16,10 +16,9 @@ import "core:strings"
 
 PLAY_FIELD_OF_VIEW_DEGREES :: 72.0
 PLAY_NEAR_PLANE_METERS :: 0.1
-VIEW_WEAPON_FORWARD_METERS :: 0.55
-VIEW_WEAPON_SCALE :: 0.6
-VIEW_WEAPON_SIDE_METERS :: 0.17
-VIEW_WEAPON_DROP_METERS :: 0.17
+BODY_BACK_METERS :: 0.25 // The body stands this far behind the eye so the head is not in the camera,
+BODY_RIGHT_METERS :: 0.2 // a little to the right so the held weapon enters the view from the lower right,
+BODY_RAISE_METERS :: 0.15 // and a little up so the weapon is inside the frame rather than below it.
 RECOIL_KICK_METERS :: 0.06
 RECOIL_DECAY_PER_SECOND :: 10.0
 DEMO_TURN_RADIANS_PER_SECOND :: 5.0
@@ -47,6 +46,7 @@ Weapon_View_Group :: struct {
 Play :: struct {
 	battle:        Gameplay.Battle,
 	soldiers:      Characters.Character_Renderer,
+	body:          Characters.Character, // The player's own body, seen when looking down and in shadows.
 	hud:           Render.Hud,
 	view_weapons:  [Weapons.Weapon_Kind][dynamic]Weapon_View_Group,
 	effect_cube:   Render.Mesh,
@@ -70,7 +70,7 @@ play_create :: proc(sandbox: ^Sandbox, demo: bool, fly: bool) -> (ok: bool) {
 	boxes := Base.Layout_World_Boxes(sandbox.base.layout, base_height)
 	defer delete(boxes)
 	ground := World.Ground{height_at = terrain_height, data = sandbox.terrain}
-	spawn := [3]f32{0, 0, 80}
+	spawn := [3]f32{0, 0, 100}
 	if demo do spawn = {0, 0, 52}
 	spawn.y = terrain_height(sandbox.terrain, spawn.x, spawn.z)
 	play.battle = Gameplay.Battle_Create(ground, boxes[:], spawn, 99)
@@ -84,6 +84,7 @@ play_create :: proc(sandbox: ^Sandbox, demo: bool, fly: bool) -> (ok: bool) {
 	}
 	play.effect_cube = upload_unit(Procedural.Box_Create({1, 1, 1}))
 	play.effect_sphere = upload_unit(Procedural.Sphere_Create(1, EFFECT_SPHERE_SEGMENTS, EFFECT_SPHERE_SEGMENTS / 2))
+	play.body = Characters.Character{variant = .Rifleman, aiming = true, hide_weapon = true}
 	play.demo = demo
 	play.flashlight_on = demo
 	play.mode = .Fly if fly else .Play
@@ -116,14 +117,14 @@ spawn_garrison :: proc(battle: ^Gameplay.Battle, terrain: ^Procedural.Terrain) {
 	at :: proc(x, y, z: f32) -> [3]f32 {
 		return {x, y, z}
 	}
-	for x in ([2]f32{-6, 6}) do Gameplay.Battle_Add_Enemy(battle, .Guard, at(x, ground, 58), 0, nil)
+	for x in ([2]f32{-6, 6}) do Gameplay.Battle_Add_Enemy(battle, .Guard, at(x, ground, 48), 0, nil)
 	for angle in ([4]f32{45, 135, 225, 315}) {
 		position := [2]f32{math.cos(math.to_radians(angle)), math.sin(math.to_radians(angle))} * 57
 		Gameplay.Battle_Add_Enemy(battle, .Sniper, at(position.x, ground, position.y), math.atan2(-position.x, -position.y) + math.PI, nil)
 	}
 	west_loop := [][3]f32{at(-32, ground, -34), at(-32, ground, 34), at(-20, ground, 34), at(-20, ground, -34)}
 	yard_loop := [][3]f32{at(-12, ground, -20), at(14, ground, -20), at(14, ground, 18), at(-12, ground, 18)}
-	gate_loop := [][3]f32{at(-24, ground, 50), at(24, ground, 50)}
+	gate_loop := [][3]f32{at(-24, ground, 44), at(24, ground, 44)}
 	Gameplay.Battle_Add_Enemy(battle, .Enemy, west_loop[0], 0, west_loop)
 	Gameplay.Battle_Add_Enemy(battle, .Rifleman, west_loop[2], 0, west_loop[2:])
 	Gameplay.Battle_Add_Enemy(battle, .Enemy, yard_loop[0], 0, yard_loop)
@@ -146,10 +147,12 @@ play_update :: proc(sandbox: ^Sandbox, input: ^Platform.Input, delta_seconds: f3
 	case .Fly:
 		Fly_Camera_Update(&sandbox.camera, input, delta_seconds)
 		battle_update_unattended(&play.battle, delta_seconds)
+		animate_body(play, delta_seconds)
 	case .Play:
 		player_input := demo_input(play.battle, delta_seconds) if play.demo else collect_input(input)
 		Gameplay.Battle_Update(&play.battle, player_input, delta_seconds)
 		sync_camera_to_player(sandbox)
+		animate_body(play, delta_seconds)
 	}
 	if play.battle.player.shots_fired != play.shots_seen {
 		play.shots_seen = play.battle.player.shots_fired
@@ -229,6 +232,8 @@ play_items :: proc(sandbox: ^Sandbox, items, shadow_items: ^[dynamic]Render.Draw
 	lights = make([dynamic]Render.Light, context.temp_allocator)
 	characters := make([dynamic]Characters.Character, context.temp_allocator)
 	for enemy in play.battle.enemies do append(&characters, enemy.character)
+	body_shown := !Gameplay.Health_Is_Dead(play.battle.player.health)
+	if body_shown do append(&characters, play.body)
 	for item in Characters.Character_Renderer_Items(&play.soldiers, characters[:]) {
 		append(items, item)
 		append(shadow_items, item)
@@ -240,7 +245,7 @@ play_items :: proc(sandbox: ^Sandbox, items, shadow_items: ^[dynamic]Render.Draw
 		flashlight.casts_shadow = true
 		append(&lights, flashlight)
 	}
-	if play.mode == .Play && !Gameplay.Health_Is_Dead(play.battle.player.health) do add_view_weapon(play, items)
+	if body_shown do add_held_weapon(play, items)
 	return lights
 }
 
@@ -296,16 +301,29 @@ along_axis :: proc(origin, axis: [3]f32) -> matrix[4, 4]f32 {
 	}
 }
 
-// The held weapon rides in front of the camera, low and to the right, kicked back by the last shot.
+// The body stands just behind the eye, facing where the player faces and aiming where the player looks; its stride follows the
+// controller's speed. The heading that makes Enemy_Forward equal the player's forward is yaw + pi (player yaw 0 looks along -Z).
 @(private = "file")
-add_view_weapon :: proc(play: ^Play, items: ^[dynamic]Render.Draw_Item) {
+animate_body :: proc(play: ^Play, delta_seconds: f32) {
 	player := play.battle.player
 	forward := Gameplay.Player_Forward(player)
-	up := [3]f32{0, 1, 0}
-	sights := la.normalize(up - forward * la.dot(up, forward))
-	right := la.cross(sights, forward)
-	origin := Gameplay.Player_Eye(player) + right * VIEW_WEAPON_SIDE_METERS - sights * VIEW_WEAPON_DROP_METERS + forward * (VIEW_WEAPON_FORWARD_METERS - play.recoil)
-	model := along_axis(origin, forward) * la.matrix4_scale_f32({VIEW_WEAPON_SCALE, VIEW_WEAPON_SCALE, VIEW_WEAPON_SCALE})
+	flat := la.normalize0([3]f32{forward.x, 0, forward.z})
+	body := &play.body
+	right := [3]f32{-flat.z, 0, flat.x} // Forward rotated a quarter turn clockwise seen from above.
+	body.position = player.controller.position - flat * BODY_BACK_METERS + right * BODY_RIGHT_METERS + {0, BODY_RAISE_METERS, 0}
+	body.heading_radians = player.yaw_radians + math.PI
+	body.speed = la.length([2]f32{player.controller.velocity.x, player.controller.velocity.z})
+	body.aim_direction = forward
+	Characters.Character_Step(body, delta_seconds)
+}
+
+// The selected weapon sits in the body's right hand, exactly where a soldier would hold it, kicked back by the last shot.
+@(private = "file")
+add_held_weapon :: proc(play: ^Play, items: ^[dynamic]Render.Draw_Item) {
+	player := play.battle.player
+	pose := Characters.Character_Pose(play.body)
+	recoil := la.matrix4_translate_f32(-Gameplay.Player_Forward(player) * play.recoil)
+	model := recoil * Characters.Weapon_Matrix(pose)
 	for &group in play.view_weapons[player.current] {
 		append(items, Render.Draw_Item{mesh = &group.mesh, model = model, material_layer = group.material, uv_scale = {2, 2}, illumination_model = .Cook_Torrance})
 	}

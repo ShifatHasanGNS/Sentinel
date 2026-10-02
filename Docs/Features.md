@@ -113,3 +113,5 @@
 | Player flashlight (F), a spot light at the eye | `Game/Sandbox/Play.odin` : `play_items` |
 | Spot-light shadows (nearest 4 shadowed spots, depth array, normal-offset 3x3 PCF) | `Engine/Render/SpotShadows.odin` : `Spot_Shadows_Choose`, `Spot_Shadow_Matrix`; `Engine/Render/ShadowMap.odin` : `Shadow_Map_Render_Layers`; `Shaders/DeferredLight.glsl` : `spot_shadow` |
 | Per-chunk prop culling (in view, or near enough to cast a shadow into view) | `Game/Sandbox/Sandbox.odin` : `collect_instances`, `chunk_matters` |
+| The player's own body and held weapon | `Game/Sandbox/Play.odin` : `animate_body`, `add_held_weapon` |
+| Player health regeneration | `Game/Gameplay/Battle.odin` : `regenerate_player` |

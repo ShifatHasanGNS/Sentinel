@@ -95,7 +95,9 @@ Battle_Add_Enemy :: proc(battle: ^Battle, variant: Characters.Soldier_Variant, p
 Battle_Update :: proc(battle: ^Battle, input: Player_Input, delta_seconds: f32) {
 	battle.noise_this_frame = false
 	update_player(battle, input, delta_seconds)
+	health_before := battle.player.health.current
 	for index in 0 ..< len(battle.enemies) do update_enemy(battle, index, delta_seconds)
+	regenerate_player(&battle.player, health_before, delta_seconds)
 	update_projectiles(battle, delta_seconds)
 	update_effects(battle, delta_seconds)
 }
@@ -184,6 +186,18 @@ fire_player_weapon :: proc(battle: ^Battle, stats: Weapons.Weapon_Stats) {
 	if result.kind != .None do append(&battle.effects, Effect{kind = .Impact, position = result.point, end = result.normal, lifetime = EFFECT_IMPACT_SECONDS})
 }
 
+// Out of combat the player heals: a hit this frame restarts the delay, and after it the health climbs steadily.
+@(private = "file")
+regenerate_player :: proc(player: ^Player, health_before, delta_seconds: f32) {
+	if Health_Is_Dead(player.health) do return
+	if player.health.current < health_before {
+		player.seconds_since_damage = 0
+		return
+	}
+	player.seconds_since_damage += delta_seconds
+	if player.seconds_since_damage >= PLAYER_REGEN_DELAY_SECONDS do Health_Heal(&player.health, PLAYER_REGEN_PER_SECOND * delta_seconds)
+}
+
 @(private = "file")
 update_enemy :: proc(battle: ^Battle, index: int, delta_seconds: f32) {
 	enemy := &battle.enemies[index]
@@ -247,7 +261,7 @@ enemy_fires :: proc(battle: ^Battle, index: int) {
 	}
 	player_eye := Player_Eye(battle.player)
 	distance := la.length(player_eye - Enemy_Eye(enemy^))
-	hit_chance := clamp(0.5 - distance * 0.01, 0.08, 0.4)
+	hit_chance := clamp(0.35 - distance * 0.007, 0.05, 0.3)
 	muzzle := Enemy_Chest_Position(enemy^) + enemy.character.aim_direction * 0.6
 	end := player_eye
 	if roll(enemy^, 1) < hit_chance {

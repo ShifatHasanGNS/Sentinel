@@ -9,6 +9,8 @@ PLAYER_EYE_HEIGHT_METERS :: 1.65
 WALK_SPEED :: 4.0
 SPRINT_SPEED :: 6.5
 PLAYER_HEALTH :: 100
+PLAYER_REGEN_DELAY_SECONDS :: 5.0 // Health returns only after this long without being hit.
+PLAYER_REGEN_PER_SECOND :: 8.0
 PITCH_LIMIT_RADIANS :: 1.5
 DAMAGE_FLASH_DECAY_PER_SECOND :: 2.0
 HIT_MARKER_SECONDS :: 0.18
@@ -22,6 +24,7 @@ Player :: struct {
 	current:      Weapons.Weapon_Kind,
 	spawn:        [3]f32,
 	damage_flash: f32, // 1 when just hurt, fading to 0.
+	seconds_since_damage: f32,
 	hit_marker:   f32, // Seconds left of the hit confirmation.
 	kills:        int,
 	shots_fired:  u32,
@@ -48,7 +51,7 @@ Player_Create :: proc(spawn: [3]f32) -> (player: Player) {
 Player_Respawn :: proc(player: ^Player) {
 	player.controller = World.Controller_Create(player.spawn)
 	player.health = Health_Create(PLAYER_HEALTH)
-	player.damage_flash, player.hit_marker = 0, 0
+	player.damage_flash, player.hit_marker, player.seconds_since_damage = 0, 0, 0
 	for kind in Weapons.Weapon_Kind {
 		stats := Weapons.Weapon_Stats_For(kind)
 		reserve_magazines := 6 if kind == .Rifle || kind == .Pistol else 4

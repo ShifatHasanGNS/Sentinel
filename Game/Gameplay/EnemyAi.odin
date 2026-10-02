@@ -6,9 +6,11 @@ import la "core:math/linalg"
 
 PATROL_SPEED :: 1.4
 CHASE_SPEED :: 3.6
-ATTACK_RANGE_METERS :: 35.0
-SIGHT_RANGE_METERS :: 80.0
-FIELD_OF_VIEW_DEGREES :: 110.0
+ATTACK_RANGE_METERS :: 30.0
+SIGHT_RANGE_METERS :: 50.0
+FIELD_OF_VIEW_DEGREES :: 100.0
+NEAR_AWARENESS_METERS :: 5.0 // Closer than this an enemy notices the player from any direction (footsteps, a shape at the edge of sight).
+AIM_SECONDS :: 0.6 // An enemy that has just opened fire takes this long to settle its aim before the first shot.
 ARRIVAL_RADIUS_METERS :: 1.0
 REACTION_SECONDS_MIN :: 0.25
 REACTION_SECONDS_MAX :: 0.75
@@ -68,12 +70,12 @@ Enemy_Ai_Notice :: proc(ai: ^Enemy_Ai, position: [3]f32) {
 	ai.state_seconds = 0
 }
 
-// The geometric part of sight: within range, within the cone about the facing direction, and nothing in the way.
+// The geometric part of sight: within range, within the cone about the facing direction (or very close), and nothing in the way.
 Can_See :: proc(eye, forward, target: [3]f32, line_is_clear: bool) -> bool {
 	to_target := target - eye
 	distance := la.length(to_target)
 	if !line_is_clear || distance > SIGHT_RANGE_METERS do return false
-	if distance < 1e-4 do return true
+	if distance <= NEAR_AWARENESS_METERS do return true
 	return la.dot(to_target / distance, la.normalize(forward)) >= math.cos(math.to_radians(f32(FIELD_OF_VIEW_DEGREES) / 2))
 }
 
@@ -174,7 +176,7 @@ attack :: proc(ai: ^Enemy_Ai, senses: Ai_Senses) -> Ai_Output {
 		enter(ai, .Chase)
 		return Ai_Output{face_direction = horizontal_direction(ai.position, ai.last_known)}
 	}
-	return Ai_Output{face_direction = horizontal_direction(ai.position, senses.player_position), shoot = true}
+	return Ai_Output{face_direction = horizontal_direction(ai.position, senses.player_position), shoot = ai.state_seconds >= AIM_SECONDS}
 }
 
 @(private = "file")
