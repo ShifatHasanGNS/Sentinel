@@ -1,5 +1,6 @@
 # Odin build outputs
 /Sentinel
+/SentinelDebug*
 *.bin
 *.exe
 *.dll
@@ -8,52 +9,21 @@
 *.o
 *.obj
 *.pdb
+*.dSYM/
 /build/
 /bin/
 
-# Debug/ — self-verification screenshot tooling (CLAUDE.md §1.2), how
-# Claude Code checks its own rendered output. Not part of the graded
-# deliverable, so it's excluded entirely (tooling and captures alike), same
-# reasoning as the "AI-agent local state" files below.
-/Debug/
-*.png
-*.ppm
+# Screenshot captures made by Tools/Capture (self-verification output)
+/Captures/
 *.bmp
+*.ppm
 
-# ...except /Screenshots/, a small, deliberately curated set of PNGs
-# README.md embeds (project overview, session 16 task: "screenshots
-# (generate with the capture flag)") — unlike Debug/Captures' hundreds of
-# session-by-session verification shots, these ARE part of the graded
-# deliverable: a fresh git clone needs them present for the README to
-# actually render, so the blanket *.png rule above needs an explicit
-# exception here rather than silently leaving the README's images broken
-# for anyone but the machine that generated them.
-!/Screenshots/
-!/Screenshots/*.png
-
-# OS/editor cruft
+# OS / editor
 .DS_Store
-__MACOSX/
-*.swp
 .vscode/
 .idea/
 
-# Claude Code / AI-agent local state — machine-specific, not part of the
-# project's actual source. CLAUDE.md itself stays tracked; these are the
-# tool's own runtime/config/scratch files.
+# Machine-local agent state (CLAUDE.md and Docs/ ARE tracked)
 .claude/
 CLAUDE.local.md
-CLAUDE.md
 .mcp.json
-.claude.json
-.cursor/
-.windsurf/
-.aider*
-.clinerules/
-*.agent.log
-PROGRESS.md
-Prompts.md
-Requirements.md
-Plan.md
-SentinelDebug.dSYM/
-SentinelDebug*
