@@ -18,6 +18,10 @@ Sky :: struct {
 	ground:    [3]f32,
 	sun_color: [3]f32,
 	to_sun:    [3]f32, // Unit vector from the scene toward the sun.
+	sun_intensity:  f32, // Scale of the atmosphere's scattered light.
+	to_moon:        [3]f32,
+	moon_color:     [3]f32,
+	moon_intensity: f32,
 }
 
 // Everything the renderer needs for one frame. Slices and pointers must outlive the call.

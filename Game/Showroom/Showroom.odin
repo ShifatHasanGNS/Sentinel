@@ -4,6 +4,7 @@ import "../../Engine/GPU"
 import "../../Engine/Platform"
 import "../../Engine/Procedural"
 import "../../Engine/Render"
+import "../Gameplay"
 import "../Materials"
 import "core:math"
 import la "core:math/linalg"
@@ -19,7 +20,6 @@ Showroom :: struct {
 	gallery:              [dynamic]Gallery_Item,
 	ground:               Gallery_Item,
 	bulb:                 Render.Mesh,
-	sun:                  Render.Light,
 	local_lights:         [dynamic]Render.Light,
 	camera_angle_radians: f32,
 }
@@ -30,7 +30,6 @@ Showroom_Create :: proc(width, height: i32) -> (showroom: Showroom, ok: bool) {
 	showroom.gallery = Gallery_Create()
 	showroom.ground = create_ground()
 	showroom.bulb = create_bulb()
-	showroom.sun = Render.Light_Directional({-0.55, -0.35, -0.4}, {1, 0.78, 0.55}, 3)
 	showroom.local_lights = create_lights()
 	return showroom, true
 }
@@ -44,12 +43,13 @@ Showroom_Render :: proc(showroom: ^Showroom, window: Platform.Window) {
 	append(&items, as_draw_item(&showroom.ground))
 	for &item in showroom.gallery do append(&items, as_draw_item(&item))
 	for light in showroom.local_lights do append(&items, bulb_draw_item(showroom, light))
+	daylight := Gameplay.Daylight_For_Hours(17.3)
 	frame := Render.Frame{
 		camera = camera(showroom, window),
 		items = items[:],
-		sun = showroom.sun,
+		sun = daylight.sun,
 		local_lights = showroom.local_lights[:],
-		sky = dusk_sky(showroom.sun),
+		sky = daylight.sky,
 		materials = &showroom.materials,
 		sun_shadows = true,
 		shadow_distance_meters = 70,
@@ -77,11 +77,6 @@ create_lights :: proc() -> (lights: [dynamic]Render.Light) {
 	append(&lights, Render.Light_Spot({0, 7, 12}, {0, -1, -0.25}, {1, 0.95, 0.85}, 400, 22, 14, 26))
 	append(&lights, Render.Light_Area({0, 3.2, 3.5}, {0, -1, 0}, {1, 1, 1}, 4, 1.2, 160, 14))
 	return lights
-}
-
-@(private = "file")
-dusk_sky :: proc(sun: Render.Light) -> Render.Sky {
-	return Render.Sky{zenith = {0.05, 0.1, 0.25}, horizon = {0.55, 0.32, 0.2}, ground = {0.04, 0.035, 0.03}, sun_color = sun.color, to_sun = -sun.direction}
 }
 
 @(private = "file")

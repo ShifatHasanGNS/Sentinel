@@ -23,6 +23,7 @@ main :: proc() {
 	check_illumination_models(&checks)
 	check_light_falloff_and_shapes(&checks)
 	check_sun_shadows(&checks)
+	check_atmosphere(&checks)
 	fmt.printfln("%d checks passed, %d failed", checks.passed, checks.failed)
 	if checks.failed > 0 do os.exit(1)
 }
@@ -232,4 +233,53 @@ run_shadow_probe :: proc(probe: ^GPU.Shader, shadow_map: ^Render.Shadow_Map, cas
 	GPU.Shader_Set(probe, "u_ToLight", -light_travel)
 	GPU.Shader_Set(probe, "u_ProbeCameraPosition", camera.position)
 	GPU.Shader_Set(probe, "u_ProbeCameraForward", camera.forward)
+}
+
+sky_at :: proc(shader: ^GPU.Shader, to_sun, direction: [3]f32) -> [3]f32 {
+	GPU.Shader_Set(shader, "u_Mode", i32(0))
+	GPU.Shader_Set(shader, "u_ToSun", to_sun)
+	GPU.Shader_Set(shader, "u_Direction", direction)
+	pixels := Support.Probe_Render(shader, 1, 1)
+	defer delete(pixels)
+	return pixels[0].xyz
+}
+
+sky_luminance :: proc(color: [3]f32) -> f32 {
+	return 0.2126 * color.r + 0.7152 * color.g + 0.0722 * color.b
+}
+
+check_atmosphere :: proc(checks: ^Support.Checks) {
+	shader, ok := GPU.Shader_Create("Tests/RenderCheck/Fixtures/AtmosphereProbe.glsl", nil, true)
+	Support.expect(checks, ok)
+	if !ok do return
+	defer GPU.Shader_Destroy(&shader)
+
+	for elevation_degrees in ([5]f32{60, 20, 2, -5, -30}) {
+		elevation := math.to_radians(elevation_degrees)
+		GPU.Shader_Set(&shader, "u_Mode", i32(1))
+		GPU.Shader_Set(&shader, "u_ToSun", [3]f32{math.cos(elevation), math.sin(elevation), 0})
+		for pixel in Support.Probe_Render(&shader, 64, 32) {
+			Support.expect(checks, pixel.x >= 0 && pixel.y >= 0 && pixel.z >= 0 && pixel.x < 1e4 && pixel.y < 1e4 && pixel.z < 1e4)
+		}
+	}
+
+	overhead: [3]f32 = {0, 1, 0}
+	noon_zenith := sky_at(&shader, overhead, overhead)
+	noon_horizon := sky_at(&shader, overhead, {1, 0.05, 0})
+	Support.expect(checks, noon_zenith.z > noon_zenith.x * 1.3) // Rayleigh scattering favours blue.
+	Support.expect(checks, noon_horizon.x / noon_horizon.z > noon_zenith.x / noon_zenith.z) // The horizon is whiter: a longer path scatters the blue away.
+
+	sunset: [3]f32 = la.normalize([3]f32{1, 0.03, 0})
+	toward_sun := sky_at(&shader, sunset, {1, 0.12, 0})
+	away_from_sun := sky_at(&shader, sunset, {-1, 0.8, 0}) // High on the far side: the pink band hugs the horizon.
+	Support.expect(checks, toward_sun.x > toward_sun.z) // Reddened at the sun.
+	Support.expect(checks, away_from_sun.z > away_from_sun.x) // Blue opposite the sun.
+
+	afternoon: [3]f32 = {0.7071, 0.7071, 0}
+	near_sun := sky_at(&shader, afternoon, la.normalize([3]f32{0.9, 0.5, 0}))
+	far_from_sun := sky_at(&shader, afternoon, {-0.3, 0.95, 0})
+	Support.expect(checks, sky_luminance(near_sun) > sky_luminance(far_from_sun)) // Forward scattering brightens the sky toward the sun.
+
+	night := sky_at(&shader, {0.866, -0.5, 0}, overhead)
+	Support.expect(checks, sky_luminance(night) < 0.01 * sky_luminance(noon_zenith))
 }

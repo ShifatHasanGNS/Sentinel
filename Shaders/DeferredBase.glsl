@@ -1,8 +1,10 @@
 #version 410 core
+#include "Noise.glsl"
 #include "Gbuffer.glsl"
 #include "Brdf.glsl"
 #include "Lighting.glsl"
 #include "GbufferRead.glsl"
+#include "Atmosphere.glsl"
 #include "Sky.glsl"
 #include "Ambient.glsl"
 #include "Shadow.glsl"

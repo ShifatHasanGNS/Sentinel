@@ -1,4 +1,4 @@
-// Image-based ambient from the analytic sky. Include after Brdf.glsl and Sky.glsl.
+// Image-based ambient from the sky gradient. Include after Brdf.glsl and Sky.glsl.
 
 // Karis 2014, "Physically Based Shading on Mobile": a fit to the split-sum environment BRDF integral,
 // returning (scale, bias) for F0, so specular ambient = prefiltered radiance * (F0 * scale + bias).
@@ -17,7 +17,7 @@ vec3 ambient_light(vec3 albedo, float roughness, float metallic, vec3 normal, ve
 	vec2 scale_bias = environment_brdf(roughness, n_dot_v);
 	vec3 diffuse = diffuse_color * (1.0 - specular_color) * sky_ambient(normal);
 	// Rough surfaces see a blurred sky: blend the sharp reflection toward the cosine-blurred hemisphere.
-	vec3 prefiltered = mix(sky_radiance(reflect(-view, normal)), sky_ambient(normal), roughness * roughness);
+	vec3 prefiltered = mix(sky_gradient(reflect(-view, normal)), sky_ambient(normal), roughness * roughness);
 	vec3 specular = prefiltered * (specular_color * scale_bias.x + scale_bias.y);
 	return (diffuse + specular) * ambient_occlusion;
 }
