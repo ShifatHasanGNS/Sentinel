@@ -25,10 +25,11 @@ SCRIPTED_FLIGHT_SPEED :: 30.0
 Sandbox :: struct {
 	renderer:       Render.Renderer,
 	materials:      Procedural.Texture_Set,
-	terrain:        Procedural.Terrain,
+	terrain:        ^Procedural.Terrain, // On the heap: the battle's ground function points at it.
 	scatter_rules:  Procedural.Scatter_Rules,
 	props:          Props,
 	base:           Base.Base_Scene,
+	play:           Play,
 	chunks:         map[World.Chunk_Coordinate]Chunk,
 	stream:         World.Chunk_Stream,
 	build_queue:    [dynamic]World.Chunk_Coordinate,
@@ -44,10 +45,11 @@ Sandbox :: struct {
 }
 
 // hours < 0 starts the day cycle at 9:00 and lets it run; otherwise time is fixed at the given hour.
-Sandbox_Create :: proc(width, height: i32, hours: f32, view: string) -> (sandbox: Sandbox, ok: bool) {
+Sandbox_Create :: proc(width, height: i32, hours: f32, view: string, demo: bool) -> (sandbox: Sandbox, ok: bool) {
 	sandbox.renderer = Render.Renderer_Create(width, height) or_return
 	sandbox.materials = Materials.Materials_Bake() or_return
-	sandbox.terrain = Procedural.Terrain{
+	sandbox.terrain = new(Procedural.Terrain)
+	sandbox.terrain^ = Procedural.Terrain{
 		seed = 7,
 		base_height_meters = 10,
 		amplitude_meters = 30,
@@ -62,6 +64,8 @@ Sandbox_Create :: proc(width, height: i32, hours: f32, view: string) -> (sandbox
 	sandbox.camera = camera_for_view(view)
 	sandbox.clock_runs = hours < 0
 	sandbox.hours = 9 if hours < 0 else hours
+	play_create(&sandbox, demo, view != "") or_return
+	if !(view != "") do sync_camera_to_player(&sandbox)
 	update_stream(&sandbox)
 	for len(sandbox.build_queue) > 0 do build_next_chunk(&sandbox)
 	return sandbox, true
@@ -78,18 +82,21 @@ Sandbox_Destroy :: proc(sandbox: ^Sandbox) {
 	delete(sandbox.canopy_instances)
 	delete(sandbox.rock_instances)
 	delete(sandbox.bush_instances)
+	play_destroy(&sandbox.play)
 	Base.Base_Scene_Destroy(&sandbox.base)
 	Props_Destroy(&sandbox.props)
+	free(sandbox.terrain)
 	Procedural.Texture_Set_Destroy(&sandbox.materials)
 	Render.Renderer_Destroy(&sandbox.renderer)
 }
 
-// scripted_seconds >= 0 flies a fixed circuit (for repeatable benchmarks); otherwise the player flies.
+// scripted_seconds >= 0 flies a fixed circuit (for repeatable benchmarks); otherwise the player plays, or flies (Tab).
 Sandbox_Update :: proc(sandbox: ^Sandbox, clock: Platform.Clock, input: ^Platform.Input, scripted_seconds: f32) {
 	if scripted_seconds >= 0 {
-		sandbox.camera = scripted_camera(sandbox.terrain, scripted_seconds)
+		sandbox.camera = scripted_camera(sandbox.terrain^, scripted_seconds)
+		play_update_idle(sandbox, clock.delta_seconds)
 	} else {
-		Fly_Camera_Update(&sandbox.camera, input, clock.delta_seconds)
+		play_update(sandbox, input, clock.delta_seconds)
 	}
 	if sandbox.clock_runs do sandbox.hours = math.mod(sandbox.hours + HOURS_PER_REAL_SECOND * clock.delta_seconds, 24)
 	update_stream(sandbox)
@@ -101,8 +108,9 @@ Sandbox_Update :: proc(sandbox: ^Sandbox, clock: Platform.Clock, input: ^Platfor
 
 Sandbox_Render :: proc(sandbox: ^Sandbox, window: Platform.Window) {
 	aspect := f32(window.framebuffer_width) / f32(window.framebuffer_height)
-	camera := Render.Camera_Look_At(sandbox.camera.position, sandbox.camera.position + Fly_Camera_Forward(sandbox.camera), FIELD_OF_VIEW_DEGREES, aspect, 0.3, 1200)
+	camera := play_camera(sandbox, aspect)
 	items, shadow_items := gather_items(sandbox, camera)
+	lights := play_items(sandbox, &items, &shadow_items)
 	daylight := Gameplay.Daylight_For_Hours(sandbox.hours)
 	frame := Render.Frame{
 		camera = camera,
@@ -118,6 +126,7 @@ Sandbox_Render :: proc(sandbox: ^Sandbox, window: Platform.Window) {
 			plateau_blend_meters = sandbox.terrain.plateau_blend_meters,
 		},
 		sun = daylight.sun,
+		local_lights = lights[:],
 		sky = daylight.sky,
 		sun_shadows = true,
 		shadow_distance_meters = SHADOW_DISTANCE_METERS,
@@ -126,6 +135,7 @@ Sandbox_Render :: proc(sandbox: ^Sandbox, window: Platform.Window) {
 		vignette_strength = 0.3,
 	}
 	Render.Renderer_Render(&sandbox.renderer, frame, window.framebuffer_width, window.framebuffer_height)
+	play_draw_hud(sandbox, window.framebuffer_width, window.framebuffer_height)
 }
 
 // Named starting points: the default overview, an aerial of the compound, the gate from the road, the motor pool, the airfield.
@@ -167,7 +177,7 @@ find_queued :: proc(queue: []World.Chunk_Coordinate, coordinate: World.Chunk_Coo
 build_next_chunk :: proc(sandbox: ^Sandbox) {
 	coordinate := sandbox.build_queue[0]
 	ordered_remove(&sandbox.build_queue, 0)
-	sandbox.chunks[coordinate] = Chunk_Build(sandbox.terrain, sandbox.scatter_rules, coordinate)
+	sandbox.chunks[coordinate] = Chunk_Build(sandbox.terrain^, sandbox.scatter_rules, coordinate)
 }
 
 // Terrain chunks in view are drawn; every loaded chunk and every prop casts shadows, so trees behind the camera still shade the scene.
