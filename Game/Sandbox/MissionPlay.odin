@@ -275,3 +275,50 @@ mission_items :: proc(play: ^Play, items: ^[dynamic]Render.Draw_Item, lights: ^[
 mission_check_restart :: proc(play: ^Play, input: ^Platform.Input) {
 	if play.mission.state.status == .Complete && Platform.Input_Key_Down(input, .R) do play.restart_requested = true
 }
+
+// A scripted playthrough for verification: teleports the player to each goal, presses or holds E as a person would, shoots the radar,
+// and prints every objective the game completes. Returns the simulated E state (held, pressed this frame).
+autoplay_step :: proc(sandbox: ^Sandbox, delta_seconds: f32) -> (held, pressed: bool) {
+	play := &sandbox.play
+	mission := &play.mission
+	previous := play.autoplay_seconds
+	play.autoplay_seconds += delta_seconds
+	crossed :: proc(previous, now, moment: f32) -> bool {
+		return previous < moment && now >= moment
+	}
+	now := play.autoplay_seconds
+	player := &play.battle.player
+	place :: proc(play: ^Play, position: [3]f32) {
+		play.battle.player.controller.position = position
+		play.battle.player.controller.velocity = {}
+	}
+	if crossed(previous, now, 0.5) do place(play, {0, mission.extraction.y, 50})
+	if crossed(previous, now, 1.5) {
+		spot := mission.terminal_position + {0, 0, 1.4}
+		place(play, spot)
+		player.yaw_radians, player.pitch_radians = 0, -0.3
+	}
+	held = now > 2.0 && now < 5.0 // Hold E at the computer.
+	if crossed(previous, now, 6.0) {
+		place(play, mission.radar_dish + {0, -3, 12})
+		player.yaw_radians, player.pitch_radians = 0, 0.2
+		fmt.eprintln("AUTOPLAY shooting the radar")
+	}
+	if now > 6.2 && now < 9.0 && !play.battle.targets[mission.radar_target].destroyed {
+		Gameplay.Battle_Detonate(&play.battle, mission.radar_dish, 6, 400)
+	}
+	if crossed(previous, now, 9.5) {
+		place(play, mission.hostage.controller.position + {1.2, 0, 0})
+		player.yaw_radians = math.PI / 2
+	}
+	pressed = crossed(previous, now, 10.2)
+	if crossed(previous, now, 11.5) do place(play, mission.extraction)
+	for objective in Mission.Objective {
+		if objective in mission.state.just_completed do fmt.eprintfln("AUTOPLAY %.1fs completed: %v", now, objective)
+	}
+	if mission.state.status == .Complete && !play.autoplay_reported {
+		play.autoplay_reported = true
+		fmt.eprintfln("AUTOPLAY mission complete at %.1fs", now)
+	}
+	return
+}

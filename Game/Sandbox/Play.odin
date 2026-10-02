@@ -79,6 +79,9 @@ Play :: struct {
 	mouse_idle_seconds: f32,
 	demo_seconds:  f32,
 	restart_requested: bool,
+	autoplay:      bool,
+	autoplay_seconds: f32,
+	autoplay_reported: bool,
 	boardable:     Maybe(int), // The vehicle in reach on foot, for the prompt.
 	interact_was_down: bool,
 	body:          Characters.Character, // The player's own body, seen when looking down and in shadows.
@@ -137,6 +140,7 @@ play_create :: proc(sandbox: ^Sandbox, demo: bool, fly: bool, drive: string, ove
 	play.mode = .Fly if fly else .Play
 	if drive != "" do board_named_vehicle(play, drive)
 	play.map_open, play.binoculars = overlay == "map", overlay == "binoculars"
+	play.autoplay = overlay == "autoplay"
 	play.binocular_zoom = BINOCULAR_ZOOM_START
 	play.binocular_raise = 1 if play.binoculars else 0
 	return true
@@ -232,7 +236,9 @@ play_update :: proc(sandbox: ^Sandbox, input: ^Platform.Input, delta_seconds: f3
 	}
 	update_vehicles(sandbox, delta_seconds)
 	if play.mode == .Play {
-		mission_update(sandbox, interact_down, interact_pressed, delta_seconds)
+		held, pressed := interact_down, interact_pressed
+		if play.autoplay do held, pressed = autoplay_step(sandbox, delta_seconds)
+		mission_update(sandbox, held, pressed, delta_seconds)
 		cameras_update(sandbox, delta_seconds)
 	}
 	Particles_Spawn_From_Effects(&play.particles, play.battle.effects[:], delta_seconds, Gameplay.Player_Eye(play.battle.player))
