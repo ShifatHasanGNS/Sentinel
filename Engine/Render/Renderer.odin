@@ -37,6 +37,8 @@ Renderer :: struct {
 	fullscreen:      GPU.Fullscreen_Pass,
 	light_volume:    Mesh,
 	shadows:         Shadow_Map,
+	spot_shadows:    Shadow_Map, // One layer per granted spot light.
+	spot_set:        Spot_Shadow_Set, // Chosen for the current frame.
 	sky_lut:         Sky_Lut,
 	cascades:        Cascade_Set, // Fitted for the current frame.
 }
@@ -55,6 +57,7 @@ Renderer_Create :: proc(width, height: i32) -> (renderer: Renderer, ok: bool) {
 	renderer.ssao = Ssao_Create(width, height) or_return
 	renderer.fullscreen = GPU.Fullscreen_Pass_Create()
 	renderer.shadows = Shadow_Map_Create(SHADOW_MAP_SIZE) or_return
+	renderer.spot_shadows = Shadow_Map_Create(SPOT_SHADOW_SIZE, SPOT_SHADOWS_MAX) or_return
 	renderer.sky_lut = Sky_Lut_Create()
 	for &timer in renderer.timers do timer = GPU.Timer_Create()
 	sphere := Procedural.Sphere_Create(1, LIGHT_VOLUME_SEGMENTS, LIGHT_VOLUME_RINGS)
@@ -67,6 +70,7 @@ Renderer_Destroy :: proc(renderer: ^Renderer) {
 	for &timer in renderer.timers do GPU.Timer_Destroy(&timer)
 	Sky_Lut_Destroy(&renderer.sky_lut)
 	Shadow_Map_Destroy(&renderer.shadows)
+	Shadow_Map_Destroy(&renderer.spot_shadows)
 	Mesh_Destroy(&renderer.light_volume)
 	GPU.Fullscreen_Pass_Destroy(&renderer.fullscreen)
 	Bloom_Destroy(&renderer.bloom)
@@ -90,7 +94,7 @@ Renderer_Render :: proc(renderer: ^Renderer, frame: Frame, width, height: i32) {
 	timed(renderer, .Sky_Lut, proc(renderer: ^Renderer, frame: Frame) {
 		Sky_Lut_Render(&renderer.sky_lut, frame.sky.to_sun, frame.sky.sun_intensity)
 	}, frame)
-	if frame.sun_shadows do timed(renderer, .Shadows, shadow_pass, frame)
+	timed(renderer, .Shadows, shadow_pass, frame)
 	timed(renderer, .Geometry, geometry_pass, frame)
 	if frame.ssao_radius_meters > 0 do timed(renderer, .Ssao, ssao_pass, frame)
 	lighting_pass(renderer, frame)
@@ -117,9 +121,13 @@ Renderer_Reset_Timers :: proc(renderer: ^Renderer) {
 
 @(private = "file")
 shadow_pass :: proc(renderer: ^Renderer, frame: Frame) {
-	renderer.cascades = Shadow_Cascades_Fit(frame.camera, frame.sun.direction, frame.shadow_distance_meters, CASCADE_SPLIT_LAMBDA, SHADOW_MAP_SIZE)
 	casters := frame.shadow_items if len(frame.shadow_items) > 0 else frame.items
-	Shadow_Map_Render(&renderer.shadows, renderer.cascades, casters)
+	if frame.sun_shadows {
+		renderer.cascades = Shadow_Cascades_Fit(frame.camera, frame.sun.direction, frame.shadow_distance_meters, CASCADE_SPLIT_LAMBDA, SHADOW_MAP_SIZE)
+		Shadow_Map_Render(&renderer.shadows, renderer.cascades, casters)
+	}
+	renderer.spot_set = Spot_Shadows_Choose(frame.local_lights, frame.camera.position)
+	if renderer.spot_set.count > 0 do Shadow_Map_Render_Layers(&renderer.spot_shadows, renderer.spot_set.matrices[:renderer.spot_set.count], casters)
 }
 
 @(private = "file")
@@ -215,7 +223,10 @@ light_volumes :: proc(renderer: ^Renderer, frame: Frame) {
 	bind_gbuffer(shader, renderer, frame.camera)
 	GPU.Shader_Set(shader, "u_ViewProjection", frame.camera.view_projection)
 	GPU.Shader_Set(shader, "u_ScreenSize", [2]f32{f32(renderer.gbuffer.width), f32(renderer.gbuffer.height)})
-	for light in frame.local_lights {
+	GPU.Shader_Set(shader, "u_SpotShadows", GPU.Texture_Bind_Next(&renderer.spot_shadows.depth, GPU.Sampler_Shadow))
+	GPU.Shader_Set(shader, "u_SpotShadowSize", f32(SPOT_SHADOW_SIZE))
+	for light, index in frame.local_lights {
+		set_spot_shadow(shader, renderer.spot_set, light, index)
 		volume := la.matrix4_translate_f32(light.position) * la.matrix4_scale_f32({light.range_meters, light.range_meters, light.range_meters})
 		GPU.Shader_Set(shader, "u_Model", volume)
 		Light_Set_Uniforms(shader, "u_Light", light)
@@ -267,4 +278,15 @@ shaft_inputs :: proc(frame: Frame) -> (sun_uv: [2]f32, color: [3]f32) {
 	if clip.w <= 0 do return
 	sun_uv = {clip.x / clip.w * 0.5 + 0.5, clip.y / clip.w * 0.5 + 0.5}
 	return sun_uv, frame.sky.sun_color * frame.shaft_strength * min(frame.sky.to_sun.y * 4, 1)
+}
+
+// Tells the light-volume shader which depth layer (if any) belongs to this light.
+@(private = "file")
+set_spot_shadow :: proc(shader: ^GPU.Shader, set: Spot_Shadow_Set, light: Light, light_index: int) {
+	slot := -1
+	for candidate in 0 ..< set.count do if set.light_index[candidate] == light_index do slot = candidate
+	GPU.Shader_Set(shader, "u_ShadowSlot", i32(slot))
+	if slot < 0 do return
+	GPU.Shader_Set(shader, "u_SpotMatrix", set.matrices[slot])
+	GPU.Shader_Set(shader, "u_SpotTexelPerMeter", Spot_Shadow_Texel_Per_Meter(light))
 }

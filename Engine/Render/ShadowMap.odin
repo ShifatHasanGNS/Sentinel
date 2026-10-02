@@ -12,10 +12,10 @@ Shadow_Map :: struct {
 	size:   i32,
 }
 
-Shadow_Map_Create :: proc(size: i32) -> (shadow_map: Shadow_Map, ok: bool) {
+Shadow_Map_Create :: proc(size: i32, layers: i32 = CASCADE_COUNT) -> (shadow_map: Shadow_Map, ok: bool) {
 	shadow_map.shader = GPU.Shader_Create("Shaders/ShadowDepth.glsl", nil, true) or_return
 	shadow_map.instanced_shader = GPU.Shader_Create("Shaders/ShadowDepth.glsl", {"INSTANCED"}, true) or_return
-	shadow_map.depth = GPU.Texture_Create({.Texture_2D_Array, .Depth32F, size, size, CASCADE_COUNT, 1})
+	shadow_map.depth = GPU.Texture_Create({.Texture_2D_Array, .Depth32F, size, size, layers, 1})
 	shadow_map.target = GPU.Framebuffer_Create_For_Layers(size, size)
 	shadow_map.size = size
 	return shadow_map, true
@@ -30,25 +30,32 @@ Shadow_Map_Destroy :: proc(shadow_map: ^Shadow_Map) {
 
 // Draws every item's depth once per cascade. Leaves the shadow framebuffer bound; callers bind their own target next.
 Shadow_Map_Render :: proc(shadow_map: ^Shadow_Map, cascades: Cascade_Set, items: []Draw_Item) {
+	matrices: [CASCADE_COUNT]matrix[4, 4]f32
+	for cascade, index in cascades do matrices[index] = cascade.view_projection
+	Shadow_Map_Render_Layers(shadow_map, matrices[:], items)
+}
+
+// One depth layer per matrix.
+Shadow_Map_Render_Layers :: proc(shadow_map: ^Shadow_Map, matrices: []matrix[4, 4]f32, items: []Draw_Item) {
 	gl.Enable(gl.DEPTH_TEST)
 	gl.DepthMask(true)
 	gl.Disable(gl.CULL_FACE)
 	gl.Enable(gl.POLYGON_OFFSET_FILL)
 	gl.PolygonOffset(2, 4)
-	for cascade, index in cascades {
+	for view_projection, index in matrices {
 		GPU.Framebuffer_Set_Depth_Layer(&shadow_map.target, &shadow_map.depth, i32(index))
 		GPU.Framebuffer_Bind(&shadow_map.target)
 		gl.Clear(gl.DEPTH_BUFFER_BIT)
-		draw_casters(&shadow_map.shader, cascade, items, false)
-		draw_casters(&shadow_map.instanced_shader, cascade, items, true)
+		draw_casters(&shadow_map.shader, view_projection, items, false)
+		draw_casters(&shadow_map.instanced_shader, view_projection, items, true)
 	}
 	gl.Disable(gl.POLYGON_OFFSET_FILL)
 }
 
 @(private = "file")
-draw_casters :: proc(shader: ^GPU.Shader, cascade: Cascade, items: []Draw_Item, instanced: bool) {
+draw_casters :: proc(shader: ^GPU.Shader, view_projection: matrix[4, 4]f32, items: []Draw_Item, instanced: bool) {
 	GPU.Shader_Use(shader)
-	GPU.Shader_Set(shader, "u_LightViewProjection", cascade.view_projection)
+	GPU.Shader_Set(shader, "u_LightViewProjection", view_projection)
 	for &item in items {
 		if item.mesh.instanced != instanced do continue
 		GPU.Shader_Set(shader, "u_Model", item.model)

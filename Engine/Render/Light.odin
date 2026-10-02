@@ -25,6 +25,7 @@ Light :: struct {
 	outer_angle_degrees: f32,
 	half_extent_u:       [3]f32, // Area lights only; cross(u, v) is the emission normal.
 	half_extent_v:       [3]f32,
+	casts_shadow:        bool, // Spot lights only: asks for a depth map (the nearest few are granted one).
 }
 
 Light_Directional :: proc(travel_direction, color: [3]f32, intensity: f32) -> Light {

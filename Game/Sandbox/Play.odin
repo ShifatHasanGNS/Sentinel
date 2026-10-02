@@ -229,7 +229,9 @@ play_items :: proc(sandbox: ^Sandbox, items, shadow_items: ^[dynamic]Render.Draw
 	for effect in play.battle.effects do add_effect(play, effect, items, &lights)
 	if play.flashlight_on && play.mode == .Play {
 		player := play.battle.player
-		append(&lights, Render.Light_Spot(Gameplay.Player_Eye(player) + Gameplay.Player_Forward(player) * 0.3, Gameplay.Player_Forward(player), {1, 0.95, 0.85}, FLASHLIGHT_INTENSITY, FLASHLIGHT_RANGE_METERS, 10, 24))
+		flashlight := Render.Light_Spot(Gameplay.Player_Eye(player) + Gameplay.Player_Forward(player) * 0.3, Gameplay.Player_Forward(player), {1, 0.95, 0.85}, FLASHLIGHT_INTENSITY, FLASHLIGHT_RANGE_METERS, 10, 24)
+		flashlight.casts_shadow = true
+		append(&lights, flashlight)
 	}
 	if play.mode == .Play && !Gameplay.Health_Is_Dead(play.battle.player.health) do add_view_weapon(play, items)
 	return lights

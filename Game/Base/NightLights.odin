@@ -66,5 +66,7 @@ build_light :: proc(kind: Catalogue.Object_Kind, lamp: Lamp, position: [3]f32, s
 		return Render.Light_Point(position, WARM_COLOR, intensity * darkness, range)
 	}
 	axis := [3]f32{lamp.axis.x * cosine + lamp.axis.z * sine, lamp.axis.y, -lamp.axis.x * sine + lamp.axis.z * cosine}
-	return Render.Light_Spot(position, axis, FLOODLIGHT_COLOR, FLOODLIGHT_INTENSITY * darkness, FLOODLIGHT_RANGE_METERS, 22, 42)
+	light := Render.Light_Spot(position, axis, FLOODLIGHT_COLOR, FLOODLIGHT_INTENSITY * darkness, FLOODLIGHT_RANGE_METERS, 22, 42)
+	light.casts_shadow = true
+	return light
 }

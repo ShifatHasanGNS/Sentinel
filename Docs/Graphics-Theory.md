@@ -71,3 +71,6 @@ Ambient light reaching a point P with normal n is `(1/pi) * integral V(w) cos(th
 
 ## Light shafts
 Single scattering along a view ray from the pixel to the sun adds `integral T(t) * S(t) dt`, where S is non-zero only where the sun is visible through that point. In screen space we march from the pixel toward the sun's projected position and sum open-sky samples (depth at the far plane) with weights `0.93^i`. Occluders (trees, buildings) between the pixel and the sun darken the sum, producing visible shafts. A per-pixel jitter of the start offset trades banding for fine noise.
+
+## Spot-light shadows
+A spot light renders the casters' depth through a perspective frustum along its axis (field of view = 2 x outer angle + 6 degrees, so the penumbra edge stays inside the map). A pixel is lit when its depth in that frustum is not behind the stored depth. Perspective depth `z' = (f+n)/(f-n) - 2fn/((f-n)z)` is non-linear, so a fixed depth bias would mean different world distances near and far; instead the lookup point is pushed along the surface normal by `distance * 2tan(fov/2)/size * (1.5 + 2.5 * tilt)` (one to four shadow texels in world units, growing with surface tilt), with a tiny constant compare bias, then 3x3 hardware-compared taps soften the edge. Only the nearest four lights that ask for a shadow get a depth layer.
