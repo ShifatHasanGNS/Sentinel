@@ -119,3 +119,9 @@
 | Temporary solids (trees, rocks near the player) | `Game/Sandbox/Play.odin` : `fill_prop_solids` |
 | Invisible collision boxes for thin objects (fence panel) | `Engine/Procedural/Assembly.odin` : `Part.collision_only`; `Game/Catalogue/Objects.odin` : `add_collision_box` |
 | Placement and layout solids | `Game/Base/Footprint.odin` : `Placement_Solids`, `Layout_Solids` |
+| Hollow buildings (walls, door openings, furniture, ceiling lamps) | `Game/Catalogue/Buildings.odin` : `add_walled_room` |
+| Door specs and leaf meshes (plank, sheet, mesh gate) | `Game/Catalogue/Doors.odin` : `Catalogue_Doors`, `Door_Leaf_Build` |
+| Doors in the world (open/close animation, leaf solid, nearest door, toggling a gate's leaves together) | `Game/Base/Doors.odin` |
+| Door leaf drawing and shadows | `Game/Base/DoorRender.odin` |
+| Interior ceiling lights | `Game/Base/InteriorLights.odin` : `Layout_Interior_Lights` |
+| E to open or close a door, on-screen prompt | `Game/Sandbox/Play.odin` : `interact_with_doors` |

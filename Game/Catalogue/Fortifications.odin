@@ -18,16 +18,11 @@ fence_section :: proc() -> (parts: Parts) {
 	return parts
 }
 
-// Two concrete posts and two mesh leaves, closed.
+// Two concrete posts and a lintel beam; the two mesh leaves between them are doors (see Doors.odin).
 @(private = "package")
 gate :: proc() -> (parts: Parts) {
 	for x in ([2]f32{-4.25, 4.25}) do add_box(&parts, {0.5, 3.2, 0.5}, {x, 1.6, 0}, .Concrete)
-	for side in ([2]f32{-1, 1}) {
-		center := side * 2.1
-		add_box(&parts, {3.7, 0.12, 0.1}, {center, 2.6, 0}, .Rusted_Metal)
-		add_box(&parts, {3.7, 0.12, 0.1}, {center, 0.3, 0}, .Rusted_Metal)
-		for index in 0 ..< 12 do add_box(&parts, {0.05, 2.3, 0.05}, {center + (f32(index) - 5.5) * 0.3, 1.45, 0}, .Rusted_Metal, false)
-	}
+	add_box(&parts, {8, 0.25, 0.3}, {0, 3.05, 0}, .Concrete, false)
 	return parts
 }
 

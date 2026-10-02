@@ -51,6 +51,10 @@ Weapon_View_Group :: struct {
 Play :: struct {
 	battle:        Gameplay.Battle,
 	soldiers:      Characters.Character_Renderer,
+	doors:         [dynamic]Base.Door,
+	door_renderer: Base.Door_Renderer,
+	door_in_reach: bool,
+	interact_was_down: bool,
 	body:          Characters.Character, // The player's own body, seen when looking down and in shadows.
 	hud:           Render.Hud,
 	view_weapons:  [Weapons.Weapon_Kind][dynamic]Weapon_View_Group,
@@ -79,6 +83,9 @@ play_create :: proc(sandbox: ^Sandbox, demo: bool, fly: bool) -> (ok: bool) {
 	if demo do spawn = {0, 0, 52}
 	spawn.y = terrain_height(sandbox.terrain, spawn.x, spawn.z)
 	play.battle = Gameplay.Battle_Create(ground, boxes[:], spawn, 99)
+	play.doors = Base.Layout_Doors(sandbox.base.layout, base_height)
+	Base.Doors_Register(play.doors[:], &play.battle.collision)
+	play.door_renderer = Base.Door_Renderer_Create(play.doors[:])
 	spawn_garrison(&play.battle, sandbox.terrain)
 	play.soldiers = Characters.Character_Renderer_Create(CHARACTERS_PER_VARIANT)
 	play.hud = Render.Hud_Create() or_return
@@ -97,6 +104,8 @@ play_create :: proc(sandbox: ^Sandbox, demo: bool, fly: bool) -> (ok: bool) {
 }
 
 play_destroy :: proc(play: ^Play) {
+	Base.Door_Renderer_Destroy(&play.door_renderer)
+	delete(play.doors)
 	Render.Mesh_Destroy(&play.effect_sphere)
 	Render.Mesh_Destroy(&play.effect_cube)
 	for &groups in play.view_weapons {
@@ -145,6 +154,10 @@ play_update :: proc(sandbox: ^Sandbox, input: ^Platform.Input, delta_seconds: f3
 	tab_down := Platform.Input_Key_Down(input, .Tab)
 	if tab_down && !play.tab_was_down do play.mode = .Fly if play.mode == .Play else .Play
 	play.tab_was_down = tab_down
+	interact_down := Platform.Input_Key_Down(input, .E)
+	if play.mode == .Play do interact_with_doors(play, interact_down && !play.interact_was_down)
+	play.interact_was_down = interact_down
+	Base.Doors_Update(play.doors[:], &play.battle.collision, delta_seconds)
 	flashlight_down := Platform.Input_Key_Down(input, .F)
 	if flashlight_down && !play.flashlight_was_down do play.flashlight_on = !play.flashlight_on
 	play.flashlight_was_down = flashlight_down
@@ -169,6 +182,7 @@ play_update :: proc(sandbox: ^Sandbox, input: ^Platform.Input, delta_seconds: f3
 // The benchmark flies a fixed circuit but the soldiers still think, so their cost is measured.
 play_update_idle :: proc(sandbox: ^Sandbox, delta_seconds: f32) {
 	fill_prop_solids(sandbox)
+	Base.Doors_Update(sandbox.play.doors[:], &sandbox.play.battle.collision, delta_seconds)
 	battle_update_unattended(&sandbox.play.battle, delta_seconds)
 }
 
@@ -244,6 +258,10 @@ play_items :: proc(sandbox: ^Sandbox, items, shadow_items: ^[dynamic]Render.Draw
 	for item in Characters.Character_Renderer_Items(&play.soldiers, characters[:]) {
 		append(items, item)
 		append(shadow_items, item)
+	}
+	for door_item in Base.Door_Renderer_Items(&play.door_renderer, play.doors[:]) {
+		append(items, door_item)
+		append(shadow_items, door_item)
 	}
 	for effect in play.battle.effects do add_effect(play, effect, items, &lights)
 	if play.flashlight_on && play.mode == .Play {
@@ -359,6 +377,7 @@ play_draw_hud :: proc(sandbox: ^Sandbox, width, height: i32) {
 	for enemy in play.battle.enemies do if Gameplay.Enemy_Is_Alive(enemy) do living += 1
 	Render.Hud_Text(hud, 16, 16, fmt.tprintf("KILLS %d   ENEMIES %d", player.kills, living), scale, {1, 1, 1, 0.9})
 	if play.mode == .Fly do Render.Hud_Text(hud, w - 16 - Render.Hud_Text_Width("FLY MODE - TAB TO PLAY", scale), 16, "FLY MODE - TAB TO PLAY", scale, {1, 0.9, 0.3, 0.9})
+	if play.mode == .Play && play.door_in_reach && !Gameplay.Health_Is_Dead(player.health) do Render.Hud_Text(hud, (w - Render.Hud_Text_Width("E  OPEN / CLOSE", scale)) / 2, h * 0.62, "E  OPEN / CLOSE", scale, {1, 1, 1, 0.9})
 	if Gameplay.Health_Is_Dead(player.health) do draw_death_screen(hud, w, h, scale)
 	Render.Hud_Flush(hud, width, height)
 }
@@ -422,4 +441,13 @@ prop_solid :: proc(point: Procedural.Scatter_Point) -> (solid: World.Solid, ok: 
 		return World.Solid{center = point.position + {0, height / 2, 0}, half_extents = {half, height / 2, half}, yaw_radians = point.yaw_radians}, true
 	}
 	return {}, false
+}
+
+// E toggles the door in reach (a gate's two leaves together); `pressed` is the key's rising edge. Also records whether a door is in
+// reach, for the on-screen prompt.
+@(private = "file")
+interact_with_doors :: proc(play: ^Play, pressed: bool) {
+	index, found := Base.Doors_Nearest(play.doors[:], play.battle.player.controller.position)
+	play.door_in_reach = found
+	if found && pressed do Base.Doors_Toggle(play.doors[:], index)
 }

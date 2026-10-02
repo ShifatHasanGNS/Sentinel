@@ -117,6 +117,7 @@ Sandbox_Render :: proc(sandbox: ^Sandbox, window: Platform.Window) {
 	lights := play_items(sandbox, &items, &shadow_items)
 	darkness := clamp((0.08 - Gameplay.Sun_Direction_To_Sun(sandbox.hours).y) / 0.2, 0, 1)
 	for light in Base.Layout_Night_Lights(sandbox.base.layout, sandbox.terrain.base_height_meters, darkness) do append(&lights, light)
+	for light in Base.Layout_Interior_Lights(sandbox.base.layout, sandbox.terrain.base_height_meters) do append(&lights, light)
 	daylight := Gameplay.Daylight_For_Hours(sandbox.hours)
 	frame := Render.Frame{
 		camera = camera,
@@ -156,6 +157,9 @@ camera_for_view :: proc(view: string) -> Fly_Camera {
 	case "yard": return Fly_Camera_Looking_At({-34, 16, 70}, {14, 11, 44})
 	case "airfield": return Fly_Camera_Looking_At({60, 26, 50}, {32, 11, -4})
 	case "player": return Fly_Camera_Looking_At({4, 12.4, 107}, {0, 11.2, 100})
+	case "hq": return Fly_Camera_Looking_At({-6, 11.7, 14}, {0, 12.0, -1})
+	case "inside": return Fly_Camera_Looking_At({3, 11.75, -2.6}, {-3.5, 11.2, -10})
+	case "barracks": return Fly_Camera_Looking_At({-31, 11.7, -4}, {-44, 11.5, -2})
 	case "command": return Fly_Camera_Looking_At({-20, 24, 62}, {-8, 11, -12})
 	}
 	return Fly_Camera{position = {-150, 45, 190}, yaw_radians = -0.67, pitch_radians = -0.15}

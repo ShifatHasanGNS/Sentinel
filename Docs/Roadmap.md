@@ -13,7 +13,7 @@
 | M8 | Gameplay | done |
 | M9 | Polish | mostly done: bloom, SSAO, light shafts, docs sweep. Spot shadows done. Prop culling done (Geometry 4.4 to 2.6 ms, Shadows 3.6 to 2.6 ms). Deferred: point shadows, anisotropic GGX. Threaded chunk build dropped (a chunk builds in 0.5 ms) |
 | M10 | Collision fidelity | done: oriented `Solid`s (exact at any yaw; 5 new tests incl. a mutation-checked turned wall), invisible collision panel for fences, trees and rocks solid near the player, `Game/Base` test that every object blocks except a listed few (gate waits for M11) |
-| M11 | Buildings you can enter | todo: hollow buildings with a door in the front wall, hinged leaves opened with E, interior floor and lights; the base gate opens too |
+| M11 | Buildings you can enter | done: barracks, HQ, mess hall, generator shed, guard post and bunker are hollow with furnished interiors and ceiling lights; hinged doors open with E (the gate's two leaves together); 4 door tests (every building, 4 headings, closed blocks, open lets a body in, walls beside an open door still block) |
 | M12 | Ground vehicles | todo: jeep, cargo truck, armored carrier and tank you can enter (E), drive (WASD), chase camera with V for seat view; tank turret and gun |
 | M13 | Helicopter | todo: board, lift off, fly (collective, pitch, roll, yaw), land |
 | M14 | Mini I.G.I. mission layer | todo: staged objectives (hack the camera computer, destroy the radar, rescue the hostage, extract by helicopter), security cameras that raise the alarm, binoculars, map computer, crouch and noise-based stealth. Inspired by Project I.G.I.: I'm Going In (tactical infiltration, objective stages, hacking cameras, binoculars, vehicles) |
