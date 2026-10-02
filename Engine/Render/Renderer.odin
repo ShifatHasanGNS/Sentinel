@@ -16,6 +16,7 @@ Renderer :: struct {
 	hdr:             GPU.Framebuffer,
 	ldr:             GPU.Framebuffer,
 	geometry:        GPU.Shader,
+	geometry_instanced: GPU.Shader,
 	base_lighting:   GPU.Shader,
 	volume_lighting: GPU.Shader,
 	tonemap:         GPU.Shader,
@@ -28,6 +29,7 @@ Renderer :: struct {
 
 Renderer_Create :: proc(width, height: i32) -> (renderer: Renderer, ok: bool) {
 	renderer.geometry = GPU.Shader_Create("Shaders/Geometry.glsl", nil, true) or_return
+	renderer.geometry_instanced = GPU.Shader_Create("Shaders/Geometry.glsl", {"INSTANCED"}, true) or_return
 	renderer.base_lighting = GPU.Shader_Create("Shaders/DeferredBase.glsl", {"CASCADE_COUNT 3"}, true) or_return
 	renderer.volume_lighting = GPU.Shader_Create("Shaders/DeferredLight.glsl", nil, true) or_return
 	renderer.tonemap = GPU.Shader_Create("Shaders/PostTonemap.glsl", nil, true) or_return
@@ -54,6 +56,7 @@ Renderer_Destroy :: proc(renderer: ^Renderer) {
 	GPU.Shader_Destroy(&renderer.tonemap)
 	GPU.Shader_Destroy(&renderer.volume_lighting)
 	GPU.Shader_Destroy(&renderer.base_lighting)
+	GPU.Shader_Destroy(&renderer.geometry_instanced)
 	GPU.Shader_Destroy(&renderer.geometry)
 }
 
@@ -82,14 +85,21 @@ geometry_pass :: proc(renderer: ^Renderer, frame: Frame) {
 	gl.CullFace(gl.BACK)
 	gl.ClearColor(0, 0, 0, 0)
 	gl.Clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT)
-	shader := &renderer.geometry
+	gl.Enable(gl.FRAMEBUFFER_SRGB)
+	draw_geometry_items(&renderer.geometry, frame, false)
+	draw_geometry_items(&renderer.geometry_instanced, frame, true)
+	gl.Disable(gl.FRAMEBUFFER_SRGB)
+}
+
+@(private = "file")
+draw_geometry_items :: proc(shader: ^GPU.Shader, frame: Frame, instanced: bool) {
 	GPU.Shader_Use(shader)
 	Texture_Set_Bind(shader, frame.materials)
 	GPU.Shader_Set(shader, "u_ViewProjection", frame.camera.view_projection)
 	GPU.Shader_Set(shader, "u_TriplanarScale", f32(TRIPLANAR_TILES_PER_METER))
-	gl.Enable(gl.FRAMEBUFFER_SRGB)
-	for &item in frame.items do draw_geometry_item(shader, &item)
-	gl.Disable(gl.FRAMEBUFFER_SRGB)
+	for &item in frame.items {
+		if item.mesh.instanced == instanced do draw_geometry_item(shader, &item)
+	}
 }
 
 @(private = "file")

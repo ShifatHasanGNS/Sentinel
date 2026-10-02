@@ -9,6 +9,7 @@ import "core:fmt"
 import "core:math"
 import la "core:math/linalg"
 import "core:os"
+import gl "vendor:OpenGL"
 
 // Lighting, tonemap and shadow functions are probed on the GPU: a fixture shader includes the real GLSL and writes results to pixels.
 main :: proc() {
@@ -24,6 +25,7 @@ main :: proc() {
 	check_light_falloff_and_shapes(&checks)
 	check_sun_shadows(&checks)
 	check_atmosphere(&checks)
+	check_instancing(&checks)
 	fmt.printfln("%d checks passed, %d failed", checks.passed, checks.failed)
 	if checks.failed > 0 do os.exit(1)
 }
@@ -282,4 +284,43 @@ check_atmosphere :: proc(checks: ^Support.Checks) {
 
 	night := sky_at(&shader, {0.866, -0.5, 0}, overhead)
 	Support.expect(checks, sky_luminance(night) < 0.01 * sky_luminance(noon_zenith))
+}
+
+// Five boxes at x = -4, -2, 0, 2, 4 with layers 1..5, seen from above through a 64-pixel-wide strip. Each box must appear at
+// its own place with its own layer; the gaps stay empty; fewer instances draw fewer boxes; none draws nothing.
+check_instancing :: proc(checks: ^Support.Checks) {
+	source := Procedural.Box_Create({0.5, 0.5, 0.5})
+	defer Procedural.Mesh_Destroy(&source)
+	mesh := Render.Mesh_Upload_Instanced(source, 8)
+	defer Render.Mesh_Destroy(&mesh)
+	shader, ok := GPU.Shader_Create("Tests/RenderCheck/Fixtures/InstanceProbe.glsl", nil, true)
+	Support.expect(checks, ok)
+	if !ok do return
+	defer GPU.Shader_Destroy(&shader)
+	target := GPU.Framebuffer_Create({64, 1, {.RGBA32F}, .None})
+	defer GPU.Framebuffer_Destroy(&target)
+
+	instances: [5]Render.Instance
+	for index in 0 ..< 5 do instances[index] = Render.Instance{model = la.matrix4_translate_f32({f32(index) * 2 - 4, 0, 0}), material_layer = f32(index + 1)}
+	centers := [5]int{6, 19, 32, 44, 57}
+	gaps := [4]int{12, 25, 38, 51}
+
+	for count in ([3]int{5, 3, 0}) {
+		Render.Mesh_Set_Instances(&mesh, instances[:count])
+		GPU.Framebuffer_Bind(&target)
+		gl.Disable(gl.CULL_FACE)
+		gl.Disable(gl.DEPTH_TEST)
+		gl.ClearColor(0, 0, 0, 0)
+		gl.Clear(gl.COLOR_BUFFER_BIT)
+		GPU.Shader_Use(&shader)
+		GPU.Shader_Set(&shader, "u_ViewProjection", la.matrix_ortho3d_f32(-5, 5, -1, 1, -10, 10))
+		Render.Mesh_Draw(&mesh)
+		row: [64][4]f32
+		GPU.Texture_Read_2D(&target.colors[0], row[:])
+		for center, index in centers {
+			expected: f32 = f32(index + 1) / 10 if index < count else 0
+			Support.expect(checks, abs(row[center].x - expected) < 1e-4)
+		}
+		for gap in gaps do Support.expect_value(checks, row[gap].x, 0)
+	}
 }

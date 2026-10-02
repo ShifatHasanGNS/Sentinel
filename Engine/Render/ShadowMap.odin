@@ -8,11 +8,13 @@ Shadow_Map :: struct {
 	depth:  GPU.Texture, // 2D array, one layer per cascade.
 	target: GPU.Framebuffer,
 	shader: GPU.Shader,
+	instanced_shader: GPU.Shader,
 	size:   i32,
 }
 
 Shadow_Map_Create :: proc(size: i32) -> (shadow_map: Shadow_Map, ok: bool) {
-	shadow_map.shader = GPU.Shader_Create("Shaders/ShadowDepth.glsl") or_return
+	shadow_map.shader = GPU.Shader_Create("Shaders/ShadowDepth.glsl", nil, true) or_return
+	shadow_map.instanced_shader = GPU.Shader_Create("Shaders/ShadowDepth.glsl", {"INSTANCED"}, true) or_return
 	shadow_map.depth = GPU.Texture_Create({.Texture_2D_Array, .Depth32F, size, size, CASCADE_COUNT, 1})
 	shadow_map.target = GPU.Framebuffer_Create_For_Layers(size, size)
 	shadow_map.size = size
@@ -22,12 +24,12 @@ Shadow_Map_Create :: proc(size: i32) -> (shadow_map: Shadow_Map, ok: bool) {
 Shadow_Map_Destroy :: proc(shadow_map: ^Shadow_Map) {
 	GPU.Framebuffer_Destroy(&shadow_map.target)
 	GPU.Texture_Destroy(&shadow_map.depth)
+	GPU.Shader_Destroy(&shadow_map.instanced_shader)
 	GPU.Shader_Destroy(&shadow_map.shader)
 }
 
 // Draws every item's depth once per cascade. Leaves the shadow framebuffer bound; callers bind their own target next.
 Shadow_Map_Render :: proc(shadow_map: ^Shadow_Map, cascades: Cascade_Set, items: []Draw_Item) {
-	GPU.Shader_Use(&shadow_map.shader)
 	gl.Enable(gl.DEPTH_TEST)
 	gl.DepthMask(true)
 	gl.Disable(gl.CULL_FACE)
@@ -37,13 +39,21 @@ Shadow_Map_Render :: proc(shadow_map: ^Shadow_Map, cascades: Cascade_Set, items:
 		GPU.Framebuffer_Set_Depth_Layer(&shadow_map.target, &shadow_map.depth, i32(index))
 		GPU.Framebuffer_Bind(&shadow_map.target)
 		gl.Clear(gl.DEPTH_BUFFER_BIT)
-		GPU.Shader_Set(&shadow_map.shader, "u_LightViewProjection", cascade.view_projection)
-		for &item in items {
-			GPU.Shader_Set(&shadow_map.shader, "u_Model", item.model)
-			Mesh_Draw(item.mesh)
-		}
+		draw_casters(&shadow_map.shader, cascade, items, false)
+		draw_casters(&shadow_map.instanced_shader, cascade, items, true)
 	}
 	gl.Disable(gl.POLYGON_OFFSET_FILL)
+}
+
+@(private = "file")
+draw_casters :: proc(shader: ^GPU.Shader, cascade: Cascade, items: []Draw_Item, instanced: bool) {
+	GPU.Shader_Use(shader)
+	GPU.Shader_Set(shader, "u_LightViewProjection", cascade.view_projection)
+	for &item in items {
+		if item.mesh.instanced != instanced do continue
+		GPU.Shader_Set(shader, "u_Model", item.model)
+		Mesh_Draw(item.mesh)
+	}
 }
 
 // Binds the depth array to the next texture unit and sets the uniforms Shaders/Include/Shadow.glsl reads.

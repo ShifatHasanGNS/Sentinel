@@ -6,21 +6,39 @@ layout(location = 0) in vec3 a_Position;
 layout(location = 1) in vec3 a_Normal;
 layout(location = 2) in vec4 a_Tangent;
 layout(location = 3) in vec2 a_Uv;
+#ifdef INSTANCED
+layout(location = 4) in vec4 a_ModelColumn0;
+layout(location = 5) in vec4 a_ModelColumn1;
+layout(location = 6) in vec4 a_ModelColumn2;
+layout(location = 7) in vec4 a_ModelColumn3;
+layout(location = 8) in vec4 a_InstanceData;
+#else
 uniform mat4 u_Model;
+uniform float u_Layer;
+#endif
 uniform mat4 u_ViewProjection;
+flat out float v_layer;
 out vec3 v_world_position;
 out vec3 v_world_normal;
 out vec4 v_world_tangent;
 out vec2 v_uv;
 void main() {
-	vec4 world_position = u_Model * vec4(a_Position, 1.0);
+#ifdef INSTANCED
+	mat4 model = mat4(a_ModelColumn0, a_ModelColumn1, a_ModelColumn2, a_ModelColumn3);
+	v_layer = a_InstanceData.x;
+#else
+	mat4 model = u_Model;
+	v_layer = u_Layer;
+#endif
+	vec4 world_position = model * vec4(a_Position, 1.0);
 	v_world_position = world_position.xyz;
-	v_world_normal = mat3(u_Model) * a_Normal;
-	v_world_tangent = vec4(mat3(u_Model) * a_Tangent.xyz, a_Tangent.w);
+	v_world_normal = mat3(model) * a_Normal;
+	v_world_tangent = vec4(mat3(model) * a_Tangent.xyz, a_Tangent.w);
 	v_uv = a_Uv;
 	gl_Position = u_ViewProjection * world_position;
 }
 #stage fragment
+flat in float v_layer;
 in vec3 v_world_position;
 in vec3 v_world_normal;
 in vec4 v_world_tangent;
@@ -31,7 +49,6 @@ layout(location = 2) out vec4 o_Emission;
 uniform sampler2DArray u_AlbedoArray;
 uniform sampler2DArray u_NormalArray;
 uniform sampler2DArray u_OrmArray;
-uniform float u_Layer;
 uniform vec2 u_UvScale;
 uniform float u_TriplanarScale;
 uniform bool u_Triplanar;
@@ -44,11 +61,11 @@ void main() {
 	if (u_Triplanar) {
 		vec3 blend = triplanar_blend(geometric_normal);
 		vec3 position = v_world_position * u_TriplanarScale;
-		albedo = triplanar_sample(u_AlbedoArray, u_Layer, position, blend).rgb;
-		orm = triplanar_sample(u_OrmArray, u_Layer, position, blend).rgb;
-		normal = triplanar_normal(u_NormalArray, u_Layer, position, geometric_normal, blend);
+		albedo = triplanar_sample(u_AlbedoArray, v_layer, position, blend).rgb;
+		orm = triplanar_sample(u_OrmArray, v_layer, position, blend).rgb;
+		normal = triplanar_normal(u_NormalArray, v_layer, position, geometric_normal, blend);
 	} else {
-		vec3 uv = vec3(v_uv * u_UvScale, u_Layer);
+		vec3 uv = vec3(v_uv * u_UvScale, v_layer);
 		albedo = texture(u_AlbedoArray, uv).rgb;
 		orm = texture(u_OrmArray, uv).rgb;
 		vec3 tangent_normal = texture(u_NormalArray, uv).xyz * 2.0 - 1.0;
