@@ -68,28 +68,64 @@ upload_prop :: proc(mesh: Procedural.Mesh, capacity: int) -> Render.Mesh {
 	return Render.Mesh_Upload_Instanced(mesh, capacity)
 }
 
-// A tapering trunk 4 m tall, standing on y = 0.
+BRANCHES :: 6
+BRANCH_LENGTH_METERS :: 1.5
+
+// Where branch i leaves the trunk and where it ends: spread around the trunk by the golden angle, rising and tilting out ~50 degrees.
 @(private = "file")
-tree_trunk_mesh :: proc() -> Procedural.Mesh {
-	trunk := Procedural.Cylinder_Create(0.22, 4, 10, 6)
-	Procedural.Mesh_Deform(&trunk, {Procedural.Taper{1, 0.55}, Procedural.Noise_Displace{0.04, 2.5, 2, 3}})
-	return placed(trunk, {0, 2, 0}, {1, 1, 1})
+branch_ends :: proc(index: int) -> (base, tip: [3]f32) {
+	around := f32(index) * 2.3999632
+	height := 2.3 + 0.35 * f32(index)
+	tilt := math.to_radians(f32(50) - 4 * f32(index))
+	direction := [3]f32{math.sin(tilt) * math.cos(around), math.cos(tilt), math.sin(tilt) * math.sin(around)}
+	base = {0, height, 0}
+	return base, base + direction * (BRANCH_LENGTH_METERS - 0.12 * f32(index))
 }
 
-// Two overlapping lumpy blobs make a canopy that reads as foliage without any leaf geometry.
+// A tapering trunk 4 m tall with six branches reaching out and up from it, standing on y = 0.
+@(private = "file")
+tree_trunk_mesh :: proc() -> (tree: Procedural.Mesh) {
+	trunk := Procedural.Cylinder_Create(0.22, 4.4, 10, 6)
+	Procedural.Mesh_Deform(&trunk, {Procedural.Taper{1, 0.4}, Procedural.Noise_Displace{0.05, 2.5, 2, 3}})
+	Procedural.Mesh_Append(&tree, trunk, la.matrix4_translate_f32({0, 2.2, 0}))
+	Procedural.Mesh_Destroy(&trunk)
+	for index in 0 ..< BRANCHES {
+		base, tip := branch_ends(index)
+		span := tip - base
+		length := la.length(span)
+		branch := Procedural.Cylinder_Create(0.075, length, 6, 2)
+		Procedural.Mesh_Deform(&branch, {Procedural.Taper{1, 0.35}, Procedural.Noise_Displace{0.02, 3, 2, u32(60 + index)}})
+		axis := span / length
+		reference: [3]f32 = {1, 0, 0} if abs(axis.x) < 0.9 else {0, 0, 1}
+		side := la.normalize(la.cross(axis, reference))
+		forward := la.cross(side, axis)
+		frame := matrix[4, 4]f32{
+			side.x, axis.x, forward.x, base.x + span.x / 2,
+			side.y, axis.y, forward.y, base.y + span.y / 2,
+			side.z, axis.z, forward.z, base.z + span.z / 2,
+			0, 0, 0, 1,
+		}
+		Procedural.Mesh_Append(&tree, branch, frame)
+		Procedural.Mesh_Destroy(&branch)
+	}
+	return tree
+}
+
+// Foliage clumps sit on the branch tips (plus one on top), so the crown follows the branching instead of being a ball.
 @(private = "file")
 tree_canopy_mesh :: proc() -> (canopy: Procedural.Mesh) {
-	lobes := [?]struct {
-		position: [3]f32,
-		radius:   f32,
-		seed:     u32,
-	}{{{0, 5.2, 0}, 1.5, 11}, {{0.9, 4.4, 0.5}, 1.05, 12}, {{-0.8, 4.7, -0.6}, 1.1, 13}, {{-0.3, 6.1, 0.3}, 1.0, 14}, {{0.6, 5.6, -0.7}, 0.9, 15}, {{-1.0, 5.6, 0.7}, 0.85, 16}}
-	for lobe in lobes {
-		blob := Procedural.Sphere_Create(lobe.radius, 14, 7)
-		Procedural.Mesh_Deform(&blob, {Procedural.Noise_Displace{lobe.radius * 0.3, 2.6 / lobe.radius, 4, lobe.seed}})
-		Procedural.Mesh_Append(&canopy, blob, la.matrix4_translate_f32(lobe.position) * la.matrix4_scale_f32({1, 1.25, 1}))
+	for index in 0 ..< BRANCHES {
+		_, tip := branch_ends(index)
+		radius := 0.95 - 0.04 * f32(index)
+		blob := Procedural.Sphere_Create(radius, 14, 7)
+		Procedural.Mesh_Deform(&blob, {Procedural.Noise_Displace{radius * 0.32, 2.6 / radius, 4, u32(11 + index)}})
+		Procedural.Mesh_Append(&canopy, blob, la.matrix4_translate_f32(tip + {0, radius * 0.3, 0}) * la.matrix4_scale_f32({1.1, 0.85, 1.1}))
 		Procedural.Mesh_Destroy(&blob)
 	}
+	top := Procedural.Sphere_Create(1.0, 14, 7)
+	Procedural.Mesh_Deform(&top, {Procedural.Noise_Displace{0.3, 2.6, 4, 19}})
+	Procedural.Mesh_Append(&canopy, top, la.matrix4_translate_f32({0, 5.0, 0}) * la.matrix4_scale_f32({1, 0.9, 1}))
+	Procedural.Mesh_Destroy(&top)
 	return canopy
 }
 
@@ -100,11 +136,20 @@ rock_mesh :: proc() -> Procedural.Mesh {
 	return placed(rock, {0, 0.25, 0}, {1.2, 0.7, 1})
 }
 
+// A shrub is a cluster of five small lumpy clumps at different heights rather than one smooth mound.
 @(private = "file")
-bush_mesh :: proc() -> Procedural.Mesh {
-	bush := Procedural.Sphere_Create(0.7, 14, 7)
-	Procedural.Mesh_Deform(&bush, {Procedural.Noise_Displace{0.14, 2.2, 2, 31}})
-	return placed(bush, {0, 0.35, 0}, {1.3, 0.9, 1.3})
+bush_mesh :: proc() -> (bush: Procedural.Mesh) {
+	clumps := [?]struct {
+		position: [3]f32,
+		radius:   f32,
+	}{{{0, 0.3, 0}, 0.38}, {{0.35, 0.22, 0.1}, 0.28}, {{-0.3, 0.25, -0.12}, 0.3}, {{0.05, 0.52, -0.08}, 0.24}, {{-0.05, 0.2, 0.35}, 0.25}}
+	for clump, index in clumps {
+		blob := Procedural.Sphere_Create(clump.radius, 10, 5)
+		Procedural.Mesh_Deform(&blob, {Procedural.Noise_Displace{clump.radius * 0.18, 2.5 / clump.radius, 2, u32(31 + index)}})
+		Procedural.Mesh_Append(&bush, blob, la.matrix4_translate_f32(clump.position) * la.matrix4_scale_f32({1.15, 0.9, 1.15}))
+		Procedural.Mesh_Destroy(&blob)
+	}
+	return bush
 }
 
 @(private = "file")
