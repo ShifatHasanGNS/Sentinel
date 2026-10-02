@@ -23,6 +23,10 @@ TREE_TRUNK_HALF_WIDTH_METERS :: 0.2
 TREE_HEIGHT_METERS :: 4.0
 ROCK_HALF_WIDTH_METERS :: 0.8
 ROCK_HEIGHT_METERS :: 1.0
+HEAD_BOB_METERS :: 0.035
+BOB_STEPS_PER_METER :: 1.5
+SWAY_METERS_PER_RADIAN :: 0.35
+SWAY_RETURN_PER_SECOND :: 9.0
 PLAY_NEAR_PLANE_METERS :: 0.1
 BODY_BACK_METERS :: 0.25 // The body stands this far behind the eye so the head is not in the camera,
 BODY_RIGHT_METERS :: 0.2 // a little to the right so the held weapon enters the view from the lower right,
@@ -54,6 +58,10 @@ Weapon_View_Group :: struct {
 Play :: struct {
 	battle:        Gameplay.Battle,
 	mission:       Mission_Play,
+	particles:     Particles,
+	bob_phase:     f32,
+	bob_strength:  f32, // 0 standing still .. 1 walking; follows speed smoothly.
+	sway:          [2]f32, // Held weapon lag behind the view turn (x right, y up), springing back to rest.
 	cameras:       [dynamic]Camera_Instance,
 	camera_meshes: Camera_Meshes,
 	alarm:         Mission.Alarm,
@@ -135,6 +143,7 @@ play_create :: proc(sandbox: ^Sandbox, demo: bool, fly: bool, drive: string, ove
 }
 
 play_destroy :: proc(play: ^Play) {
+	Particles_Destroy(&play.particles)
 	cameras_destroy(play)
 	mission_destroy(&play.mission)
 	vehicles_destroy(play)
@@ -226,6 +235,9 @@ play_update :: proc(sandbox: ^Sandbox, input: ^Platform.Input, delta_seconds: f3
 		mission_update(sandbox, interact_down, interact_pressed, delta_seconds)
 		cameras_update(sandbox, delta_seconds)
 	}
+	Particles_Spawn_From_Effects(&play.particles, play.battle.effects[:], delta_seconds, Gameplay.Player_Eye(play.battle.player))
+	Particles_Update(&play.particles, delta_seconds)
+	update_view_motion(play, delta_seconds)
 	if play.battle.player.shots_fired != play.shots_seen {
 		play.shots_seen = play.battle.player.shots_fired
 		play.recoil = RECOIL_KICK_METERS
@@ -249,8 +261,11 @@ battle_update_unattended :: proc(battle: ^Gameplay.Battle, delta_seconds: f32) {
 
 sync_camera_to_player :: proc(sandbox: ^Sandbox) {
 	player := sandbox.play.battle.player
-	sandbox.camera = Fly_Camera{position = Gameplay.Player_Eye(player), yaw_radians = player.yaw_radians, pitch_radians = player.pitch_radians}
+	bob := math.sin(sandbox.play.bob_phase) * HEAD_BOB_METERS * sandbox.play.bob_strength
+	sandbox.camera = Fly_Camera{position = Gameplay.Player_Eye(player) + {0, bob, 0}, yaw_radians = player.yaw_radians, pitch_radians = player.pitch_radians}
 }
+
+last_look_delta: [2]f32 // The latest frame's look input in radians (yaw left, pitch up), for the weapon's sway.
 
 collect_input :: proc(input: ^Platform.Input) -> (result: Gameplay.Player_Input) {
 	axis :: proc(input: ^Platform.Input, positive, negative: Platform.Key) -> f32 {
@@ -259,6 +274,7 @@ collect_input :: proc(input: ^Platform.Input) -> (result: Gameplay.Player_Input)
 	result.move = {axis(input, .D, .A), axis(input, .W, .S)}
 	result.look = {-input.mouse_delta.x * MOUSE_RADIANS_PER_PIXEL, -input.mouse_delta.y * MOUSE_RADIANS_PER_PIXEL}
 	result.fire = Platform.Input_Mouse_Down(input, .Left)
+	last_look_delta = {result.look.x, result.look.y}
 	result.reload = Platform.Input_Key_Down(input, .R)
 	result.sprint = Platform.Input_Key_Down(input, .Left_Shift)
 	result.crouch = Platform.Input_Key_Down(input, .C)
@@ -323,6 +339,7 @@ play_items :: proc(sandbox: ^Sandbox, items, shadow_items: ^[dynamic]Render.Draw
 		append(shadow_items, door_item)
 	}
 	for effect in play.battle.effects do add_effect(play, effect, items, &lights)
+	Particles_Items(play, items)
 	mission_items(play, items, &lights)
 	cameras_items(play, items)
 	if play.flashlight_on && play.mode == .Play {
@@ -367,13 +384,11 @@ effect_item :: proc(mesh: ^Render.Mesh, model: matrix[4, 4]f32, emission: [3]f32
 	return Render.Draw_Item{mesh = mesh, model = model, material_layer = i32(Materials.Surface_Material.Gunmetal), uv_scale = {1, 1}, illumination_model = .Lambert, emission = emission}
 }
 
-@(private = "file")
 sphere_matrix :: proc(center: [3]f32, radius: f32) -> matrix[4, 4]f32 {
 	return la.matrix4_translate_f32(center) * la.matrix4_scale_f32({radius, radius, radius})
 }
 
 // A frame at `origin` with +Z along `axis` and +Y as upright as possible.
-@(private = "file")
 along_axis :: proc(origin, axis: [3]f32) -> matrix[4, 4]f32 {
 	up := [3]f32{0, 1, 0}
 	if abs(axis.y) > 0.99 do up = {1, 0, 0}
@@ -410,7 +425,11 @@ add_held_weapon :: proc(play: ^Play, items: ^[dynamic]Render.Draw_Item) {
 	player := play.battle.player
 	pose := Characters.Character_Pose(play.body)
 	recoil := la.matrix4_translate_f32(-Gameplay.Player_Forward(player) * play.recoil)
-	model := recoil * Characters.Weapon_Matrix(pose)
+	forward_unit := Gameplay.Player_Forward(player)
+	right_unit := la.normalize0(la.cross(forward_unit, [3]f32{0, 1, 0}))
+	bob_offset := [3]f32{0, math.sin(play.bob_phase * 2) * 0.012 * play.bob_strength, 0}
+	sway_offset := right_unit * play.sway.x + [3]f32{0, play.sway.y, 0}
+	model := la.matrix4_translate_f32(bob_offset + sway_offset) * recoil * Characters.Weapon_Matrix(pose)
 	for &group in play.view_weapons[player.current] {
 		append(items, Render.Draw_Item{mesh = &group.mesh, model = model, material_layer = group.material, uv_scale = {2, 2}, illumination_model = .Cook_Torrance})
 	}
@@ -522,4 +541,18 @@ interact_on_foot :: proc(play: ^Play, pressed: bool) {
 	if !pressed || play.mission.hostage_in_reach || play.mission.terminal_in_reach do return
 	if _, boardable := play.boardable.?; boardable do board_vehicle(play)
 	else if found do Base.Doors_Toggle(play.doors[:], index)
+}
+
+// Head bob follows the stride (one up-down per step while walking on foot); the weapon lags a little behind turns and returns.
+@(private = "file")
+update_view_motion :: proc(play: ^Play, delta_seconds: f32) {
+	player := play.battle.player
+	speed := la.length([2]f32{player.controller.velocity.x, player.controller.velocity.z})
+	grounded := player.controller.on_ground && play.driving == nil
+	target: f32 = clamp(speed / 4, 0, 1.2) if grounded else 0
+	play.bob_strength += (target - play.bob_strength) * min(1, 8 * delta_seconds)
+	play.bob_phase += speed * BOB_STEPS_PER_METER * math.PI * delta_seconds * (1 if grounded else 0)
+	play.sway *= math.exp(-SWAY_RETURN_PER_SECOND * delta_seconds)
+	play.sway += last_look_delta * SWAY_METERS_PER_RADIAN * 0.35
+	play.sway = {clamp(play.sway.x, -0.06, 0.06), clamp(play.sway.y, -0.05, 0.05)}
 }

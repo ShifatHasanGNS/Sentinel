@@ -149,3 +149,6 @@
 | Binocular zoom (Z/X, smooth raise), map objective markers | `Game/Sandbox/Optics.odin` |
 | Weathering and fine detail on surfaces | `Shaders/Include/Weathering.glsl` : `weather_surface`; used in `Shaders/Geometry.glsl` |
 | Cloud layer (fbm plane, self-shadowing, silver lining) | `Shaders/Include/Sky.glsl` : `add_clouds` |
+| Smoke and dust puffs, bullet-hole decals | `Game/Sandbox/Particles.odin` |
+| Head bob and weapon sway | `Game/Sandbox/Play.odin` : `update_view_motion` |
+| Soft shadow filter (Vogel disk PCF) | `Shaders/Include/Shadow.glsl` |
