@@ -58,10 +58,13 @@ uniform vec3 u_Emission;
 
 void main() {
 	vec3 geometric_normal = normalize(v_world_normal);
+	vec3 triplanar_position = v_world_position * u_TriplanarScale;
+	vec3 position_dx = dFdx(triplanar_position); // Taken here, in uniform control flow, for the textureGrad calls below.
+	vec3 position_dy = dFdy(triplanar_position);
 	vec3 albedo, orm, normal;
 	if (u_Terrain) {
 		vec3 blend = triplanar_blend(geometric_normal);
-		vec3 position = v_world_position * u_TriplanarScale;
+		vec3 position = triplanar_position;
 		vec4 weights = terrain_weights(geometric_normal, v_world_position);
 		albedo = vec3(0.0);
 		orm = vec3(0.0);
@@ -69,17 +72,17 @@ void main() {
 		for (int index = 0; index < 4; index++) {
 			if (weights[index] < 0.01) continue;
 			float terrain_layer = u_TerrainLayers[index];
-			albedo += weights[index] * triplanar_sample(u_AlbedoArray, terrain_layer, position, blend).rgb;
-			orm += weights[index] * triplanar_sample(u_OrmArray, terrain_layer, position, blend).rgb;
-			normal_sum += weights[index] * triplanar_normal(u_NormalArray, terrain_layer, position, geometric_normal, blend);
+			albedo += weights[index] * triplanar_sample(u_AlbedoArray, terrain_layer, position, position_dx, position_dy, blend).rgb;
+			orm += weights[index] * triplanar_sample(u_OrmArray, terrain_layer, position, position_dx, position_dy, blend).rgb;
+			normal_sum += weights[index] * triplanar_normal(u_NormalArray, terrain_layer, position, position_dx, position_dy, geometric_normal, blend);
 		}
 		normal = normalize(normal_sum);
 	} else if (u_Triplanar) {
 		vec3 blend = triplanar_blend(geometric_normal);
-		vec3 position = v_world_position * u_TriplanarScale;
-		albedo = triplanar_sample(u_AlbedoArray, v_layer, position, blend).rgb;
-		orm = triplanar_sample(u_OrmArray, v_layer, position, blend).rgb;
-		normal = triplanar_normal(u_NormalArray, v_layer, position, geometric_normal, blend);
+		vec3 position = triplanar_position;
+		albedo = triplanar_sample(u_AlbedoArray, v_layer, position, position_dx, position_dy, blend).rgb;
+		orm = triplanar_sample(u_OrmArray, v_layer, position, position_dx, position_dy, blend).rgb;
+		normal = triplanar_normal(u_NormalArray, v_layer, position, position_dx, position_dy, geometric_normal, blend);
 	} else {
 		vec3 uv = vec3(v_uv * u_UvScale, v_layer);
 		albedo = texture(u_AlbedoArray, uv).rgb;

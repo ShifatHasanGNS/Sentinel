@@ -6,12 +6,13 @@ import "../../Engine/Render"
 import World "../../Engine/World"
 import "../Gameplay"
 import "../Materials"
+import "core:fmt"
 import "core:math"
 import la "core:math/linalg"
 
 LOAD_RADIUS_CHUNKS :: 4
 UNLOAD_RADIUS_CHUNKS :: 6
-CHUNK_BUILDS_PER_FRAME_MAX :: 3
+CHUNK_BUILDS_PER_FRAME_MAX :: 1
 SHADOW_DISTANCE_METERS :: 140.0
 HOURS_PER_REAL_SECOND :: 0.02 // A full day passes in twenty minutes.
 FIELD_OF_VIEW_DEGREES :: 65.0
@@ -163,10 +164,8 @@ gather_items :: proc(sandbox: ^Sandbox, camera: Render.Camera) -> (items, shadow
 		if Render.Frustum_Intersects_Aabb(frustum, chunk.lowest, chunk.highest) do append(&items, item)
 	}
 	collect_instances(sandbox)
-	for prop_item in prop_items(sandbox) {
-		append(&items, prop_item)
-		append(&shadow_items, prop_item)
-	}
+	for prop_item in prop_items(sandbox) do append(&items, prop_item)
+	for proxy_item in shadow_proxy_items(sandbox) do append(&shadow_items, proxy_item)
 	return
 }
 
@@ -181,6 +180,14 @@ prop_items :: proc(sandbox: ^Sandbox) -> [4]Render.Draw_Item {
 		return Render.Draw_Item{mesh = mesh, model = la.MATRIX4F32_IDENTITY, uv_scale = {1, 1}, triplanar = true, illumination_model = .Cook_Torrance}
 	}
 	return {prop(&sandbox.props.tree_trunk), prop(&sandbox.props.tree_canopy), prop(&sandbox.props.rock), prop(&sandbox.props.bush)}
+}
+
+@(private = "file")
+shadow_proxy_items :: proc(sandbox: ^Sandbox) -> [4]Render.Draw_Item {
+	proxy :: proc(mesh: ^Render.Mesh) -> Render.Draw_Item {
+		return Render.Draw_Item{mesh = mesh, model = la.MATRIX4F32_IDENTITY}
+	}
+	return {proxy(&sandbox.props.tree_trunk_shadow), proxy(&sandbox.props.tree_canopy_shadow), proxy(&sandbox.props.rock_shadow), proxy(&sandbox.props.bush_shadow)}
 }
 
 @(private = "file")
@@ -220,4 +227,15 @@ scripted_camera :: proc(terrain: Procedural.Terrain, seconds: f32) -> Fly_Camera
 	height := Procedural.Terrain_Height(terrain, x, z) + 35
 	heading := la.normalize([3]f32{-math.sin(angle), -0.15, math.cos(angle)})
 	return Fly_Camera{position = {x, height, z}, yaw_radians = math.atan2(-heading.x, -heading.z), pitch_radians = math.asin(heading.y)}
+}
+
+// Prints the average GPU time of each renderer pass.
+Sandbox_Report :: proc(sandbox: ^Sandbox) {
+	milliseconds := Render.Renderer_Pass_Milliseconds(&sandbox.renderer)
+	total: f32
+	for pass in Render.Render_Pass {
+		fmt.printfln("  %-18v %6.2f ms", pass, milliseconds[pass])
+		total += milliseconds[pass]
+	}
+	fmt.printfln("  %-18s %6.2f ms", "GPU total", total)
 }

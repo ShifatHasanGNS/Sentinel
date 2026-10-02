@@ -31,6 +31,7 @@ Sampler_Desc :: struct {
 
 Sampler_Trilinear_Repeat :: Sampler_Desc{.Trilinear, .Linear, .Repeat, 16, false}
 Sampler_Linear_Clamp :: Sampler_Desc{.Linear, .Linear, .Clamp_To_Edge, 1, false}
+Sampler_Linear_Repeat :: Sampler_Desc{.Linear, .Linear, .Repeat, 1, false}
 Sampler_Nearest_Clamp :: Sampler_Desc{.Nearest, .Nearest, .Clamp_To_Edge, 1, false}
 Sampler_Shadow :: Sampler_Desc{.Linear, .Linear, .Clamp_To_Edge, 1, true}
 

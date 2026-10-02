@@ -11,7 +11,17 @@ LIGHT_VOLUME_RINGS :: 12
 SHADOW_MAP_SIZE :: 2048
 CASCADE_SPLIT_LAMBDA :: 0.75
 
+Render_Pass :: enum {
+	Sky_Lut,
+	Shadows,
+	Geometry,
+	Lighting_Base,
+	Lighting_Volumes,
+	Post,
+}
+
 Renderer :: struct {
+	timers:          [Render_Pass]GPU.Timer,
 	gbuffer:         GPU.Framebuffer, // albedo + model, normal + roughness + metallic, emission + occlusion, depth
 	hdr:             GPU.Framebuffer,
 	ldr:             GPU.Framebuffer,
@@ -24,6 +34,7 @@ Renderer :: struct {
 	fullscreen:      GPU.Fullscreen_Pass,
 	light_volume:    Mesh,
 	shadows:         Shadow_Map,
+	sky_lut:         Sky_Lut,
 	cascades:        Cascade_Set, // Fitted for the current frame.
 }
 
@@ -39,6 +50,8 @@ Renderer_Create :: proc(width, height: i32) -> (renderer: Renderer, ok: bool) {
 	renderer.ldr = GPU.Framebuffer_Create({width, height, {.RGBA8}, .None})
 	renderer.fullscreen = GPU.Fullscreen_Pass_Create()
 	renderer.shadows = Shadow_Map_Create(SHADOW_MAP_SIZE) or_return
+	renderer.sky_lut = Sky_Lut_Create()
+	for &timer in renderer.timers do timer = GPU.Timer_Create()
 	sphere := Procedural.Sphere_Create(1, LIGHT_VOLUME_SEGMENTS, LIGHT_VOLUME_RINGS)
 	defer Procedural.Mesh_Destroy(&sphere)
 	renderer.light_volume = Mesh_Upload(sphere)
@@ -46,6 +59,8 @@ Renderer_Create :: proc(width, height: i32) -> (renderer: Renderer, ok: bool) {
 }
 
 Renderer_Destroy :: proc(renderer: ^Renderer) {
+	for &timer in renderer.timers do GPU.Timer_Destroy(&timer)
+	Sky_Lut_Destroy(&renderer.sky_lut)
 	Shadow_Map_Destroy(&renderer.shadows)
 	Mesh_Destroy(&renderer.light_volume)
 	GPU.Fullscreen_Pass_Destroy(&renderer.fullscreen)
@@ -64,10 +79,32 @@ Renderer_Render :: proc(renderer: ^Renderer, frame: Frame, width, height: i32) {
 	GPU.Framebuffer_Resize(&renderer.gbuffer, width, height)
 	GPU.Framebuffer_Resize(&renderer.hdr, width, height)
 	GPU.Framebuffer_Resize(&renderer.ldr, width, height)
-	if frame.sun_shadows do shadow_pass(renderer, frame)
-	geometry_pass(renderer, frame)
+	for &timer in renderer.timers do GPU.Timer_Collect(&timer)
+	timed(renderer, .Sky_Lut, proc(renderer: ^Renderer, frame: Frame) {
+		Sky_Lut_Render(&renderer.sky_lut, frame.sky.to_sun, frame.sky.sun_intensity)
+	}, frame)
+	if frame.sun_shadows do timed(renderer, .Shadows, shadow_pass, frame)
+	timed(renderer, .Geometry, geometry_pass, frame)
 	lighting_pass(renderer, frame)
-	post_pass(renderer, frame, width, height)
+	timed(renderer, .Post, post_pass, frame)
+}
+
+// Runs a pass between GPU timer begin and end.
+@(private = "file")
+timed :: proc(renderer: ^Renderer, pass: Render_Pass, body: proc(renderer: ^Renderer, frame: Frame), frame: Frame) {
+	GPU.Timer_Begin(&renderer.timers[pass])
+	body(renderer, frame)
+	GPU.Timer_End(&renderer.timers[pass])
+}
+
+// Average GPU milliseconds per pass since the last reset.
+Renderer_Pass_Milliseconds :: proc(renderer: ^Renderer) -> (milliseconds: [Render_Pass]f32) {
+	for timer, pass in renderer.timers do milliseconds[pass] = GPU.Timer_Average_Milliseconds(timer)
+	return
+}
+
+Renderer_Reset_Timers :: proc(renderer: ^Renderer) {
+	for &timer in renderer.timers do GPU.Timer_Reset(&timer)
 }
 
 @(private = "file")
@@ -125,12 +162,12 @@ lighting_pass :: proc(renderer: ^Renderer, frame: Frame) {
 	gl.Disable(gl.DEPTH_TEST)
 	gl.Disable(gl.CULL_FACE)
 	gl.Disable(gl.BLEND)
-	light_base(renderer, frame)
+	timed(renderer, .Lighting_Base, light_base, frame)
 	gl.Enable(gl.BLEND)
 	gl.BlendFunc(gl.ONE, gl.ONE)
 	gl.Enable(gl.CULL_FACE)
 	gl.CullFace(gl.FRONT) // Back faces of the volume cover the lit pixels even when the camera is inside it.
-	light_volumes(renderer, frame)
+	timed(renderer, .Lighting_Volumes, light_volumes, frame)
 	gl.CullFace(gl.BACK)
 	gl.Disable(gl.BLEND)
 }
@@ -140,12 +177,12 @@ light_base :: proc(renderer: ^Renderer, frame: Frame) {
 	shader := &renderer.base_lighting
 	GPU.Shader_Use(shader)
 	bind_gbuffer(shader, renderer, frame.camera)
+	Sky_Lut_Bind(shader, &renderer.sky_lut)
 	GPU.Shader_Set(shader, "u_SkyZenith", frame.sky.zenith)
 	GPU.Shader_Set(shader, "u_SkyHorizon", frame.sky.horizon)
 	GPU.Shader_Set(shader, "u_SkyGround", frame.sky.ground)
 	GPU.Shader_Set(shader, "u_SunColor", frame.sky.sun_color)
 	GPU.Shader_Set(shader, "u_ToSun", frame.sky.to_sun)
-	GPU.Shader_Set(shader, "u_SunIntensity", frame.sky.sun_intensity)
 	GPU.Shader_Set(shader, "u_ToMoon", frame.sky.to_moon)
 	GPU.Shader_Set(shader, "u_MoonColor", frame.sky.moon_color)
 	GPU.Shader_Set(shader, "u_MoonIntensity", frame.sky.moon_intensity)
@@ -183,7 +220,8 @@ bind_gbuffer :: proc(shader: ^GPU.Shader, renderer: ^Renderer, camera: Camera) {
 }
 
 @(private = "file")
-post_pass :: proc(renderer: ^Renderer, frame: Frame, width, height: i32) {
+post_pass :: proc(renderer: ^Renderer, frame: Frame) {
+	width, height := renderer.gbuffer.width, renderer.gbuffer.height
 	GPU.Framebuffer_Bind(&renderer.ldr)
 	GPU.Shader_Use(&renderer.tonemap)
 	GPU.Texture_Units_Reset()

@@ -21,3 +21,11 @@
 - Deferred to later milestones: spot-light shadows (needs a perspective shadow array), point-light shadows, anisotropic GGX (needs a tangent in the G-buffer), bloom (M9).
 - Shadows: 3 cascades, 2048^2 depth array, practical splits (lambda 0.75), bounding-sphere fit snapped to texels, normal-offset bias plus 3x3 hardware PCF. The acne check only fails when polygon offset, normal offset and depth bias are all removed; any one of them is enough alone, and the pipeline keeps all three.
 - Post: HDR -> exposure, ACES, vignette, sRGB into an RGBA8 target -> FXAA to the screen. FXAA runs after tonemapping because it works on perceptual luma.
+- World = 64 m chunks (32 x 32 cells) streamed in rings; the stream's unload radius (6) exceeds its load radius (4). At most one chunk is built per frame, nearest first, so streaming never hitches the frame; the first frame builds everything synchronously.
+- Props are instanced from a single global instance buffer per kind. Each has a detailed mesh for the camera and a ~50-triangle proxy for the shadow pass that draws the same instances (`Mesh_Upload_Instanced_Sharing`). A shadow is a silhouette; the proxies cut the shadow pass from 14 ms to 2.4 ms.
+- Triplanar sampling skips projections with weight below 3% and uses explicit gradients (`textureGrad`) taken in uniform control flow. On near-flat ground two of three projections drop out; geometry pass 11.4 ms to 5.4 ms at 1440p, visually identical (mean difference 0.04 / 255).
+- The atmosphere is cached in a 192 x 128 look-up table once per frame (probe check: within 8% of direct evaluation away from the sun). Lighting still uses the cheap CPU-coloured gradient for ambient.
+- Single scattering makes the horizon yellow; 35% of the gradient colour is blended in as a multiple-scattering fill.
+- Captures ignore input (the fly camera used to read the real mouse). Remaining run-to-run noise is 0.18% of bytes, from map iteration order.
+- Shadow casters outside the camera frustum are kept (all loaded chunks and props), so a tree behind the camera still shades the scene. Terrain chunks are not culled against cascade boxes yet (2.4 ms total, deferred).
+- Deferred to M9: threaded chunk building, per-chunk prop culling and LOD, distance fog from the sky LUT, bloom.

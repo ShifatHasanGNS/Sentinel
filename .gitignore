@@ -1,6 +1,7 @@
 # Odin build outputs
 /Sentinel
 /SentinelDebug*
+/SentinelFast*
 *.bin
 *.exe
 *.dll

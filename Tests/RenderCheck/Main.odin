@@ -26,6 +26,7 @@ main :: proc() {
 	check_sun_shadows(&checks)
 	check_atmosphere(&checks)
 	check_instancing(&checks)
+	check_sky_lut(&checks)
 	fmt.printfln("%d checks passed, %d failed", checks.passed, checks.failed)
 	if checks.failed > 0 do os.exit(1)
 }
@@ -288,11 +289,16 @@ check_atmosphere :: proc(checks: ^Support.Checks) {
 
 // Five boxes at x = -4, -2, 0, 2, 4 with layers 1..5, seen from above through a 64-pixel-wide strip. Each box must appear at
 // its own place with its own layer; the gaps stay empty; fewer instances draw fewer boxes; none draws nothing.
+// A second, smaller mesh sharing the same instance buffer (a shadow proxy) must land on exactly the same places.
 check_instancing :: proc(checks: ^Support.Checks) {
 	source := Procedural.Box_Create({0.5, 0.5, 0.5})
 	defer Procedural.Mesh_Destroy(&source)
+	proxy_source := Procedural.Box_Create({0.25, 0.25, 0.25})
+	defer Procedural.Mesh_Destroy(&proxy_source)
 	mesh := Render.Mesh_Upload_Instanced(source, 8)
 	defer Render.Mesh_Destroy(&mesh)
+	proxy := Render.Mesh_Upload_Instanced_Sharing(proxy_source, &mesh)
+	defer Render.Mesh_Destroy(&proxy)
 	shader, ok := GPU.Shader_Create("Tests/RenderCheck/Fixtures/InstanceProbe.glsl", nil, true)
 	Support.expect(checks, ok)
 	if !ok do return
@@ -307,20 +313,65 @@ check_instancing :: proc(checks: ^Support.Checks) {
 
 	for count in ([3]int{5, 3, 0}) {
 		Render.Mesh_Set_Instances(&mesh, instances[:count])
-		GPU.Framebuffer_Bind(&target)
-		gl.Disable(gl.CULL_FACE)
-		gl.Disable(gl.DEPTH_TEST)
-		gl.ClearColor(0, 0, 0, 0)
-		gl.Clear(gl.COLOR_BUFFER_BIT)
-		GPU.Shader_Use(&shader)
-		GPU.Shader_Set(&shader, "u_ViewProjection", la.matrix_ortho3d_f32(-5, 5, -1, 1, -10, 10))
-		Render.Mesh_Draw(&mesh)
-		row: [64][4]f32
-		GPU.Texture_Read_2D(&target.colors[0], row[:])
-		for center, index in centers {
-			expected: f32 = f32(index + 1) / 10 if index < count else 0
-			Support.expect(checks, abs(row[center].x - expected) < 1e-4)
+		for drawn in ([2]^Render.Mesh{&mesh, &proxy}) {
+			row := draw_instance_strip(&target, &shader, drawn)
+			for center, index in centers {
+				expected: f32 = f32(index + 1) / 10 if index < count else 0
+				Support.expect(checks, abs(row[center].x - expected) < 1e-4)
+			}
+			for gap in gaps do Support.expect_value(checks, row[gap].x, 0)
 		}
-		for gap in gaps do Support.expect_value(checks, row[gap].x, 0)
 	}
+}
+
+draw_instance_strip :: proc(target: ^GPU.Framebuffer, shader: ^GPU.Shader, mesh: ^Render.Mesh) -> (row: [64][4]f32) {
+	GPU.Framebuffer_Bind(target)
+	gl.Disable(gl.CULL_FACE)
+	gl.Disable(gl.DEPTH_TEST)
+	gl.ClearColor(0, 0, 0, 0)
+	gl.Clear(gl.COLOR_BUFFER_BIT)
+	GPU.Shader_Use(shader)
+	GPU.Shader_Set(shader, "u_ViewProjection", la.matrix_ortho3d_f32(-5, 5, -1, 1, -10, 10))
+	Render.Mesh_Draw(mesh)
+	GPU.Texture_Read_2D(&target.colors[0], row[:])
+	return
+}
+
+// The look-up table is only a cache: sampled away from the sun and the horizon singularity it must match direct evaluation.
+check_sky_lut :: proc(checks: ^Support.Checks) {
+	shader, ok := GPU.Shader_Create("Tests/RenderCheck/Fixtures/SkyLutProbe.glsl", nil, true)
+	Support.expect(checks, ok)
+	if !ok do return
+	defer GPU.Shader_Destroy(&shader)
+	lut := Render.Sky_Lut_Create()
+	defer Render.Sky_Lut_Destroy(&lut)
+	pass := GPU.Fullscreen_Pass_Create()
+	defer GPU.Fullscreen_Pass_Destroy(&pass)
+	for sun_elevation_degrees in ([3]f32{60, 15, 3}) {
+		elevation := math.to_radians(sun_elevation_degrees)
+		to_sun := [3]f32{math.cos(elevation), math.sin(elevation), 0}
+		Render.Sky_Lut_Render(&lut, to_sun, 20)
+		for direction_elevation in ([3]f32{5, 25, 60}) {
+			for azimuth_step in 0 ..< 8 {
+				azimuth, lift := f32(azimuth_step) * math.PI / 4, math.to_radians(direction_elevation)
+				direction := [3]f32{math.cos(lift) * math.cos(azimuth), math.sin(lift), math.cos(lift) * math.sin(azimuth)}
+				if la.dot(la.normalize(direction), to_sun) > math.cos(math.to_radians(f32(20))) do continue // Skip the sun's glare.
+				direct := sky_with_lut(&shader, &lut, to_sun, direction, 0)
+				cached := sky_with_lut(&shader, &lut, to_sun, direction, 1)
+				Support.expect(checks, abs(sky_luminance(cached) - sky_luminance(direct)) <= 0.08 * sky_luminance(direct) + 1e-4)
+			}
+		}
+	}
+}
+
+sky_with_lut :: proc(shader: ^GPU.Shader, lut: ^Render.Sky_Lut, to_sun, direction: [3]f32, mode: i32) -> [3]f32 {
+	GPU.Shader_Use(shader)
+	GPU.Texture_Units_Reset()
+	GPU.Shader_Set(shader, "u_SkyLut", GPU.Texture_Bind_Next(&lut.target.colors[0], GPU.Sampler_Linear_Repeat))
+	GPU.Shader_Set(shader, "u_Mode", mode)
+	GPU.Shader_Set(shader, "u_ToSun", to_sun)
+	GPU.Shader_Set(shader, "u_Direction", direction)
+	pixels := Support.Probe_Render(shader, 1, 1)
+	defer delete(pixels)
+	return pixels[0].xyz
 }

@@ -38,3 +38,18 @@ Split the view frustum with the practical scheme: lambda * logarithmic + (1 - la
 
 ## Tone mapping
 ACES filmic curve (Narkowicz fit): (x (2.51 x + 0.03)) / (x (2.43 x + 0.59) + 0.14), clamped to [0, 1]: a toe for contrast in the darks and a shoulder that rolls highlights off instead of clipping.
+
+## Terrain
+Height = base + amplitude * fbm(x, z) * smoothstep(plateau_radius, plateau_radius + blend, distance). The smoothstep is C1, so the plateau meets the hills without a crease. Normals are central differences of the same height function, so adjacent chunks agree exactly along their shared border.
+
+## Sun path
+With latitude phi, declination delta and hour angle h (zero at noon, 15 degrees per hour): east = -cos(delta) sin(h); up = sin(phi) sin(delta) + cos(phi) cos(delta) cos(h); south = sin(phi) cos(delta) cos(h) - cos(phi) sin(delta). This vector has unit length, so it is a direction directly.
+
+## Atmosphere
+Single scattering (Nishita): along the view ray accumulate density_i * transmittance(sample to sun) * transmittance(sample to eye). Rayleigh scatter (molecules, coefficient ~ 1/wavelength^4: blue sky, red sunset) with phase 3/16pi (1 + cos^2); Mie scatter (haze, strongly forward) with the Cornette-Shanks phase. Transmittance is exp(-integral of extinction) (Beer-Lambert). Densities fall off exponentially with height at scale heights of 8 km (Rayleigh) and 1.2 km (Mie). The look-up table stores the result on an (azimuth, elevation) grid with v = 0.5 + 0.5 sign(e) sqrt(|e| / (pi/2)) so that resolution concentrates at the horizon.
+
+## Frustum culling
+Gribb-Hartmann: each of the six frustum planes is the fourth row of the view-projection matrix plus or minus another row (clip x, y, z against w). A sphere is outside if it is farther than its radius behind any plane; a box is outside if its corner furthest along a plane's normal is behind that plane.
+
+## Eye adaptation
+The exposure multiplies scene radiance before tone mapping. It rises exponentially as the sun sinks (exposure = 10^darkness), so night scenes stay readable the way the eye adapts.

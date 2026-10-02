@@ -28,8 +28,9 @@ Folders and files are PascalCase. One package per folder. One feature per file, 
 
 ## Commands
 
-- Build/run: `odin run Source -out:Sentinel`
-- Pure tests: `odin test Engine/GPU`, `odin test Engine/Procedural`, `odin test Engine/Render`, run from the repo root (fixtures use root-relative paths)
+- Build/run: `odin run Source -out:Sentinel` (fly: WASD, mouse, Space/Ctrl or E/Q for up/down, Shift to boost, Esc quits). For speed numbers build with `-o:speed`.
+- Flags: `--scene sandbox|showroom`, `--time <hours>` (fixed hour; omit to run the day cycle), `--capture <frames> <path>`, `--benchmark <frames>` (1080p, scripted circuit, prints frame and per-pass GPU times).
+- Pure tests: `odin test Engine/GPU`, `Engine/Procedural`, `Engine/Render`, `Engine/World`, `Game/Gameplay` (one `odin test <package>` each), run from the repo root (fixtures use root-relative paths)
 - GL checks (need a window, main thread): `odin run Tests/GpuCheck -out:GpuCheck`, `odin run Tests/TextureCheck -out:TextureCheck`, `odin run Tests/RenderCheck -out:RenderCheck`
 - Screenshot self-check: `odin run Source -out:SentinelDebug -- --capture <frames> Captures/x.bmp`, then `Tools/ToPng.sh Captures/x.bmp` and view the PNG.
 

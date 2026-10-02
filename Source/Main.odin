@@ -8,7 +8,10 @@ import "core:os"
 main :: proc() {
 	config := Config_Parse(os.args[1:])
 	interactive := config.capture_frames == 0
-	window, window_ok := Platform.Window_Create("Sentinel", 1280, 720, interactive)
+	benchmarking := config.benchmark_frames > 0
+	width: i32 = 1920 if benchmarking else 1280
+	height: i32 = 1080 if benchmarking else 720
+	window, window_ok := Platform.Window_Create("Sentinel", width, height, interactive, !benchmarking)
 	if !window_ok do os.exit(1)
 	defer Platform.Window_Destroy(&window)
 	input := Platform.Input_Create(&window)
@@ -33,6 +36,9 @@ run_sandbox :: proc(window: ^Platform.Window, input: ^Platform.Input, config: Co
 		},
 		render = proc(user: rawptr, window: Platform.Window) {
 			Sandbox.Sandbox_Render((^Sandbox.Sandbox)(user), window)
+		},
+		report = proc(user: rawptr) {
+			Sandbox.Sandbox_Report((^Sandbox.Sandbox)(user))
 		},
 	})
 }

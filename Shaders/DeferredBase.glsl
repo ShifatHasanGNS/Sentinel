@@ -4,7 +4,7 @@
 #include "Brdf.glsl"
 #include "Lighting.glsl"
 #include "GbufferRead.glsl"
-#include "Atmosphere.glsl"
+#include "SkyLut.glsl"
 #include "Sky.glsl"
 #include "Ambient.glsl"
 #include "Shadow.glsl"

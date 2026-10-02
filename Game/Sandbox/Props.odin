@@ -12,11 +12,17 @@ BUSH_CAPACITY :: 8000
 TREE_VARIANT_LIMIT :: 0.30
 ROCK_VARIANT_LIMIT :: 0.45
 
+// Each prop has a detailed mesh for the camera and a crude proxy for the shadow pass that draws the same instances: a shadow
+// is a silhouette, so a few dozen triangles do the work of a thousand.
 Props :: struct {
-	tree_trunk:  Render.Mesh,
-	tree_canopy: Render.Mesh,
-	rock:        Render.Mesh,
-	bush:        Render.Mesh,
+	tree_trunk:         Render.Mesh,
+	tree_canopy:        Render.Mesh,
+	rock:               Render.Mesh,
+	bush:               Render.Mesh,
+	tree_trunk_shadow:  Render.Mesh,
+	tree_canopy_shadow: Render.Mesh,
+	rock_shadow:        Render.Mesh,
+	bush_shadow:        Render.Mesh,
 }
 
 Props_Create :: proc() -> (props: Props) {
@@ -24,14 +30,29 @@ Props_Create :: proc() -> (props: Props) {
 	props.tree_canopy = upload_prop(tree_canopy_mesh(), TREE_CAPACITY)
 	props.rock = upload_prop(rock_mesh(), ROCK_CAPACITY)
 	props.bush = upload_prop(bush_mesh(), BUSH_CAPACITY)
+	props.tree_trunk_shadow = upload_shadow_proxy(placed(Procedural.Cylinder_Create(0.2, 4, 5, 1), {0, 2, 0}, {1, 1, 1}), &props.tree_trunk)
+	props.tree_canopy_shadow = upload_shadow_proxy(placed(Procedural.Sphere_Create(2.0, 8, 4), {0, 5.2, 0}, {1, 1.25, 1}), &props.tree_canopy)
+	props.rock_shadow = upload_shadow_proxy(placed(Procedural.Sphere_Create(0.9, 8, 4), {0, 0.25, 0}, {1.2, 0.7, 1}), &props.rock)
+	props.bush_shadow = upload_shadow_proxy(placed(Procedural.Sphere_Create(0.7, 6, 3), {0, 0.35, 0}, {1.3, 0.9, 1.3}), &props.bush)
 	return props
 }
 
 Props_Destroy :: proc(props: ^Props) {
+	Render.Mesh_Destroy(&props.tree_trunk_shadow)
+	Render.Mesh_Destroy(&props.tree_canopy_shadow)
+	Render.Mesh_Destroy(&props.rock_shadow)
+	Render.Mesh_Destroy(&props.bush_shadow)
 	Render.Mesh_Destroy(&props.tree_trunk)
 	Render.Mesh_Destroy(&props.tree_canopy)
 	Render.Mesh_Destroy(&props.rock)
 	Render.Mesh_Destroy(&props.bush)
+}
+
+@(private = "file")
+upload_shadow_proxy :: proc(mesh: Procedural.Mesh, owner: ^Render.Mesh) -> Render.Mesh {
+	mesh := mesh
+	defer Procedural.Mesh_Destroy(&mesh)
+	return Render.Mesh_Upload_Instanced_Sharing(mesh, owner)
 }
 
 @(private = "file")

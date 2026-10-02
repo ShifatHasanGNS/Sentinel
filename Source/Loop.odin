@@ -13,6 +13,7 @@ Scene :: struct {
 	user:   rawptr,
 	update: proc(user: rawptr, clock: Platform.Clock, input: ^Platform.Input, scripted_seconds: f32),
 	render: proc(user: rawptr, window: Platform.Window),
+	report: proc(user: rawptr), // Optional; called when a benchmark ends.
 }
 
 Run_Loop :: proc(window: ^Platform.Window, input: ^Platform.Input, config: Config, scene: Scene) {
@@ -21,7 +22,7 @@ Run_Loop :: proc(window: ^Platform.Window, input: ^Platform.Input, config: Confi
 	defer delete(frame_milliseconds)
 	for frame := 1; !Platform.Window_Should_Close(window); frame += 1 {
 		Platform.Clock_Tick(&clock)
-		Platform.Input_Update(input)
+		if config.capture_frames == 0 do Platform.Input_Update(input) // Captures must not depend on where the mouse happens to be.
 		if Platform.Input_Key_Down(input, .Escape) do Platform.Window_Request_Close(window)
 		scripted_seconds: f32 = f32(frame) * BENCHMARK_FRAME_SECONDS if config.benchmark_frames > 0 else -1
 		scene.update(scene.user, clock, input, scripted_seconds)
@@ -33,6 +34,7 @@ Run_Loop :: proc(window: ^Platform.Window, input: ^Platform.Input, config: Confi
 		}
 		if frame == config.benchmark_frames {
 			report_benchmark(frame_milliseconds[:])
+			if scene.report != nil do scene.report(scene.user)
 			break
 		}
 		Platform.Window_Present(window)

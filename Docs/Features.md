@@ -53,3 +53,21 @@
 | Depth-only render into an array layer | `Engine/GPU/Framebuffer.odin` : `Framebuffer_Set_Depth_Layer` |
 | Showroom (materials on primitives, deformed shapes, material spheres) | `Game/Showroom/Showroom.odin`, `Game/Showroom/Gallery.odin` |
 | Gallery of primitives, plain and deformed | `Game/Showroom/Gallery.odin` : `Gallery_Create` |
+| Hash-based scatter (trees, rocks, bushes) with slope and plateau rules | `Engine/Procedural/Scatter.odin` : `Scatter_Chunk` |
+| Terrain height, plateau blend, chunk meshes | `Engine/Procedural/Terrain.odin` : `Terrain_Height`, `Terrain_Chunk_Mesh` |
+| Terrain material blend by slope and height (GLSL) | `Shaders/Include/TerrainBlend.glsl` |
+| Chunk streaming set with hysteresis | `Engine/World/Chunks.odin` : `Chunk_Stream_Update` |
+| Frustum culling (sphere, box) | `Engine/Render/Culling.odin` : `Frustum_From_View_Projection`, `Frustum_Intersects_Aabb` |
+| Sun path, sunlight, moonlight, sky gradient, eye-adaptation exposure | `Game/Gameplay/TimeOfDay.odin` |
+| Hour to sun light + sky | `Game/Gameplay/Daylight.odin` : `Daylight_For_Hours` |
+| Atmosphere scattering (Rayleigh + Mie) | `Shaders/Include/Atmosphere.glsl` : `atmosphere_radiance` |
+| Sky look-up table (atmosphere cached per frame) | `Engine/Render/SkyLut.odin`, `Shaders/Include/SkyLut.glsl`, `Shaders/SkyLutPass.glsl` |
+| Sky, sun and moon discs, stars | `Shaders/Include/Sky.glsl` : `sky_radiance` |
+| Instanced meshes + shared-instance shadow proxies | `Engine/Render/Mesh.odin` : `Mesh_Upload_Instanced`, `Mesh_Upload_Instanced_Sharing`, `Mesh_Set_Instances` |
+| GPU pass timers | `Engine/GPU/Timer.odin`, `Engine/Render/Renderer.odin` : `Renderer_Pass_Milliseconds` |
+| Fly camera | `Game/Sandbox/FlyCamera.odin` |
+| Props built from primitives and deformers (tree, rock, bush) + shadow proxies | `Game/Sandbox/Props.odin` |
+| Chunk = terrain mesh + scatter | `Game/Sandbox/WorldChunks.odin` |
+| The open-world scene (stream, gather, day cycle) | `Game/Sandbox/Sandbox.odin` |
+| Frame loop, capture, benchmark | `Source/Loop.odin` |
+| Flags: `--scene`, `--time`, `--capture`, `--benchmark` | `Source/Config.odin` |

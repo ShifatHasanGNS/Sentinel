@@ -1,4 +1,4 @@
-// The sky. Include after Atmosphere.glsl and Noise.glsl (hash_u32).
+// The sky. Include after SkyLut.glsl and Noise.glsl (hash_u32).
 // sky_radiance: what the eye sees (atmosphere scattering, sun and moon discs, stars). sky_gradient and sky_ambient: a cheap
 // gradient from CPU-supplied colours, used for lighting where evaluating the atmosphere per pixel would cost too much.
 
@@ -7,7 +7,7 @@ uniform vec3 u_SkyHorizon;
 uniform vec3 u_SkyGround;
 uniform vec3 u_SunColor;
 uniform vec3 u_ToSun;
-uniform float u_SunIntensity;
+uniform sampler2D u_SkyLut; // The atmosphere, evaluated once per frame (see SkyLut.glsl).
 uniform vec3 u_ToMoon;
 uniform vec3 u_MoonColor;
 uniform float u_MoonIntensity;
@@ -37,7 +37,7 @@ float star_field(vec3 direction) {
 vec3 sky_radiance(vec3 direction) {
 	// Below the horizon the view ray would hit the planet; continue the horizon haze instead, dimmed like distant land.
 	vec3 haze_direction = normalize(vec3(direction.x, max(direction.y, 0.0), direction.z));
-	vec3 scattered = atmosphere_radiance(haze_direction, u_ToSun, u_SunIntensity);
+	vec3 scattered = sky_lut_sample(u_SkyLut, haze_direction);
 	// Single scattering loses the blue along the long horizon path; real skies fill it back in by multiple scattering. Blend in the
 	// gradient colours as that fill. Below the horizon the haze dims like distant land.
 	vec3 sky = mix(scattered, sky_gradient(direction), 0.35) * mix(1.0, 0.6, smoothstep(0.0, -0.2, direction.y));

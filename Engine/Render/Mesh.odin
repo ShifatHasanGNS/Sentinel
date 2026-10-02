@@ -18,6 +18,7 @@ Mesh :: struct {
 	instance_buffer:   GPU.Buffer,
 	instance_count:    i32,
 	instance_capacity: int,
+	instance_owner:    ^Mesh, // Set when this mesh draws another mesh's instances (a shadow proxy); nil otherwise.
 }
 
 // Matches Procedural.Vertex: position, normal, tangent (xyz + handedness), uv.
@@ -47,6 +48,22 @@ Mesh_Upload_Instanced :: proc(source: Procedural.Mesh, capacity: int) -> (mesh: 
 	return mesh
 }
 
+// A second mesh (typically a cheaper shadow proxy) that draws exactly the instances of `owner`, with no copy of the data.
+// The owner must outlive it.
+Mesh_Upload_Instanced_Sharing :: proc(source: Procedural.Mesh, owner: ^Mesh) -> (mesh: Mesh) {
+	assert(owner.instanced && owner.instance_owner == nil, "Mesh_Upload_Instanced_Sharing: owner must own its instances")
+	mesh.vertex_buffer = GPU.Buffer_Create(.Vertex, source.vertices[:])
+	mesh.index_buffer = GPU.Buffer_Create(.Index, source.indices[:])
+	attributes := vertex_attributes()
+	instance_attributes: [5]GPU.Vertex_Attribute
+	for &attribute in instance_attributes do attribute = {4, .Float32, false, 1}
+	streams := [2]GPU.Vertex_Stream{{&mesh.vertex_buffer, attributes[:]}, {&owner.instance_buffer, instance_attributes[:]}}
+	mesh.vertex_array = GPU.Vertex_Array_Create(streams[:], &mesh.index_buffer, i32(len(source.indices)))
+	mesh.instanced = true
+	mesh.instance_owner = owner
+	return mesh
+}
+
 Mesh_Set_Instances :: proc(mesh: ^Mesh, instances: []Instance) {
 	assert(mesh.instanced, "Mesh_Set_Instances: mesh was not uploaded as instanced")
 	assert(len(instances) <= mesh.instance_capacity, "Mesh_Set_Instances: more instances than capacity")
@@ -55,15 +72,17 @@ Mesh_Set_Instances :: proc(mesh: ^Mesh, instances: []Instance) {
 }
 
 Mesh_Draw :: proc(mesh: ^Mesh) {
-	if mesh.instance_count == 0 do return
-	GPU.Vertex_Array_Draw(&mesh.vertex_array, mesh.instance_count)
+	count := mesh.instance_count
+	if mesh.instance_owner != nil do count = mesh.instance_owner.instance_count
+	if count == 0 do return
+	GPU.Vertex_Array_Draw(&mesh.vertex_array, count)
 }
 
 Mesh_Destroy :: proc(mesh: ^Mesh) {
 	GPU.Vertex_Array_Destroy(&mesh.vertex_array)
 	GPU.Buffer_Destroy(&mesh.vertex_buffer)
 	GPU.Buffer_Destroy(&mesh.index_buffer)
-	if mesh.instanced do GPU.Buffer_Destroy(&mesh.instance_buffer)
+	if mesh.instanced && mesh.instance_owner == nil do GPU.Buffer_Destroy(&mesh.instance_buffer)
 }
 
 @(private = "file")

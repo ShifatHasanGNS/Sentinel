@@ -13,7 +13,8 @@ Window :: struct {
 	framebuffer_height:   i32,
 }
 
-Window_Create :: proc(title: cstring, width, height: i32, visible: bool) -> (window: Window, ok: bool) {
+// retina = false keeps one framebuffer pixel per window pixel on high-DPI displays (for benchmarks at a known resolution).
+Window_Create :: proc(title: cstring, width, height: i32, visible: bool, retina := true) -> (window: Window, ok: bool) {
 	if !glfw.Init() {
 		fmt.eprintln("glfw.Init failed")
 		return {}, false
@@ -23,6 +24,7 @@ Window_Create :: proc(title: cstring, width, height: i32, visible: bool) -> (win
 	glfw.WindowHint(glfw.OPENGL_PROFILE, glfw.OPENGL_CORE_PROFILE)
 	glfw.WindowHint(glfw.OPENGL_FORWARD_COMPAT, true)
 	glfw.WindowHint(glfw.VISIBLE, b32(visible))
+	glfw.WindowHint(glfw.COCOA_RETINA_FRAMEBUFFER, b32(retina))
 
 	window.handle = glfw.CreateWindow(width, height, title, nil, nil)
 	if window.handle == nil {
