@@ -42,8 +42,13 @@ check_normal_encoding_round_trip :: proc(checks: ^Support.Checks) {
 	encoded := GPU.Framebuffer_Create({64, 64, {.RGBA16F}, .None})
 	defer GPU.Framebuffer_Destroy(&encoded)
 
+	// The write pass never reads u_Encoded, but an unbound sampler is a validation warning; give it a placeholder.
+	placeholder := GPU.Texture_Create({.Texture_2D, .RGBA16F, 1, 1, 1, 1})
+	defer GPU.Texture_Destroy(&placeholder)
 	GPU.Framebuffer_Bind(&encoded)
 	GPU.Shader_Use(&shader)
+	GPU.Texture_Units_Reset()
+	GPU.Shader_Set(&shader, "u_Encoded", GPU.Texture_Bind_Next(&placeholder, GPU.Sampler_Nearest_Clamp))
 	GPU.Shader_Set(&shader, "u_Mode", i32(0))
 	GPU.Fullscreen_Pass_Draw(&pass)
 	GPU.Texture_Units_Reset()

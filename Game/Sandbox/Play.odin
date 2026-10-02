@@ -145,7 +145,7 @@ play_update :: proc(sandbox: ^Sandbox, input: ^Platform.Input, delta_seconds: f3
 	switch play.mode {
 	case .Fly:
 		Fly_Camera_Update(&sandbox.camera, input, delta_seconds)
-		Gameplay.Battle_Update(&play.battle, {}, delta_seconds)
+		battle_update_unattended(&play.battle, delta_seconds)
 	case .Play:
 		player_input := demo_input(play.battle, delta_seconds) if play.demo else collect_input(input)
 		Gameplay.Battle_Update(&play.battle, player_input, delta_seconds)
@@ -159,7 +159,14 @@ play_update :: proc(sandbox: ^Sandbox, input: ^Platform.Input, delta_seconds: f3
 
 // The benchmark flies a fixed circuit but the soldiers still think, so their cost is measured.
 play_update_idle :: proc(sandbox: ^Sandbox, delta_seconds: f32) {
-	Gameplay.Battle_Update(&sandbox.play.battle, {}, delta_seconds)
+	battle_update_unattended(&sandbox.play.battle, delta_seconds)
+}
+
+// While nobody plays (fly camera, benchmark) the soldiers still think and shoot, but the idle player is kept alive.
+@(private = "file")
+battle_update_unattended :: proc(battle: ^Gameplay.Battle, delta_seconds: f32) {
+	Gameplay.Health_Heal(&battle.player.health, battle.player.health.maximum)
+	Gameplay.Battle_Update(battle, {}, delta_seconds)
 }
 
 sync_camera_to_player :: proc(sandbox: ^Sandbox) {
