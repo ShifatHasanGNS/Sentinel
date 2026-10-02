@@ -21,6 +21,10 @@ Surface_Material :: enum i32 {
 	Rubber,
 	Glass,
 	Olive_Paint,
+	Skin,
+	Fabric_Desert,
+	Fabric_Dark,
+	Gunmetal,
 }
 
 // Colours are linear RGB. detail, bump_strength and the three colours mean what each recipe shader says they mean.
@@ -39,6 +43,10 @@ recipes := [Surface_Material]Procedural.Texture_Recipe {
 	.Rubber        = {"Shaders/Recipes/Rubber.glsl", 107, 4, {{0.03, 0.03, 0.032}, {0.008, 0.008, 0.009}, {}}, 0.5, 1.5},
 	.Glass         = {"Shaders/Recipes/Glass.glsl", 109, 2, {{0.02, 0.035, 0.05}, {0.06, 0.09, 0.11}, {}}, 0.5, 0.8},
 	.Olive_Paint   = {"Shaders/Recipes/PaintedMetal.glsl", 113, 4, {{0.12, 0.15, 0.07}, {0.45, 0.45, 0.47}, {}}, 0, 1.6},
+	.Skin          = {"Shaders/Recipes/Skin.glsl", 127, 4, {{0.42, 0.27, 0.19}, {0.36, 0.22, 0.15}, {0.5, 0.25, 0.2}}, 0.5, 0.6},
+	.Fabric_Desert = {"Shaders/Recipes/Canvas.glsl", 131, 8, {{0.38, 0.30, 0.18}, {0.28, 0.22, 0.13}, {}}, 0.5, 0.9},
+	.Fabric_Dark   = {"Shaders/Recipes/Canvas.glsl", 137, 8, {{0.06, 0.07, 0.06}, {0.035, 0.04, 0.035}, {}}, 0.5, 0.9},
+	.Gunmetal      = {"Shaders/Recipes/PaintedMetal.glsl", 139, 4, {{0.03, 0.03, 0.035}, {0.28, 0.28, 0.3}, {}}, 0, 1.2},
 	.Rock          = {"Shaders/Recipes/Rock.glsl", 83, 4, {{0.30, 0.29, 0.27}, {0.14, 0.13, 0.12}, {}}, 0.5, 1.0},
 }
 
