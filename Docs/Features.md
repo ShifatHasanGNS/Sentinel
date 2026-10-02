@@ -76,7 +76,7 @@
 | Flags: `--scene`, `--time`, `--capture`, `--benchmark` | `Source/Config.odin` |
 | Parts and assemblies: primitive + deformers + transform + material + emission + solid, grouped per material, collision boxes | `Engine/Procedural/Assembly.odin` : `Assembly_Build`, `Assembly_Bounds` |
 | Mesh validation (normals, tangents, uv, winding) | `Engine/Procedural/MeshValidate.odin` : `Mesh_Find_Problem` |
-| The 33 military objects | `Game/Catalogue/Objects.odin` (enum + dispatch), `Buildings.odin`, `Fortifications.odin`, `Vehicles.odin`, `Props.odin` |
+| The 33 military objects | `Game/Catalogue/Objects.odin` (enum + dispatch), `Game/Catalogue/Buildings.odin`, `Fortifications.odin`, `Vehicles.odin`, `Props.odin` |
 | Object size and collision boxes without building meshes | `Game/Catalogue/Objects.odin` : `Catalogue_Info` |
 | Shadow-caster meshes (solid parts only) | `Game/Catalogue/Objects.odin` : `Catalogue_Build_Shadow` |
 | Footprints, overlap test (separating axis), rotated collision boxes | `Game/Base/Footprint.odin` |
@@ -93,4 +93,18 @@
 | Instanced rendering of any number of soldiers | `Game/Characters/CharacterRender.odin` : `Character_Renderer_Items` |
 | Weapon models | `Game/Weapons/Weapons.odin` : `Weapon_Build` |
 | Soldier line-up scene (`--scene soldiers`) | `Game/Showroom/SoldierLineup.odin` |
-
+| Scene description handed to the renderer (`Draw_Item`, `Frame`, `Sky`) | `Engine/Render/Scene.odin` |
+| Capsule character controller (slide, step-up, ground snap) | `Engine/World/Collision.odin` : `Controller_Step` |
+| Raycasts (box, sphere, capsule, terrain), ballistic step, cone spread | `Engine/World/Raycast.odin` : `Raycast_World`, `Ballistic_Step`, `Spread_Direction` |
+| Weapon behaviour (fire rate, ammo, reload, explosion falloff) | `Game/Weapons/Behavior.odin` : `Weapon_Update`, `Explosion_Falloff` |
+| Health and hit-zone damage multipliers | `Game/Gameplay/Health.odin` : `Health_Apply_Damage` |
+| Player movement and look | `Game/Gameplay/Player.odin` : `Player_Wish_Velocity`, `Player_Look` |
+| Enemy body, hit shapes, raycast against a soldier | `Game/Gameplay/Enemy.odin` : `Enemy_Hit_Shapes`, `Enemy_Raycast` |
+| Enemy AI state machine (patrol, spot, chase, shoot, dead) | `Game/Gameplay/EnemyAi.odin` : `Enemy_Ai_Update`, `Can_See` |
+| Battle simulation, hitscan, projectiles, effects | `Game/Gameplay/Battle.odin` : `Battle_Update`, `Resolve_Hitscan`, `Battle_Detonate` |
+| HUD quads and text (immediate mode) | `Engine/Render/Hud.odin`; `Shaders/Hud.glsl` |
+| Procedural material recipes | `Shaders/Recipes/*.glsl` (one per `Surface_Material`) |
+| Sun shadow depth pass | `Shaders/ShadowDepth.glsl` |
+| Fullscreen triangle vertex stage | `Shaders/Include/Fullscreen.glsl` |
+| Program entry, scene table, loop | `Source/Main.odin`, `Source/Loop.odin`, `Source/Config.odin` |
+| BMP to PNG for screenshot review | `Tools/ToPng.sh` |
