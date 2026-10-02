@@ -1,0 +1,1 @@
+#define SHARED_VALUE 1.0
