@@ -1,5 +1,6 @@
 package Gameplay
 
+import "../Weapons"
 import "core:testing"
 
 // Seam: Battle_Update collecting pickups, and the ammunition a killed soldier drops.
@@ -40,4 +41,13 @@ test_a_killed_soldier_drops_ammunition :: proc(t: ^testing.T) {
 	testing.expect(t, !Enemy_Is_Alive(battle.enemies[0]))
 	testing.expect_value(t, len(battle.pickups), 1)
 	testing.expect_value(t, battle.pickups[0].kind, Pickup_Kind.Ammo)
+}
+
+@(test)
+test_a_sniper_drops_sniper_rifle_ammunition :: proc(t: ^testing.T) {
+	battle := Battle_Create(FLAT_GROUND, nil, {0, 0, 0}, 1)
+	defer Battle_Destroy(&battle)
+	Battle_Add_Enemy(&battle, .Sniper, {0, 0, 20}, 3.14159, nil)
+	for _ in 0 ..< 10 do Resolve_Hitscan(&battle, {0, 1.5, 0}, {0, 0, 1}, 50, 100)
+	testing.expect_value(t, battle.pickups[0].weapon, Weapons.Weapon_Kind.Sniper_Rifle)
 }

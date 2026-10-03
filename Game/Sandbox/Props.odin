@@ -10,6 +10,7 @@ ROCK_CAPACITY :: 4000
 BUSH_CAPACITY :: 8000
 GRASS_CAPACITY :: 24000
 GRASS_DRAW_DISTANCE_METERS :: 45.0
+TREE_DETAIL_DISTANCE_METERS :: 110.0
 
 // Scatter variant thresholds: [0, TREE) tree, [TREE, ROCK) rock, the rest bush.
 TREE_VARIANT_LIMIT :: 0.30
@@ -23,6 +24,8 @@ Props :: struct {
 	rock:               Render.Mesh,
 	bush:               Render.Mesh,
 	grass:              Render.Mesh,
+	tree_far_trunk:     Render.Mesh, // Distant trees: a few hundred triangles instead of thousands (beyond TREE_DETAIL_DISTANCE_METERS).
+	tree_far_canopy:    Render.Mesh,
 	tree_trunk_shadow:  Render.Mesh,
 	tree_canopy_shadow: Render.Mesh,
 	rock_shadow:        Render.Mesh,
@@ -35,6 +38,8 @@ Props_Create :: proc() -> (props: Props) {
 	props.rock = upload_prop(rock_mesh(), ROCK_CAPACITY)
 	props.bush = upload_prop(bush_mesh(), BUSH_CAPACITY)
 	props.grass = upload_prop(grass_tuft_mesh(), GRASS_CAPACITY)
+	props.tree_far_trunk = upload_prop(placed(Procedural.Cylinder_Create(0.18, 4.4, 5, 1), {0, 2.2, 0}, {1, 1, 1}), TREE_CAPACITY)
+	props.tree_far_canopy = upload_prop(tree_far_canopy_mesh(), TREE_CAPACITY)
 	props.tree_trunk_shadow = upload_shadow_proxy(placed(Procedural.Cylinder_Create(0.2, 4, 5, 1), {0, 2, 0}, {1, 1, 1}), &props.tree_trunk)
 	props.tree_canopy_shadow = upload_shadow_proxy(placed(Procedural.Sphere_Create(2.0, 8, 4), {0, 5.2, 0}, {1, 1.25, 1}), &props.tree_canopy)
 	props.rock_shadow = upload_shadow_proxy(placed(Procedural.Sphere_Create(0.9, 8, 4), {0, 0.25, 0}, {1.2, 0.7, 1}), &props.rock)
@@ -52,6 +57,8 @@ Props_Destroy :: proc(props: ^Props) {
 	Render.Mesh_Destroy(&props.rock)
 	Render.Mesh_Destroy(&props.bush)
 	Render.Mesh_Destroy(&props.grass)
+	Render.Mesh_Destroy(&props.tree_far_trunk)
+	Render.Mesh_Destroy(&props.tree_far_canopy)
 }
 
 @(private = "file")
@@ -178,4 +185,17 @@ grass_tuft_mesh :: proc() -> (tuft: Procedural.Mesh) {
 		Procedural.Mesh_Destroy(&blade)
 	}
 	return tuft
+}
+
+// The far crown: the same silhouette from three coarse lumpy lobes (a far tree covers a few dozen pixels).
+@(private = "file")
+tree_far_canopy_mesh :: proc() -> (canopy: Procedural.Mesh) {
+	lobes := [3][4]f32{{0, 5.0, 0, 1.6}, {0.9, 4.2, 0.4, 1.1}, {-0.8, 4.4, -0.5, 1.1}}
+	for lobe, index in lobes {
+		blob := Procedural.Sphere_Create(lobe[3], 8, 4)
+		Procedural.Mesh_Deform(&blob, {Procedural.Noise_Displace{lobe[3] * 0.25, 2.0 / lobe[3], 2, u32(70 + index)}})
+		Procedural.Mesh_Append(&canopy, blob, la.matrix4_translate_f32(lobe.xyz) * la.matrix4_scale_f32({1.1, 0.9, 1.1}))
+		Procedural.Mesh_Destroy(&blob)
+	}
+	return canopy
 }

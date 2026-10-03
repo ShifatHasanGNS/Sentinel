@@ -7,7 +7,8 @@ PICKUP_RADIUS_METERS :: 1.3
 MEDKIT_HEAL :: 50.0
 DROPPED_MAGAZINES :: 2
 
-// Supplies lying on the ground, collected by walking over them (as in Project I.G.I.): dead soldiers drop rifle ammunition, and
+// Supplies lying on the ground, collected by walking over them (as in Project I.G.I.): dead soldiers drop ammunition for the weapon
+// they carried (a sniper's is for the sniper rifle), and
 // medical kits wait inside buildings.
 Pickup_Kind :: enum {
 	Ammo,
@@ -18,10 +19,11 @@ Pickup :: struct {
 	kind:     Pickup_Kind,
 	position: [3]f32,
 	taken:    bool,
+	weapon:   Weapons.Weapon_Kind, // Which weapon's ammunition (Ammo only).
 }
 
-Battle_Add_Pickup :: proc(battle: ^Battle, kind: Pickup_Kind, position: [3]f32) {
-	append(&battle.pickups, Pickup{kind = kind, position = position})
+Battle_Add_Pickup :: proc(battle: ^Battle, kind: Pickup_Kind, position: [3]f32, weapon: Weapons.Weapon_Kind = .Rifle) {
+	append(&battle.pickups, Pickup{kind = kind, position = position, weapon = weapon})
 }
 
 // Takes whatever the player stands on. A medkit is left for later when health is already full; ammunition is always taken.
@@ -34,7 +36,7 @@ collect_pickups :: proc(battle: ^Battle) {
 		if la.length([2]f32{offset.x, offset.z}) > PICKUP_RADIUS_METERS || abs(offset.y) > 1.5 do continue
 		switch pickup.kind {
 		case .Ammo:
-			player.weapons[.Rifle].reserve += DROPPED_MAGAZINES * Weapons.Weapon_Stats_For(.Rifle).magazine_size
+			player.weapons[pickup.weapon].reserve += DROPPED_MAGAZINES * Weapons.Weapon_Stats_For(pickup.weapon).magazine_size
 			pickup.taken = true
 		case .Medkit:
 			if player.health.current >= player.health.maximum do continue

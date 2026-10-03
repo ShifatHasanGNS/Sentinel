@@ -45,6 +45,8 @@ Sandbox :: struct {
 	clock_runs:     bool,
 	trunk_instances:  [dynamic]Render.Instance,
 	canopy_instances: [dynamic]Render.Instance,
+	far_trunk_instances:  [dynamic]Render.Instance,
+	far_canopy_instances: [dynamic]Render.Instance,
 	rock_instances:   [dynamic]Render.Instance,
 	bush_instances:   [dynamic]Render.Instance,
 }
@@ -87,6 +89,8 @@ Sandbox_Destroy :: proc(sandbox: ^Sandbox) {
 	delete(sandbox.to_unload)
 	delete(sandbox.trunk_instances)
 	delete(sandbox.canopy_instances)
+	delete(sandbox.far_trunk_instances)
+	delete(sandbox.far_canopy_instances)
 	delete(sandbox.rock_instances)
 	delete(sandbox.bush_instances)
 	delete(sandbox.grass_instances)
@@ -237,11 +241,11 @@ terrain_item :: proc(chunk: ^Chunk) -> Render.Draw_Item {
 }
 
 @(private = "file")
-prop_items :: proc(sandbox: ^Sandbox) -> [5]Render.Draw_Item {
+prop_items :: proc(sandbox: ^Sandbox) -> [7]Render.Draw_Item {
 	prop :: proc(mesh: ^Render.Mesh) -> Render.Draw_Item {
 		return Render.Draw_Item{mesh = mesh, model = la.MATRIX4F32_IDENTITY, uv_scale = {1, 1}, triplanar = true, illumination_model = .Cook_Torrance}
 	}
-	return {prop(&sandbox.props.tree_trunk), prop(&sandbox.props.tree_canopy), prop(&sandbox.props.rock), prop(&sandbox.props.bush), prop(&sandbox.props.grass)}
+	return {prop(&sandbox.props.tree_trunk), prop(&sandbox.props.tree_canopy), prop(&sandbox.props.rock), prop(&sandbox.props.bush), prop(&sandbox.props.grass), prop(&sandbox.props.tree_far_trunk), prop(&sandbox.props.tree_far_canopy)}
 }
 
 @(private = "file")
@@ -258,15 +262,19 @@ shadow_proxy_items :: proc(sandbox: ^Sandbox) -> [4]Render.Draw_Item {
 collect_instances :: proc(sandbox: ^Sandbox, frustum: Render.Frustum, camera_position: [3]f32) {
 	clear(&sandbox.trunk_instances)
 	clear(&sandbox.canopy_instances)
+	clear(&sandbox.far_trunk_instances)
+	clear(&sandbox.far_canopy_instances)
 	clear(&sandbox.rock_instances)
 	clear(&sandbox.bush_instances)
 	clear(&sandbox.grass_instances)
 	for _, &chunk in sandbox.chunks {
-		if chunk_matters(chunk, frustum, camera_position) do for point in chunk.scatter do place_prop(sandbox, point)
+		if chunk_matters(chunk, frustum, camera_position) do for point in chunk.scatter do place_prop(sandbox, point, camera_position)
 		if Render.Frustum_Intersects_Aabb(frustum, chunk.lowest, chunk.highest) do for point in chunk.grass do place_grass(sandbox, point, camera_position)
 	}
 	Render.Mesh_Set_Instances(&sandbox.props.tree_trunk, sandbox.trunk_instances[:min(len(sandbox.trunk_instances), TREE_CAPACITY)])
 	Render.Mesh_Set_Instances(&sandbox.props.tree_canopy, sandbox.canopy_instances[:min(len(sandbox.canopy_instances), TREE_CAPACITY)])
+	Render.Mesh_Set_Instances(&sandbox.props.tree_far_trunk, sandbox.far_trunk_instances[:min(len(sandbox.far_trunk_instances), TREE_CAPACITY)])
+	Render.Mesh_Set_Instances(&sandbox.props.tree_far_canopy, sandbox.far_canopy_instances[:min(len(sandbox.far_canopy_instances), TREE_CAPACITY)])
 	Render.Mesh_Set_Instances(&sandbox.props.rock, sandbox.rock_instances[:min(len(sandbox.rock_instances), ROCK_CAPACITY)])
 	Render.Mesh_Set_Instances(&sandbox.props.bush, sandbox.bush_instances[:min(len(sandbox.bush_instances), BUSH_CAPACITY)])
 	Render.Mesh_Set_Instances(&sandbox.props.grass, sandbox.grass_instances[:min(len(sandbox.grass_instances), GRASS_CAPACITY)])
@@ -288,9 +296,12 @@ place_grass :: proc(sandbox: ^Sandbox, point: Procedural.Scatter_Point, camera_p
 }
 
 @(private = "file")
-place_prop :: proc(sandbox: ^Sandbox, point: Procedural.Scatter_Point) {
+place_prop :: proc(sandbox: ^Sandbox, point: Procedural.Scatter_Point, camera_position: [3]f32) {
 	model := la.matrix4_translate_f32(point.position) * la.matrix4_rotate_f32(point.yaw_radians, {0, 1, 0}) * la.matrix4_scale_f32({point.scale, point.scale, point.scale})
 	switch {
+	case point.variant < TREE_VARIANT_LIMIT && la.length(point.position - camera_position) > TREE_DETAIL_DISTANCE_METERS:
+		append(&sandbox.far_trunk_instances, Render.Instance{model = model, material_layer = f32(Materials.Surface_Material.Dirt)})
+		append(&sandbox.far_canopy_instances, Render.Instance{model = model, material_layer = f32(Materials.Surface_Material.Grass)})
 	case point.variant < TREE_VARIANT_LIMIT:
 		append(&sandbox.trunk_instances, Render.Instance{model = model, material_layer = f32(Materials.Surface_Material.Dirt)})
 		append(&sandbox.canopy_instances, Render.Instance{model = model, material_layer = f32(Materials.Surface_Material.Grass)})

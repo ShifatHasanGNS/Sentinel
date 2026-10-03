@@ -216,7 +216,7 @@ damage_enemy :: proc(battle: ^Battle, index: int, damage: f32, zone: Hit_Zone, f
 	if killed {
 		Enemy_Ai_Kill(&enemy.ai)
 		battle.player.kills += 1
-		Battle_Add_Pickup(battle, .Ammo, enemy.controller.position + {0.4, 0, 0.3}) // The soldier's spare magazines fall beside him.
+		Battle_Add_Pickup(battle, .Ammo, enemy.controller.position + {0.4, 0, 0.3}, Characters.Soldier_Weapon(enemy.character.variant)) // The soldier's spare magazines fall beside him.
 	} else {
 		Enemy_Ai_Notice(&enemy.ai, from)
 		Characters.Character_Hit(&enemy.character, la.normalize([3]f32{enemy.controller.position.x - from.x, 0, enemy.controller.position.z - from.z}))
