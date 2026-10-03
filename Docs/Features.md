@@ -179,3 +179,5 @@
 | Pause menu (Esc, Q quits) | `Game/Sandbox/Play.odin` : `play_handle_pause`, `draw_pause_screen` |
 | Compass strip with objective marker | `Game/Sandbox/Compass.odin` : `compass_draw_hud`, `bearing_relative_degrees` |
 | Ladder grab from any side, forward is up while on a ladder, "W climb" prompt, release at the top | `Engine/World/Collision.odin` : `Ladder_Near`, `ladder_at`, `climb`; `Game/Gameplay/Battle.odin` : `update_player` |
+| Particle renderer: soft billboards, noise-eroded shapes, alpha-blended smoke sorted back to front, additive HDR fire | `Engine/Render/ParticlePass.odin`; `Shaders/Particles.glsl` |
+| Smoke, dust, muzzle fire and fireball emitters and ageing | `Game/Sandbox/Particles.odin` : `Particles_Spawn_From_Effects`, `Particles_Collect` |

@@ -29,6 +29,7 @@ Renderer :: struct {
 	hdr:             GPU.Framebuffer,
 	ldr:             GPU.Framebuffer,
 	bloom:           Bloom,
+	particles:       Particle_Renderer,
 	previous_hdr:    GPU.Framebuffer, // Last frame's lit image, which screen-space reflections sample.
 	previous_view_projection: matrix[4, 4]f32,
 	ssao:            Ssao,
@@ -59,6 +60,7 @@ Renderer_Create :: proc(width, height: i32) -> (renderer: Renderer, ok: bool) {
 	renderer.ldr = GPU.Framebuffer_Create({width, height, {.RGBA8}, .None})
 	renderer.previous_hdr = GPU.Framebuffer_Create({width, height, {.RGBA16F}, .None})
 	renderer.bloom = Bloom_Create(width, height) or_return
+	renderer.particles = Particle_Renderer_Create() or_return
 	renderer.ssao = Ssao_Create(width, height) or_return
 	renderer.fullscreen = GPU.Fullscreen_Pass_Create()
 	renderer.shadows = Shadow_Map_Create(SHADOW_MAP_SIZE) or_return
@@ -79,6 +81,7 @@ Renderer_Destroy :: proc(renderer: ^Renderer) {
 	Mesh_Destroy(&renderer.light_volume)
 	GPU.Fullscreen_Pass_Destroy(&renderer.fullscreen)
 	Bloom_Destroy(&renderer.bloom)
+	Particle_Renderer_Destroy(&renderer.particles)
 	Ssao_Destroy(&renderer.ssao)
 	GPU.Framebuffer_Destroy(&renderer.ldr)
 	GPU.Framebuffer_Destroy(&renderer.previous_hdr)
@@ -106,6 +109,7 @@ Renderer_Render :: proc(renderer: ^Renderer, frame: Frame, width, height: i32) {
 	if frame.ssao_radius_meters > 0 do timed(renderer, .Ssao, ssao_pass, frame)
 	keep_previous_frame(renderer)
 	lighting_pass(renderer, frame)
+	particle_pass(renderer, frame)
 	timed(renderer, .Post, post_pass, frame)
 }
 
@@ -325,4 +329,10 @@ keep_previous_frame :: proc(renderer: ^Renderer) {
 	gl.BindFramebuffer(gl.DRAW_FRAMEBUFFER, renderer.previous_hdr.id)
 	gl.BlitFramebuffer(0, 0, renderer.hdr.width, renderer.hdr.height, 0, 0, renderer.previous_hdr.width, renderer.previous_hdr.height, gl.COLOR_BUFFER_BIT, gl.NEAREST)
 	gl.BindFramebuffer(gl.FRAMEBUFFER, 0)
+}
+
+@(private = "file")
+particle_pass :: proc(renderer: ^Renderer, frame: Frame) {
+	GPU.Framebuffer_Bind(&renderer.hdr)
+	Particle_Renderer_Draw(&renderer.particles, frame.particles, frame, &renderer.gbuffer.depth, renderer.gbuffer.width, renderer.gbuffer.height)
 }

@@ -428,16 +428,11 @@ add_effect :: proc(play: ^Play, effect: Gameplay.Effect, items: ^[dynamic]Render
 		append(items, effect_item(&play.effect_cube, model, [3]f32{9, 6.5, 2.5}))
 	case .Muzzle_Flash:
 		if effect.silenced do return // A suppressed shot has no flash.
-		// The player's own flash sits at the camera and would fill the screen, so only its light is kept.
-		if la.length(effect.position - Gameplay.Player_Eye(play.battle.player)) > 2 {
-			append(items, effect_item(&play.effect_sphere, sphere_matrix(effect.position, 0.1), [3]f32{14, 10, 4} * fade))
-		}
+		// The flame itself is fire particles (Particles.odin); the effect adds the light it throws on its surroundings.
 		append(lights, Render.Light_Point(effect.position, {1, 0.8, 0.45}, 70 * fade, 14))
 	case .Impact:
 		append(items, effect_item(&play.effect_sphere, sphere_matrix(effect.position, 0.03 + 0.12 * (1 - fade)), [3]f32{5, 3.5, 1.5} * fade))
 	case .Explosion:
-		radius := EXPLOSION_VISUAL_RADIUS_METERS * math.sqrt(1 - fade)
-		append(items, effect_item(&play.effect_sphere, sphere_matrix(effect.position, max(radius, 0.1)), [3]f32{10, 5, 1.5} * fade * fade))
 		append(lights, Render.Light_Point(effect.position, {1, 0.55, 0.2}, 1100 * fade * fade, 42))
 	}
 }
@@ -662,7 +657,6 @@ projectile_items :: proc(play: ^Play, items: ^[dynamic]Render.Draw_Item, lights:
 		body := along_axis(projectile.position, direction) * la.matrix4_scale_f32({0.05, 0.05, 0.55})
 		append(items, Render.Draw_Item{mesh = &play.effect_cube, model = body, material_layer = i32(Materials.Surface_Material.Gunmetal), uv_scale = {1, 1}, illumination_model = .Cook_Torrance})
 		flame := projectile.position - direction * 0.32
-		append(items, Render.Draw_Item{mesh = &play.effect_sphere, model = sphere_matrix(flame, 0.07), material_layer = i32(Materials.Surface_Material.Gunmetal), uv_scale = {1, 1}, illumination_model = .Lambert, emission = {12, 6, 1.5}})
 		append(lights, Render.Light_Point(flame, {1, 0.6, 0.25}, 60, 10))
 		Particles_Trail(&play.particles, flame)
 	}
