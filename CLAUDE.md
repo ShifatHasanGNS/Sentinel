@@ -6,6 +6,8 @@ Odin + OpenGL 4.1 core (macOS ceiling: no compute, no SSBO) + GLFW. Everything i
 
 ## Hard constraints
 
+Audio uses `vendor:miniaudio`, whose static library is not built by default: run `sh $(odin root)/vendor/miniaudio/src/build_miniaudio.sh` once. All sounds are synthesized in code.
+
 1. No pre-saved 3D models, no image/texture files, no precomputed data on disk. Meshes and textures come from code and a seed. Only shader sources are read from disk.
 2. Characters and objects are built from primitives (spheres allowed) plus transforms plus noise deformers.
 3. Engine packages never import `Game`. Dependencies point down: `Game` > `Engine/Render` > `Engine/World` > `Engine/Procedural` > `Engine/GPU` > `Engine/Platform`.
@@ -30,7 +32,7 @@ Folders and files are PascalCase. One package per folder. One feature per file, 
 
 - Build/run: `odin run Source -out:Sentinel` (fly: WASD, mouse, Space/Ctrl or E/Q for up/down, Shift to boost, Esc quits). For speed numbers build with `-o:speed`.
 - Flags: `--scene sandbox|showroom|catalogue|soldiers`, `--object <Name>` (catalogue close-up), `--view base|gate|yard|airfield|command|sun|player|hq|inside|barracks` (sandbox camera), `--overlay map|binoculars` (start with it open), `--fullscreen` (start fullscreen; F11 toggles it any time; the window is resizable; F9 frees or recaptures the cursor), `--autoplay` (a script teleports through every mission step; prints each completed objective to stderr: a quick end-to-end check of the mission), `--briefing` (show the mission briefing even when capturing), `--demo` (sandbox: a bot plays and fires at the nearest enemy), `--drive <Kind>` (start inside that vehicle; with `--demo` a bot drives it), `--time <hours>` (fixed hour; omit to run the day cycle), `--capture <frames> <path>`, `--benchmark <frames>` (1080p, scripted circuit, prints frame and per-pass GPU times).
-- Pure tests: `odin test Engine/GPU`, `Engine/Procedural`, `Engine/Render`, `Engine/World`, `Game/Gameplay`, `Game/Vehicles`, `Game/Mission`, `Game/Catalogue`, `Game/Base`, `Game/Characters`, `Game/Weapons` (one `odin test <package>` each), run from the repo root (fixtures use root-relative paths)
+- Pure tests: `odin test Engine/Audio`, `Engine/GPU`, `Engine/Procedural`, `Engine/Render`, `Engine/World`, `Game/Gameplay`, `Game/Vehicles`, `Game/Mission`, `Game/Catalogue`, `Game/Base`, `Game/Characters`, `Game/Weapons` (one `odin test <package>` each), run from the repo root (fixtures use root-relative paths)
 - GL checks (need a window, main thread): `odin run Tests/GpuCheck -out:GpuCheck`, `odin run Tests/TextureCheck -out:TextureCheck`, `odin run Tests/RenderCheck -out:RenderCheck`
 - Screenshot self-check: `odin run Source -out:SentinelDebug -- --capture <frames> Captures/x.bmp`, then `Tools/ToPng.sh Captures/x.bmp` and view the PNG.
 

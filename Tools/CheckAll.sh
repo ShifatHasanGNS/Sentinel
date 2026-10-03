@@ -3,7 +3,7 @@
 # Usage: Tools/CheckAll.sh   (from the repository root)
 set -u
 status=0
-for package in Engine/GPU Engine/Procedural Engine/Render Engine/World Game/Catalogue Game/Base Game/Characters Game/Weapons Game/Gameplay Game/Vehicles Game/Mission; do
+for package in Engine/GPU Engine/Procedural Engine/Render Engine/World Game/Catalogue Game/Base Game/Characters Game/Weapons Game/Gameplay Game/Vehicles Game/Mission Engine/Audio Game/Sandbox; do
 	name=$(basename "$package")
 	output=$(odin test "$package" -out:/tmp/sentinel_test_$name 2>&1)
 	summary=$(printf '%s\n' "$output" | grep -E "Finished [0-9]+ tests" | tail -1)

@@ -165,3 +165,7 @@
 | Rockets and shells in flight, motor light, smoke trail | `Game/Sandbox/Play.odin` : `projectile_items`; `Game/Sandbox/Particles.odin` : `Particles_Trail` |
 | Tracer streaks | `Game/Sandbox/Play.odin` : `add_effect` |
 | Screen-space reflections (last frame's image, reprojected) | `Shaders/DeferredBase.glsl` : `screen_space_reflection`; `Engine/Render/Renderer.odin` : `keep_previous_frame` |
+| Audio mixer (48 voices, resampling, equal-power pan, tanh limiter) | `Engine/Audio/Mixer.odin` : `Mixer_Play`, `Mixer_Fill` |
+| Procedural sounds (gunshots, explosion, footsteps, engine, rotor, alarm, chime, creak) | `Engine/Audio/Synth.odin` |
+| Audio output device (miniaudio) | `Engine/Audio/Device.odin` |
+| Game sounds: shots, impacts, blasts, footsteps, reload, vehicles, alarm, doors, pickups | `Game/Sandbox/Sound.odin` : `sound_update`, `spatialize` |

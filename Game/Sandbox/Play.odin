@@ -59,6 +59,8 @@ Weapon_View_Group :: struct {
 Play :: struct {
 	battle:        Gameplay.Battle,
 	mission:       Mission_Play,
+	sound:         Sound_Bank,
+	last_pickup_flash: f32,
 	particles:     Particles,
 	bob_phase:     f32,
 	bob_strength:  f32, // 0 standing still .. 1 walking; follows speed smoothly.
@@ -112,6 +114,7 @@ terrain_height :: proc(data: rawptr, x, z: f32) -> f32 {
 
 play_create :: proc(sandbox: ^Sandbox, demo: bool, fly: bool, drive: string, overlay: string, interactive: bool) -> (ok: bool) {
 	play := &sandbox.play
+	play.sound = sound_create(interactive && !demo)
 	base_height := sandbox.terrain.base_height_meters
 	boxes := Base.Layout_Solids(sandbox.base.layout, base_height)
 	defer delete(boxes)
@@ -151,6 +154,7 @@ play_create :: proc(sandbox: ^Sandbox, demo: bool, fly: bool, drive: string, ove
 }
 
 play_destroy :: proc(play: ^Play) {
+	sound_destroy(&play.sound)
 	Particles_Destroy(&play.particles)
 	cameras_destroy(play)
 	mission_destroy(&play.mission)
@@ -251,6 +255,7 @@ play_update :: proc(sandbox: ^Sandbox, input: ^Platform.Input, delta_seconds: f3
 	Particles_Spawn_From_Effects(&play.particles, play.battle.effects[:], delta_seconds, Gameplay.Player_Eye(play.battle.player))
 	Particles_Update(&play.particles, delta_seconds)
 	update_view_motion(play, delta_seconds)
+	sound_update(sandbox, delta_seconds)
 	if play.battle.player.shots_fired != play.shots_seen {
 		play.shots_seen = play.battle.player.shots_fired
 		play.recoil = RECOIL_KICK_METERS
@@ -563,7 +568,10 @@ interact_on_foot :: proc(play: ^Play, pressed: bool) {
 	play.boardable = nearest_boardable(play)
 	if !pressed || play.mission.hostage_in_reach || play.mission.terminal_in_reach do return
 	if _, boardable := play.boardable.?; boardable do board_vehicle(play)
-	else if found do Base.Doors_Toggle(play.doors[:], index)
+	else if found {
+		Base.Doors_Toggle(play.doors[:], index)
+		door_sound(play, play.doors[index].hinge)
+	}
 }
 
 // Head bob follows the stride (one up-down per step while walking on foot); the weapon lags a little behind turns and returns.
