@@ -14,6 +14,8 @@ GRENADE_RESTITUTION :: 0.35
 GRENADE_FRICTION :: 0.6
 ROCKET_LIFETIME_SECONDS :: 6.0
 HEARING_RANGE_METERS :: 70.0
+SHOUT_RADIUS_METERS :: 22.0
+BODY_SIGHT_METERS :: 14.0
 EFFECT_TRACER_SECONDS :: 0.12
 EFFECT_FLASH_SECONDS :: 0.06
 EFFECT_IMPACT_SECONDS :: 0.35
@@ -290,12 +292,42 @@ update_enemy :: proc(battle: ^Battle, index: int, delta_seconds: f32) {
 	}
 	enemy.ai.position = enemy.controller.position
 	senses := enemy_senses(battle, enemy^)
+	was_unaware := enemy.ai.state == .Patrol || enemy.ai.state == .Search
 	output := Enemy_Ai_Update(&enemy.ai, senses, enemy.waypoints[:], delta_seconds)
+	if was_unaware && enemy.ai.state == .Alert do shout(battle, index, enemy.ai.last_known) // He has noticed something: his squad hears him.
+	if enemy.ai.state == .Patrol do discover_bodies(battle, index)
 	wish := [2]f32{output.move_direction.x, output.move_direction.z} * output.speed
 	World.Controller_Step(&enemy.controller, battle.collision, battle.ground, wish, false, delta_seconds)
 	animate_enemy(enemy, output, wish, battle.player, delta_seconds)
 	trigger := output.shoot
 	if Weapons.Weapon_Update(&enemy.weapon, Enemy_Weapon_Stats(), trigger, false, delta_seconds) do enemy_fires(battle, index)
+}
+
+// A soldier who spots trouble calls out; idle soldiers within SHOUT_RADIUS_METERS turn toward where he was looking.
+@(private = "file")
+shout :: proc(battle: ^Battle, caller: int, toward: [3]f32) {
+	origin := battle.enemies[caller].controller.position
+	for &other, index in battle.enemies {
+		if index == caller || !Enemy_Is_Alive(other) do continue
+		if la.length(other.controller.position - origin) <= SHOUT_RADIUS_METERS do Enemy_Ai_Notice(&other.ai, toward)
+	}
+}
+
+// A patrolling soldier who comes across a comrade's body (within BODY_SIGHT_METERS, in front of him, in the clear) raises the
+// alert at that spot. Each body is only "found" once.
+@(private = "file")
+discover_bodies :: proc(battle: ^Battle, finder: int) {
+	enemy := &battle.enemies[finder]
+	eye, forward := Enemy_Eye(enemy^), Enemy_Forward(enemy^)
+	for &body, index in battle.enemies {
+		if index == finder || Enemy_Is_Alive(body) || body.body_found do continue
+		spot := body.controller.position + {0, 0.4, 0}
+		if !Can_See(eye, forward, spot, World.Line_Of_Sight_Clear(battle.collision, battle.ground, eye, spot), BODY_SIGHT_METERS / SIGHT_RANGE_METERS) do continue
+		body.body_found = true
+		Enemy_Ai_Notice(&enemy.ai, body.controller.position)
+		shout(battle, finder, body.controller.position)
+		return
+	}
 }
 
 // Sight is the cone and range test plus a ray from the enemy's eye to the player's that no wall or hill may interrupt.

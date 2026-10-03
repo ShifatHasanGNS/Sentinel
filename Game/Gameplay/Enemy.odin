@@ -25,6 +25,7 @@ Enemy :: struct {
 	seed:          u32,
 	shot_counter:  u32,
 	death_seconds: f32,
+	body_found:    bool, // Another soldier has come across this corpse.
 }
 
 Enemy_Weapon_Stats :: proc() -> (stats: Weapons.Weapon_Stats) {

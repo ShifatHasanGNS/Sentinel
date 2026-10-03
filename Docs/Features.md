@@ -175,3 +175,5 @@
 | Save format (checkpoint and best time, plain text, damage-tolerant parser) | `Game/Mission/Save.odin` : `Save_Format`, `Save_Parse`, `Profile_Record_Completion` |
 | Checkpoints after each objective, respawn at the last one, `--continue`, best time on the complete screen | `Game/Sandbox/SaveGame.odin` : `save_update`, `checkpoint_capture` |
 | Second mission, Night Raid (fuel tanks as targets, no hostage, 21:30, separate best time) | `Game/Mission/Mission.odin` : `Variant`, `Variant_Objectives`; `Game/Sandbox/MissionPlay.odin` : `place_fuel_targets` |
+| Squad shouts (a soldier who spots trouble alerts mates within 22 m) and body discovery | `Game/Gameplay/Battle.odin` : `shout`, `discover_bodies` |
+| Pause menu (Esc, Q quits) | `Game/Sandbox/Play.odin` : `play_handle_pause`, `draw_pause_screen` |

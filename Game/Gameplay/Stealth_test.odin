@@ -41,7 +41,7 @@ test_enemies_hear_footsteps_only_within_the_noise_radius :: proc(t: ^testing.T) 
 	battle := Battle_Create(FLAT_GROUND, nil, {0, 0, 0}, 5)
 	defer Battle_Destroy(&battle)
 	Battle_Add_Enemy(&battle, .Enemy, {0, 0, -(FOOTSTEP_RADIUS_WALK - 2)}, math.PI, nil) // The player walks toward them from behind, so only hearing can notice.
-	Battle_Add_Enemy(&battle, .Enemy, {0, 0, -(FOOTSTEP_RADIUS_WALK + 6)}, math.PI, nil)
+	Battle_Add_Enemy(&battle, .Enemy, {0, 0, -(FOOTSTEP_RADIUS_WALK + 26)}, math.PI, nil) // Beyond both the noise radius and the first soldier's shout.
 	for &enemy in battle.enemies do enemy.character.heading_radians = math.PI // Facing -Z, away from the player at the origin behind them.
 	for _ in 0 ..< 5 do Battle_Update(&battle, Player_Input{}, 1.0 / 30) // Standing still: silent.
 	testing.expect_value(t, battle.enemies[0].ai.state, Ai_State.Patrol)
@@ -90,4 +90,42 @@ test_a_silenced_shot_leaves_no_muzzle_flash :: proc(t: ^testing.T) {
 		testing.expect(t, effect.silenced)
 	}
 	testing.expect_value(t, flashes, 1)
+}
+
+// Seam: Battle_Update with several soldiers. One who spots the player calls out; only squad-mates within the shout radius react.
+@(test)
+test_a_soldier_who_spots_the_player_alerts_nearby_squad_mates_only :: proc(t: ^testing.T) {
+	battle := Battle_Create(FLAT_GROUND, nil, {0, 0, 0}, 5)
+	defer Battle_Destroy(&battle)
+	Battle_Add_Enemy(&battle, .Enemy, {0, 0, 20}, math.PI, nil) // Faces the player: sees him.
+	Battle_Add_Enemy(&battle, .Enemy, {12, 0, 24}, 0, nil) // Squad-mate within 22 m of the first, looking away from the player.
+	Battle_Add_Enemy(&battle, .Enemy, {80, 0, 24}, 0, nil) // Far away.
+	for _ in 0 ..< 3 do Battle_Update(&battle, {}, 1.0 / 30)
+	testing.expect_value(t, battle.enemies[0].ai.state, Ai_State.Alert)
+	testing.expect_value(t, battle.enemies[1].ai.state, Ai_State.Alert)
+	testing.expect_value(t, battle.enemies[2].ai.state, Ai_State.Patrol)
+}
+
+// A patrolling soldier who walks up on a body raises the alarm, once; one facing the other way does not.
+@(test)
+test_bodies_are_discovered_by_soldiers_who_can_see_them_and_only_once :: proc(t: ^testing.T) {
+	battle := Battle_Create(FLAT_GROUND, nil, {0, 0, -100}, 5)
+	defer Battle_Destroy(&battle)
+	Battle_Add_Enemy(&battle, .Enemy, {0, 0, 0}, 0, nil) // The victim.
+	Battle_Add_Enemy(&battle, .Enemy, {0, 0, 8}, math.PI, nil) // 8 m away, facing the victim.
+	Battle_Add_Enemy(&battle, .Enemy, {0, 0, -8}, math.PI, nil) // 8 m away on the other side, facing away (-Z).
+	Enemy_Ai_Kill(&battle.enemies[0].ai)
+	battle.enemies[0].health.current = 0
+	Battle_Update(&battle, {}, 1.0 / 30)
+	testing.expect_value(t, battle.enemies[1].ai.state, Ai_State.Alert)
+	testing.expect(t, battle.enemies[0].body_found)
+	testing.expect_value(t, battle.enemies[2].ai.state, Ai_State.Alert) // Reached by the discoverer's shout (within 22 m)...
+	far_battle := Battle_Create(FLAT_GROUND, nil, {0, 0, -100}, 5)
+	defer Battle_Destroy(&far_battle)
+	Battle_Add_Enemy(&far_battle, .Enemy, {0, 0, 0}, 0, nil)
+	Battle_Add_Enemy(&far_battle, .Enemy, {0, 0, 30}, math.PI, nil) // Too far to make out a body.
+	far_battle.enemies[0].health.current = 0
+	Enemy_Ai_Kill(&far_battle.enemies[0].ai)
+	Battle_Update(&far_battle, {}, 1.0 / 30)
+	testing.expect_value(t, far_battle.enemies[1].ai.state, Ai_State.Patrol)
 }
