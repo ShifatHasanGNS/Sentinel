@@ -164,3 +164,4 @@
 | Grenade bounce (restitution, friction, fuse) | `Game/Gameplay/Battle.odin` : `bounce_grenade` |
 | Rockets and shells in flight, motor light, smoke trail | `Game/Sandbox/Play.odin` : `projectile_items`; `Game/Sandbox/Particles.odin` : `Particles_Trail` |
 | Tracer streaks | `Game/Sandbox/Play.odin` : `add_effect` |
+| Screen-space reflections (last frame's image, reprojected) | `Shaders/DeferredBase.glsl` : `screen_space_reflection`; `Engine/Render/Renderer.odin` : `keep_previous_frame` |

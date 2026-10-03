@@ -25,10 +25,10 @@ uniform sampler2D u_PreviousHdr;
 // image (reprojected with last frame's camera). Returns rgb and a confidence in a: 0 when the ray leaves the screen or finds nothing,
 // fading toward the screen edges so reflections never end in a hard line.
 vec4 screen_space_reflection(vec3 position, vec3 normal, vec3 view, float roughness) {
-	if (roughness > 0.4) return vec4(0.0);
+	if (roughness > 0.25) return vec4(0.0); // Rougher surfaces blur the reflection into the sky term anyway.
 	vec3 direction = reflect(-view, normal);
 	if (dot(direction, normal) < 0.02) return vec4(0.0);
-	const int STEPS = 24;
+	const int STEPS = 16;
 	float step_meters = 0.25 + 0.02 * length(position - u_CameraPosition);
 	float jitter = fract(52.9829189 * fract(dot(gl_FragCoord.xy, vec2(0.06711056, 0.00583715))));
 	vec3 previous = position + normal * 0.03;
@@ -56,7 +56,7 @@ vec4 screen_space_reflection(vec3 position, vec3 normal, vec3 view, float roughn
 				vec2 previous_uv = previous_clip.xy / previous_clip.w * 0.5 + 0.5;
 				if (previous_clip.w <= 0.0 || previous_uv.x < 0.0 || previous_uv.x > 1.0 || previous_uv.y < 0.0 || previous_uv.y > 1.0) return vec4(0.0);
 				vec2 edge = min(previous_uv, 1.0 - previous_uv);
-				float confidence = smoothstep(0.0, 0.08, min(edge.x, edge.y)) * (1.0 - smoothstep(0.15, 0.4, roughness)) * (1.0 - float(i) / float(STEPS + 1));
+				float confidence = smoothstep(0.0, 0.08, min(edge.x, edge.y)) * (1.0 - smoothstep(0.1, 0.25, roughness)) * (1.0 - float(i) / float(STEPS + 1));
 				return vec4(texture(u_PreviousHdr, previous_uv).rgb, confidence);
 			}
 		}
