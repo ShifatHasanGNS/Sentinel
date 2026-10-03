@@ -21,3 +21,6 @@ Measured with `./SentinelFast --benchmark 300` (1080p, scripted circuit, -o:spee
 Measured and left alone: terrain chunk build (0.5 ms), props and characters gather (0.3 ms), game update (1.5 ms in combat), startup (0.8 s). The main thread spends most of each frame waiting in `swapBuffers`: the remaining time is the GPU and the compositor, not the CPU.
 
 Techniques considered and not adopted: GPU-driven culling and mesh shaders (need compute or newer GL than macOS offers), temporal anti-aliasing (needs motion vectors the G-buffer does not store), clustered or tiled light culling (the game never has more than a dozen local lights at once).
+
+## Stress run
+`./SentinelFast --demo --time 12 --capture N` plays N frames with the demo bot (combat, alarm, reinforcements, effects). Peak memory: 579 MB at 600 frames, 581 MB at 3,000 and 581 MB at 9,000: flat, so no leak. No crash or assertion in 9,000 frames. Most of the memory is the baked material arrays (18 layers x albedo, normal and occlusion-roughness-metal at 1024 x 1024 with mipmaps, about 300 MB); dropping `MATERIAL_TEXTURE_SIZE` to 512 would cut that to a quarter at a visible cost up close.
