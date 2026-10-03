@@ -525,6 +525,10 @@ play_draw_hud :: proc(sandbox: ^Sandbox, width, height: i32) {
 	if play.mode == .Fly do Render.Hud_Text(hud, w - 16 - Render.Hud_Text_Width("FLY MODE - TAB TO PLAY", scale), 16, "FLY MODE - TAB TO PLAY", scale, {1, 0.9, 0.3, 0.9})
 	if _, can_board := play.boardable.?; play.mode == .Play && play.driving == nil && can_board && !Gameplay.Health_Is_Dead(player.health) do Render.Hud_Text(hud, (w - Render.Hud_Text_Width("E  ENTER VEHICLE", scale)) / 2, h * 0.62, "E  ENTER VEHICLE", scale, {1, 1, 1, 0.9})
 	else if play.mode == .Play && play.door_in_reach && !Gameplay.Health_Is_Dead(player.health) do Render.Hud_Text(hud, (w - Render.Hud_Text_Width("E  OPEN / CLOSE", scale)) / 2, h * 0.62, "E  OPEN / CLOSE", scale, {1, 1, 1, 0.9})
+	if _, near_ladder := World.Ladder_Near(play.battle.collision, player.controller.position, World.LADDER_PROMPT_METERS, player.controller.on_ground); play.mode == .Play && play.driving == nil && near_ladder && !Gameplay.Health_Is_Dead(player.health) {
+		prompt := "W  CLIMB UP     S  DOWN"
+		Render.Hud_Text(hud, (w - Render.Hud_Text_Width(prompt, scale)) / 2, h * 0.68, prompt, scale, {1, 1, 1, 0.9})
+	}
 	if Gameplay.Health_Is_Dead(player.health) do draw_death_screen(hud, w, h, scale)
 	cameras_draw_hud(play, w, scale)
 	if player.pickup_flash > 0 do Render.Hud_Text(hud, (w - Render.Hud_Text_Width("PICKED UP", scale)) / 2, h * 0.7, "PICKED UP", scale, {0.7, 1, 0.7, min(player.pickup_flash, 1)})

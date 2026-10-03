@@ -291,12 +291,12 @@ radar_station :: proc() -> (parts: Parts) {
 // A ladder standing at `foot` (its base centre) on a wall facing +Z: two rails and a rung every 0.3 m.
 @(private = "package")
 add_ladder :: proc(parts: ^Parts, foot: [3]f32, height: f32) {
-	for x in ([2]f32{-0.22, 0.22}) do add_box(parts, {0.05, height, 0.06}, foot + {x, height / 2, 0}, .Wood, false)
-	for index in 1 ..< int(height / 0.3) do add_box(parts, {0.44, 0.04, 0.04}, foot + {0, f32(index) * 0.3, 0}, .Wood, false)
+	for x in ([2]f32{-0.22, 0.22}) do add_box(parts, {0.06, height, 0.07}, foot + {x, height / 2, 0.02}, .Painted_Metal, false)
+	for index in 1 ..< int(height / 0.3) do add_box(parts, {0.44, 0.045, 0.045}, foot + {0, f32(index) * 0.3, 0.02}, .Painted_Metal, false)
 }
 
 @(rodata)
-WATCHTOWER_LADDERS := [1]Procedural.Collision_Box{{{-0.65, 0, 1.45}, {-0.15, 6.3, 1.6}}}
+WATCHTOWER_LADDERS := [1]Procedural.Collision_Box{{{-0.7, 0, 1.4}, {-0.1, 6.3, 1.62}}}
 
 // Climbable volumes in an object's frame (their +Z face is where the climber stands).
 Catalogue_Ladders :: proc(kind: Object_Kind) -> []Procedural.Collision_Box {

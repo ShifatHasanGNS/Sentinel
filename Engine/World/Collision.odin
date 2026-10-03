@@ -9,7 +9,10 @@ CONTROLLER_RADIUS_METERS :: 0.35
 CONTROLLER_HEIGHT_METERS :: 1.8
 CONTROLLER_CROUCH_HEIGHT_METERS :: 1.1
 CLIMB_SPEED_METERS_PER_SECOND :: 1.8
-LADDER_REACH_METERS :: 0.45 // How far from the ladder's face a body can be and still hold on.
+LADDER_REACH_METERS :: 0.8 // How far from the ladder's face a body can be and still hold on.
+LADDER_TOP_RELEASE_METERS :: 0.5
+LADDER_PLANE_SLACK_METERS :: 0.2
+LADDER_PROMPT_METERS :: 2.2 // How far away the "climb" prompt shows.
 STEP_HEIGHT_METERS :: 0.35 // Ledges up to this tall are stepped onto; taller ones are walls.
 GROUND_SNAP_METERS :: 0.35 // On the ground, drops up to this far are walked down; larger ones are falls.
 SUBSTEP_SECONDS_MAX :: 1.0 / 60 // Longer steps are split, so fast motion cannot skip over a thin wall.
@@ -54,7 +57,7 @@ Controller_Step :: proc(controller: ^Controller, world: Collision_World, ground:
 	step := delta_seconds / f32(substeps)
 	for _ in 0 ..< substeps {
 		move_horizontally(controller, world, wish * step)
-		if ladder, on_ladder := ladder_at(world, controller.position); on_ladder {
+		if ladder, on_ladder := ladder_at(world, controller.position, controller.on_ground); on_ladder {
 			climb(controller, world, ground, ladder, wish, step)
 			continue
 		}
@@ -182,11 +185,13 @@ Controller_Set_Crouch :: proc(controller: ^Controller, world: Collision_World, c
 
 // The ladder the body is holding, if any: its feet within the ladder's height span and its circle within reach of the volume.
 @(private = "file")
-ladder_at :: proc(world: Collision_World, position: [3]f32) -> (ladder: Solid, found: bool) {
+ladder_at :: proc(world: Collision_World, position: [3]f32, on_ground: bool) -> (ladder: Solid, found: bool) {
 	for candidate in world.ladders {
 		local := to_local(candidate, position)
 		bottom, top := -candidate.half_extents.y, candidate.half_extents.y
 		if local.y < bottom - 0.05 || local.y > top - 0.1 do continue
+		if on_ground && local.y > top - LADDER_TOP_RELEASE_METERS do continue // Standing on the roof at the top: walk, do not hold the ladder.
+		if local.z < -LADDER_PLANE_SLACK_METERS do continue // Past the ladder's own plane (stepped onto the platform): no longer on it.
 		if abs(local.x) > candidate.half_extents.x + LADDER_REACH_METERS || abs(local.z) > candidate.half_extents.z + LADDER_REACH_METERS do continue
 		return candidate, true
 	}
@@ -211,4 +216,19 @@ climb :: proc(controller: ^Controller, world: Collision_World, ground: Ground, l
 	} else {
 		controller.on_ground = false
 	}
+}
+
+// The ladder within `reach` of the body (its feet inside the ladder's height span), and the horizontal unit direction from the body
+// into the ladder's wall (what "forward" should mean while climbing, whichever way the player happens to face).
+Ladder_Near :: proc(world: Collision_World, position: [3]f32, reach: f32, on_ground: bool) -> (into_wall: [2]f32, found: bool) {
+	for ladder in world.ladders {
+		local := to_local(ladder, position)
+		if local.y < -ladder.half_extents.y - 0.05 || local.y > ladder.half_extents.y - 0.1 do continue
+		if on_ground && local.y > ladder.half_extents.y - LADDER_TOP_RELEASE_METERS do continue
+		if local.z < -LADDER_PLANE_SLACK_METERS do continue
+		if abs(local.x) > ladder.half_extents.x + reach || abs(local.z) > ladder.half_extents.z + reach do continue
+		inward := rotate_about_y({0, 0, -1}, ladder.yaw_radians)
+		return {inward.x, inward.z}, true
+	}
+	return {}, false
 }

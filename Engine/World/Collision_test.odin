@@ -152,9 +152,12 @@ test_a_ladder_is_climbed_up_onto_a_roof_and_down_again :: proc(t: ^testing.T) {
 	append(&world.ladders, Solid{center = {0, 1.6, 0.15}, half_extents = {0.3, 1.6, 0.1}})
 	controller := Controller_Create({0, 0, 1.5})
 	walk(&controller, &world, FLAT, {0, -2}, 0.6) // Walk up to the ladder.
-	walk(&controller, &world, FLAT, {0, -2}, 2.5) // Keep pushing: climb.
+	for _ in 0 ..< 60 * 4 { // Keep pushing: climb until the top is reached.
+		if controller.position.y > 2.9 do break
+		Controller_Step(&controller, world, FLAT, {0, -2}, false, 1.0 / 60)
+	}
 	testing.expect(t, controller.position.y > 2.9)
-	walk(&controller, &world, FLAT, {0, -2}, 1.0) // Step off onto the roof.
+	walk(&controller, &world, FLAT, {0, -2}, 0.5) // Step off onto the roof.
 	testing.expect(t, abs(controller.position.y - 3) < 0.05 && controller.position.z < -0.3)
 	testing.expect(t, controller.on_ground)
 	without_ladder: Collision_World

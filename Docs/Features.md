@@ -178,3 +178,4 @@
 | Squad shouts (a soldier who spots trouble alerts mates within 22 m) and body discovery | `Game/Gameplay/Battle.odin` : `shout`, `discover_bodies` |
 | Pause menu (Esc, Q quits) | `Game/Sandbox/Play.odin` : `play_handle_pause`, `draw_pause_screen` |
 | Compass strip with objective marker | `Game/Sandbox/Compass.odin` : `compass_draw_hud`, `bearing_relative_degrees` |
+| Ladder grab from any side, forward is up while on a ladder, "W climb" prompt, release at the top | `Engine/World/Collision.odin` : `Ladder_Near`, `ladder_at`, `climb`; `Game/Gameplay/Battle.odin` : `update_player` |

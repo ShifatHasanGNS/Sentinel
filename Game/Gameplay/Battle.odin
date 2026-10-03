@@ -244,7 +244,11 @@ update_player :: proc(battle: ^Battle, input: Player_Input, delta_seconds: f32) 
 	Player_Look(player, input.look)
 	if kind, chosen := input.select.?; chosen do player.current = kind
 	World.Controller_Set_Crouch(&player.controller, battle.collision, input.crouch)
-	World.Controller_Step(&player.controller, battle.collision, battle.ground, Player_Wish_Velocity(player^, input), input.jump, delta_seconds)
+	wish := Player_Wish_Velocity(player^, input)
+	if into_wall, on_ladder := World.Ladder_Near(battle.collision, player.controller.position, World.LADDER_REACH_METERS, player.controller.on_ground); on_ladder {
+		wish = into_wall * (input.move.y * WALK_SPEED) // On a ladder forward is up and back is down, however the player is facing.
+	}
+	World.Controller_Step(&player.controller, battle.collision, battle.ground, wish, input.jump, delta_seconds)
 	stats := Weapons.Weapon_Stats_For(player.current)
 	if Weapons.Weapon_Update(&player.weapons[player.current], stats, input.fire, input.reload, delta_seconds) do fire_player_weapon(battle, stats)
 }
