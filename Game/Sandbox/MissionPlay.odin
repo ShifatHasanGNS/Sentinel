@@ -41,6 +41,7 @@ Mission_Play :: struct {
 	state:             Mission.Mission,
 	hostage:           Hostage,
 	radar_target:      int,
+	fuel_targets:      [dynamic]int,
 	terminal_position: [3]f32,
 	extraction:        [3]f32,
 	radar_dish:        [3]f32,
@@ -52,9 +53,10 @@ Mission_Play :: struct {
 	beacon:            Render.Mesh,
 }
 
-mission_create :: proc(play: ^Play, sandbox: ^Sandbox, interactive: bool) {
+mission_create :: proc(play: ^Play, sandbox: ^Sandbox, interactive: bool, variant: Mission.Variant) {
 	mission := &play.mission
-	mission.state = Mission.Mission_Create()
+	mission.state = Mission.Mission_Create(variant)
+	play.next_variant = variant
 	ground := sandbox.terrain.base_height_meters
 	for placement in sandbox.base.layout.placements {
 		yaw := math.to_radians(placement.yaw_degrees)
@@ -69,6 +71,7 @@ mission_create :: proc(play: ^Play, sandbox: ^Sandbox, interactive: bool) {
 	mission.hostage.controller = World.Controller_Create(hostage_position)
 	mission.hostage.character = Characters.Character{variant = .Officer, position = hostage_position, heading_radians = barracks_yaw + math.PI / 2, hide_weapon = true}
 	place_medkits(play, sandbox)
+	if variant == .Night_Raid do place_fuel_targets(play, sandbox)
 	mission.radar_target = Gameplay.Battle_Add_Target(&play.battle, mission.radar_dish, RADAR_DISH_RADIUS_METERS, RADAR_HEALTH)
 	ground_height := terrain_height(sandbox.terrain, EXTRACTION_POSITION_XZ.x, EXTRACTION_POSITION_XZ.y)
 	mission.extraction = {EXTRACTION_POSITION_XZ.x, ground_height, EXTRACTION_POSITION_XZ.y}
@@ -79,6 +82,7 @@ mission_create :: proc(play: ^Play, sandbox: ^Sandbox, interactive: bool) {
 }
 
 mission_destroy :: proc(mission: ^Mission_Play) {
+	delete(mission.fuel_targets)
 	Render.Mesh_Destroy(&mission.beacon)
 }
 
@@ -117,7 +121,7 @@ mission_update :: proc(sandbox: ^Sandbox, interact_down, interact_pressed: bool,
 	terminal_point := mission.terminal_position + {0, 0.9, 0.6}
 	hostage_point := mission.hostage.controller.position + {0, 1.1, 0}
 	mission.terminal_in_reach = play.driving == nil && flat_distance(player_position, mission.terminal_position) < TERMINAL_REACH_METERS && abs(player_position.y - mission.terminal_position.y) < 2.5 && seen(play, eye, terminal_point)
-	mission.hostage_in_reach = !mission.hostage.rescued && play.driving == nil && flat_distance(player_position, mission.hostage.controller.position) < HOSTAGE_REACH_METERS && seen(play, eye, hostage_point)
+	mission.hostage_in_reach = .Rescue_Hostage in mission.state.required && !mission.hostage.rescued && play.driving == nil && flat_distance(player_position, mission.hostage.controller.position) < HOSTAGE_REACH_METERS && seen(play, eye, hostage_point)
 	observation := Mission.Observation{
 		inside_compound = inside,
 		terminal_in_reach = mission.terminal_in_reach && !mission.state.done[.Hack_Cameras],
@@ -125,6 +129,7 @@ mission_update :: proc(sandbox: ^Sandbox, interact_down, interact_pressed: bool,
 		hostage_in_reach = mission.hostage_in_reach,
 		interact_pressed = interact_pressed,
 		radar_destroyed = play.battle.targets[mission.radar_target].destroyed,
+		fuel_destroyed = fuel_destroyed(play),
 		at_extraction = flat_distance(player_position, mission.extraction) < EXTRACTION_RADIUS_METERS && player_position.y - mission.extraction.y < 25,
 	}
 	Mission.Mission_Update(&mission.state, observation, delta_seconds)
@@ -165,7 +170,7 @@ update_hostage :: proc(play: ^Play, delta_seconds: f32) {
 }
 
 mission_hostage_character :: proc(play: ^Play) -> Maybe(Characters.Character) {
-	if play.mission.hostage.hidden do return nil
+	if play.mission.hostage.hidden || .Rescue_Hostage not_in play.mission.state.required do return nil
 	return play.mission.hostage.character
 }
 
@@ -175,7 +180,7 @@ mission_draw_hud :: proc(play: ^Play, width, height, scale: f32) {
 	hud := &play.hud
 	mission := &play.mission
 	switch mission.state.status {
-	case .Briefing: draw_briefing(hud, width, height, scale)
+	case .Briefing: draw_briefing(hud, mission.state.variant, width, height, scale)
 	case .Complete: draw_mission_complete(play, hud, mission, width, height, scale)
 	case .Active: if !play.map_open do draw_objectives(play, width, height, scale)
 	}
@@ -189,6 +194,7 @@ draw_objectives :: proc(play: ^Play, width, height, scale: f32) {
 	Render.Hud_Text(hud, 16, y, "OBJECTIVES", scale, {1, 0.9, 0.4, 0.95})
 	current, any := Mission.Mission_Current_Objective(mission.state)
 	for objective in Mission.Objective {
+		if objective not_in mission.state.required do continue
 		y += 10 * scale
 		done := mission.state.done[objective]
 		mark := "[X] " if done else "[ ] "
@@ -213,25 +219,25 @@ draw_objectives :: proc(play: ^Play, width, height, scale: f32) {
 }
 
 @(private = "file")
-draw_briefing :: proc(hud: ^Render.Hud, width, height, scale: f32) {
+draw_briefing :: proc(hud: ^Render.Hud, variant: Mission.Variant, width, height, scale: f32) {
 	Render.Hud_Rect(hud, 0, 0, width, height, {0, 0, 0, 0.78})
-	lines := [?]string{
-		"OPERATION SENTINEL",
-		"",
-		"A HOSTAGE IS HELD IN THE BARRACKS OF THIS BASE.",
-		"ITS RADAR MUST GO DOWN AND ITS CAMERAS MUST NOT SEE YOU.",
-		"",
-		"1  GET INSIDE THE COMPOUND",
-		"2  HACK THE CAMERA COMPUTER IN THE HQ (HOLD E)",
-		"3  DESTROY THE RADAR STATION",
-		"4  RESCUE THE HOSTAGE IN THE BARRACKS (E)",
-		"5  REACH THE EXTRACTION POINT (GREEN BEACON)",
-		"",
-		"WASD MOVE  SHIFT RUN  C CROUCH  E USE  F FLASHLIGHT  B BINOCULARS  M MAP",
-		"",
-		"PRESS ENTER TO BEGIN",
+	story := "A HOSTAGE IS HELD IN THE BARRACKS OF THIS BASE."
+	story_more := "ITS RADAR MUST GO DOWN AND ITS CAMERAS MUST NOT SEE YOU."
+	if variant == .Night_Raid {
+		story = "THE BASE IS REFUELLING A STRIKE FORCE. HIT IT AFTER DARK."
+		story_more = "SILENCE THE CAMERAS, BLIND THE RADAR, BURN THE FUEL."
 	}
-	y := height * 0.25
+	required := Mission.Variant_Objectives(variant)
+	lines := make([dynamic]string, context.temp_allocator)
+	append(&lines, Mission.Variant_Name(variant), "", story, story_more, "")
+	number := 1
+	for objective in Mission.Objective {
+		if objective not_in required do continue
+		append(&lines, fmt.tprintf("%d  %s", number, Mission.Objective_Text(objective)))
+		number += 1
+	}
+	append(&lines, "", "WASD MOVE  SHIFT RUN  C CROUCH  E USE  F FLASHLIGHT  B BINOCULARS  M MAP  6 SILENCED PISTOL", "", "PRESS ENTER TO BEGIN")
+	y := height * 0.22
 	for line, index in lines {
 		size := scale * (2.4 if index == 0 else 1.1)
 		Render.Hud_Text(hud, (width - Render.Hud_Text_Width(line, size)) / 2, y, line, size, {1, 1, 1, 0.95} if index != 0 else {1, 0.85, 0.3, 1})
@@ -248,7 +254,8 @@ draw_mission_complete :: proc(play: ^Play, hud: ^Render.Hud, mission: ^Mission_P
 	line := fmt.tprintf("TIME %d:%02d", seconds / 60, seconds % 60)
 	Render.Hud_Text(hud, (width - Render.Hud_Text_Width(line, scale * 1.5)) / 2, height * 0.5, line, scale * 1.5, {1, 1, 1, 0.95})
 	if best := best_time_text(play); best != "" do Render.Hud_Text(hud, (width - Render.Hud_Text_Width(best, scale * 1.2)) / 2, height * 0.55, best, scale * 1.2, {1, 0.9, 0.4, 1})
-	hint := "PRESS R TO PLAY AGAIN    ESC TO QUIT"
+	other := "NIGHT RAID" if mission.state.variant == .Rescue else "OPERATION SENTINEL"
+	hint := fmt.tprintf("R  PLAY AGAIN     N  PLAY %s     ESC  QUIT", other)
 	Render.Hud_Text(hud, (width - Render.Hud_Text_Width(hint, scale * 1.1)) / 2, height * 0.6, hint, scale * 1.1, {1, 1, 1, 0.85})
 }
 
@@ -275,7 +282,12 @@ mission_items :: proc(play: ^Play, items: ^[dynamic]Render.Draw_Item, lights: ^[
 
 // After the mission ends the world keeps running (soldiers, effects) but the player can only restart or quit.
 mission_check_restart :: proc(play: ^Play, input: ^Platform.Input) {
-	if play.mission.state.status == .Complete && Platform.Input_Key_Down(input, .R) do play.restart_requested = true
+	if play.mission.state.status != .Complete do return
+	if Platform.Input_Key_Down(input, .R) do play.restart_requested = true
+	if Platform.Input_Key_Down(input, .N) {
+		play.restart_requested = true
+		play.next_variant = .Night_Raid if play.mission.state.variant == .Rescue else .Rescue
+	}
 }
 
 // A scripted playthrough for verification: teleports the player to each goal, presses or holds E as a person would, shoots the radar,
@@ -309,9 +321,12 @@ autoplay_step :: proc(sandbox: ^Sandbox, delta_seconds: f32) -> (held, pressed: 
 	if now > 6.2 && now < 9.0 && !play.battle.targets[mission.radar_target].destroyed {
 		Gameplay.Battle_Detonate(&play.battle, mission.radar_dish, 6, 400)
 	}
-	if crossed(previous, now, 9.5) {
+	if crossed(previous, now, 9.5) && .Rescue_Hostage in mission.state.required {
 		place(play, mission.hostage.controller.position + {1.2, 0, 0})
 		player.yaw_radians = math.PI / 2
+	}
+	if now > 9.5 && now < 10.5 && .Destroy_Fuel in mission.state.required {
+		for index in mission.fuel_targets do Gameplay.Battle_Detonate(&play.battle, play.battle.targets[index].position, 6, 400)
 	}
 	pressed = crossed(previous, now, 10.2)
 	if crossed(previous, now, 11.5) do place(play, mission.extraction)
@@ -366,4 +381,24 @@ pickups_items :: proc(play: ^Play, items: ^[dynamic]Render.Draw_Item) {
 			box(play, items, base, {0.06, 0.012, 0.2}, {0, 0.105, 0}, .Rubber, {1.4, 0.05, 0.05})
 		}
 	}
+}
+
+FUEL_TANK_HEALTH :: 320.0
+FUEL_TANK_RADIUS_METERS :: 2.0
+
+// Each fuel tank is a target (a sphere at the middle of the cylinder). The night raid asks for both to go up.
+@(private = "file")
+place_fuel_targets :: proc(play: ^Play, sandbox: ^Sandbox) {
+	ground := sandbox.terrain.base_height_meters
+	for placement in sandbox.base.layout.placements {
+		if placement.kind != .Fuel_Tank do continue
+		position := [3]f32{placement.x, ground + 1.9, placement.z}
+		append(&play.mission.fuel_targets, Gameplay.Battle_Add_Target(&play.battle, position, FUEL_TANK_RADIUS_METERS, FUEL_TANK_HEALTH))
+	}
+}
+
+fuel_destroyed :: proc(play: ^Play) -> bool {
+	if len(play.mission.fuel_targets) == 0 do return false
+	for index in play.mission.fuel_targets do if !play.battle.targets[index].destroyed do return false
+	return true
 }

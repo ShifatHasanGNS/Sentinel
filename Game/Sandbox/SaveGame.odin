@@ -83,12 +83,12 @@ save_update :: proc(play: ^Play) {
 	if mission.state.status == .Complete {
 		if !play.completion_saved {
 			play.completion_saved = true
-			play.new_best = Mission.Profile_Record_Completion(&play.profile, mission.state.elapsed_seconds)
+			play.new_best = Mission.Profile_Record_Completion(&play.profile, mission.state.elapsed_seconds, mission.state.variant)
 			profile_write(play.profile)
 		}
 		return
 	}
-	if mission.state.just_completed != {} && mission.state.status == .Active {
+	if mission.state.just_completed != {} && mission.state.status == .Active && mission.state.variant == .Rescue { // Checkpoints belong to the rescue mission.
 		play.profile.checkpoint = checkpoint_capture(play)
 		profile_write(play.profile)
 	}
@@ -96,8 +96,9 @@ save_update :: proc(play: ^Play) {
 
 // "BEST 5:12" (and a new-best notice) on the mission-complete screen.
 best_time_text :: proc(play: ^Play) -> string {
-	if play.profile.best_seconds <= 0 do return ""
-	seconds := int(play.profile.best_seconds)
+	best := play.profile.best_seconds if play.mission.state.variant == .Rescue else play.profile.night_best_seconds
+	if best <= 0 do return ""
+	seconds := int(best)
 	label := "NEW BEST" if play.new_best else "BEST"
 	return fmt.tprintf("%s %d:%02d", label, seconds / 60, seconds % 60)
 }

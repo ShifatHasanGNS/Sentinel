@@ -196,6 +196,9 @@ mission_objective_position :: proc(play: ^Play, objective: Mission.Objective) ->
 	case .Hack_Cameras: return mission.terminal_position
 	case .Destroy_Radar: return mission.radar_dish
 	case .Rescue_Hostage: return mission.hostage.controller.position
+	case .Destroy_Fuel:
+		if len(mission.fuel_targets) == 0 do return {}
+		return play.battle.targets[mission.fuel_targets[0]].position
 	case .Reach_Extraction: return mission.extraction
 	}
 	return {}
@@ -207,6 +210,7 @@ OBJECTIVE_LABELS := [Mission.Objective]string{
 	.Hack_Cameras = "2 COMPUTER",
 	.Destroy_Radar = "3 RADAR",
 	.Rescue_Hostage = "4 HOSTAGE",
+	.Destroy_Fuel = "4 FUEL",
 	.Reach_Extraction = "5 EXTRACT",
 }
 
@@ -231,6 +235,10 @@ draw_map_markers :: proc(play: ^Play, center: [2]f32, factor, scale: f32) {
 		dot(hud, center, factor, position, 1.1, {0.4, 0.6, 1, 1})
 	}
 	draw_objective_markers(play, center, factor, scale)
+	for index in play.mission.fuel_targets {
+		target := play.battle.targets[index]
+		if !target.destroyed do dot(hud, center, factor, target.position, 1.3, {1, 0.5, 0.1, 1})
+	}
 }
 
 @(private = "file")
@@ -241,6 +249,7 @@ draw_objective_markers :: proc(play: ^Play, center: [2]f32, factor, scale: f32) 
 	player := play.battle.player.controller.position
 	pulse := 0.5 + 0.5 * math.sin(play.clock_seconds * 5)
 	for objective in Mission.Objective {
+		if objective not_in mission.required do continue
 		position := mission_objective_position(play, objective)
 		at := center + {position.x, position.z} * factor
 		done := mission.done[objective]

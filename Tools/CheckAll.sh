@@ -19,4 +19,11 @@ for check in GpuCheck TextureCheck RenderCheck; do
 	*) printf 'FAIL  Tests/%s\n%s\n' "$check" "$output" | tail -15; status=1 ;;
 	esac
 done
+# End-to-end: the scripted playthrough must complete every objective of both missions (needs a built ./SentinelFast).
+if [ -x ./SentinelFast ]; then
+	for mission in rescue night; do
+		count=$(SENTINEL_SAVE_DIR=/tmp/sentinel_check_save ./SentinelFast --autoplay --mission $mission --capture 900 /tmp/sentinel_check.bmp 2>&1 | grep -c "AUTOPLAY .* completed")
+		if [ "$count" = "5" ]; then printf 'ok    autoplay %s  5 objectives completed\n' "$mission"; else printf 'FAIL  autoplay %s  %s of 5 objectives\n' "$mission" "$count"; status=1; fi
+	done
+fi
 exit $status

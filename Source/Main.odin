@@ -1,6 +1,7 @@
 package main
 
 import "../Engine/Platform"
+import "../Game/Mission"
 import "../Game/Sandbox"
 import "../Game/Showroom"
 import "core:os"
@@ -27,15 +28,18 @@ main :: proc() {
 }
 
 run_sandbox :: proc(window: ^Platform.Window, input: ^Platform.Input, config: Config) {
+	variant: Mission.Variant = .Night_Raid if config.mission == "night" else .Rescue
+	resume := config.resume
 	for !Platform.Window_Should_Close(window) {
-		restart := play_sandbox_once(window, input, config)
+		restart, next_variant := play_sandbox_once(window, input, config, variant, resume)
 		if !restart do break
+		variant, resume = next_variant, false
 	}
 }
 
 // One playthrough; returns true when the player asked to play again.
-play_sandbox_once :: proc(window: ^Platform.Window, input: ^Platform.Input, config: Config) -> (restart: bool) {
-	sandbox, ok := Sandbox.Sandbox_Create(window.framebuffer_width, window.framebuffer_height, config.time_hours, config.view, config.demo, config.drive, config.overlay, (config.capture_frames == 0 && config.benchmark_frames == 0) || config.briefing, config.resume)
+play_sandbox_once :: proc(window: ^Platform.Window, input: ^Platform.Input, config: Config, variant: Mission.Variant, resume: bool) -> (restart: bool, next_variant: Mission.Variant) {
+	sandbox, ok := Sandbox.Sandbox_Create(window.framebuffer_width, window.framebuffer_height, config.time_hours, config.view, config.demo, config.drive, config.overlay, (config.capture_frames == 0 && config.benchmark_frames == 0) || config.briefing, resume, variant)
 	if !ok do os.exit(1)
 	defer Sandbox.Sandbox_Destroy(&sandbox)
 	Run_Loop(window, input, config, Scene{
@@ -53,7 +57,7 @@ play_sandbox_once :: proc(window: ^Platform.Window, input: ^Platform.Input, conf
 			return Sandbox.Sandbox_Restart_Requested((^Sandbox.Sandbox)(user))
 		},
 	})
-	return Sandbox.Sandbox_Restart_Requested(&sandbox)
+	return Sandbox.Sandbox_Restart_Requested(&sandbox), sandbox.play.next_variant
 }
 
 run_showroom :: proc(window: ^Platform.Window, input: ^Platform.Input, config: Config) {

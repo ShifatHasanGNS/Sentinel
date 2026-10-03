@@ -7,6 +7,7 @@ import World "../../Engine/World"
 import "../Base"
 import "../Gameplay"
 import "../Materials"
+import "../Mission"
 import "core:fmt"
 import "core:math"
 import la "core:math/linalg"
@@ -53,7 +54,7 @@ Sandbox :: struct {
 }
 
 // hours < 0 starts the day cycle at 9:00 and lets it run; otherwise time is fixed at the given hour.
-Sandbox_Create :: proc(width, height: i32, hours: f32, view: string, demo: bool, drive: string, overlay: string, interactive: bool, resume: bool) -> (sandbox: Sandbox, ok: bool) {
+Sandbox_Create :: proc(width, height: i32, hours: f32, view: string, demo: bool, drive: string, overlay: string, interactive: bool, resume: bool, variant: Mission.Variant) -> (sandbox: Sandbox, ok: bool) {
 	sandbox.renderer = Render.Renderer_Create(width, height) or_return
 	sandbox.materials = Materials.Materials_Bake() or_return
 	sandbox.terrain = new(Procedural.Terrain)
@@ -72,9 +73,10 @@ Sandbox_Create :: proc(width, height: i32, hours: f32, view: string, demo: bool,
 	sandbox.base = Base.Base_Scene_Create(Base.Layout_Create(BASE_SEED, sandbox.terrain.plateau_radius_meters), sandbox.terrain.base_height_meters)
 	sandbox.camera = camera_for_view(view)
 	sandbox.clock_runs = hours < 0
-	sandbox.hours = 9 if hours < 0 else hours
+	sandbox.hours = (9 if variant == .Rescue else 21.5) if hours < 0 else hours
+	if variant == .Night_Raid && hours < 0 do sandbox.clock_runs = false // The raid happens at one fixed hour of night.
 	if view == "sun" do sandbox.camera = camera_facing_sun(sandbox.hours)
-	play_create(&sandbox, demo, view != "", drive, overlay, interactive, resume) or_return
+	play_create(&sandbox, demo, view != "", drive, overlay, interactive, resume, variant) or_return
 	if !(view != "") do sync_camera_to_player(&sandbox)
 	update_stream(&sandbox)
 	for len(sandbox.build_queue) > 0 do build_next_chunk(&sandbox)

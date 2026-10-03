@@ -89,6 +89,7 @@ Play :: struct {
 	mouse_idle_seconds: f32,
 	demo_seconds:  f32,
 	restart_requested: bool,
+	next_variant:  Mission.Variant, // Which mission the next playthrough is (R repeats this one, N switches).
 	autoplay:      bool,
 	autoplay_seconds: f32,
 	autoplay_reported: bool,
@@ -120,7 +121,7 @@ terrain_height :: proc(data: rawptr, x, z: f32) -> f32 {
 	return Procedural.Terrain_Height((^Procedural.Terrain)(data)^, x, z)
 }
 
-play_create :: proc(sandbox: ^Sandbox, demo: bool, fly: bool, drive: string, overlay: string, interactive: bool, resume: bool) -> (ok: bool) {
+play_create :: proc(sandbox: ^Sandbox, demo: bool, fly: bool, drive: string, overlay: string, interactive: bool, resume: bool, variant: Mission.Variant) -> (ok: bool) {
 	play := &sandbox.play
 	play.sound = sound_create(interactive && !demo)
 	base_height := sandbox.terrain.base_height_meters
@@ -132,7 +133,7 @@ play_create :: proc(sandbox: ^Sandbox, demo: bool, fly: bool, drive: string, ove
 	spawn.y = terrain_height(sandbox.terrain, spawn.x, spawn.z)
 	play.battle = Gameplay.Battle_Create(ground, boxes[:], spawn, 99)
 	play.battle.collision.ladders = Base.Layout_Ladders(sandbox.base.layout, base_height)
-	mission_create(play, sandbox, interactive && !demo && !fly)
+	mission_create(play, sandbox, interactive && !demo && !fly, variant)
 	cameras_create(play, sandbox)
 	play.doors = Base.Layout_Doors(sandbox.base.layout, base_height)
 	Base.Doors_Register(play.doors[:], &play.battle.collision)
@@ -159,7 +160,7 @@ play_create :: proc(sandbox: ^Sandbox, demo: bool, fly: bool, drive: string, ove
 	play.save_enabled = (interactive && !demo && !fly && drive == "" && overlay == "") || (redirected && overlay == "autoplay")
 	if play.save_enabled {
 		play.profile = profile_load()
-		if resume && play.profile.checkpoint.valid {
+		if resume && variant == .Rescue && play.profile.checkpoint.valid {
 			checkpoint_apply_to_mission(play, play.profile.checkpoint)
 			checkpoint_apply_to_player(play, play.profile.checkpoint)
 			sync_camera_to_player(sandbox)

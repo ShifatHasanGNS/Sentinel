@@ -23,6 +23,7 @@ Checkpoint :: struct {
 // The persistent record across playthroughs.
 Profile :: struct {
 	best_seconds: f32, // 0 when no mission has been completed.
+	night_best_seconds: f32, // Best of the night raid.
 	completions:  int,
 	checkpoint:   Checkpoint,
 }
@@ -30,6 +31,7 @@ Profile :: struct {
 Save_Format :: proc(profile: Profile, allocator := context.temp_allocator) -> string {
 	builder := strings.builder_make(allocator)
 	fmt.sbprintfln(&builder, "best %f", profile.best_seconds)
+	fmt.sbprintfln(&builder, "night_best %f", profile.night_best_seconds)
 	fmt.sbprintfln(&builder, "completions %d", profile.completions)
 	checkpoint := profile.checkpoint
 	if !checkpoint.valid do return strings.to_string(builder)
@@ -58,6 +60,8 @@ Save_Parse :: proc(text: string) -> (profile: Profile) {
 		switch fields[0] {
 		case "best":
 			if value, ok := number(fields, 1); ok && value >= 0 do profile.best_seconds = value
+		case "night_best":
+			if value, ok := number(fields, 1); ok && value >= 0 do profile.night_best_seconds = value
 		case "completions":
 			if value, ok := number(fields, 1); ok && value >= 0 do profile.completions = int(value)
 		case "checkpoint": profile.checkpoint.valid = fields[1] == "1"
@@ -89,11 +93,12 @@ Save_Parse :: proc(text: string) -> (profile: Profile) {
 }
 
 // A mission result: the best time keeps the smaller of the two; a first completion sets it.
-Profile_Record_Completion :: proc(profile: ^Profile, seconds: f32) -> (new_best: bool) {
+Profile_Record_Completion :: proc(profile: ^Profile, seconds: f32, variant: Variant = .Rescue) -> (new_best: bool) {
 	profile.completions += 1
-	profile.checkpoint = {}
-	if profile.best_seconds <= 0 || seconds < profile.best_seconds {
-		profile.best_seconds = seconds
+	if variant == .Rescue do profile.checkpoint = {}
+	best := &profile.best_seconds if variant == .Rescue else &profile.night_best_seconds
+	if best^ <= 0 || seconds < best^ {
+		best^ = seconds
 		return true
 	}
 	return false

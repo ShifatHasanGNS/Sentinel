@@ -81,3 +81,41 @@ test_extraction_opens_only_after_hack_radar_and_hostage_and_ends_the_mission :: 
 	Mission_Update(&mission, Observation{}, 10)
 	testing.expect_value(t, mission.elapsed_seconds, elapsed) // The clock stops.
 }
+
+// Seam: the night raid's different objective set.
+@(test)
+test_the_night_raid_needs_the_fuel_depot_and_not_the_hostage :: proc(t: ^testing.T) {
+	mission := Mission_Create(.Night_Raid)
+	Mission_Start(&mission)
+	testing.expect(t, .Destroy_Fuel in mission.required && .Rescue_Hostage not_in mission.required)
+	Mission_Update(&mission, Observation{inside_compound = true, radar_destroyed = true, hostage_in_reach = true, interact_pressed = true}, 0.1)
+	testing.expect(t, !mission.done[.Rescue_Hostage]) // There is no hostage to rescue in this mission.
+	for _ in 0 ..< int(HACK_SECONDS * 60) + 2 do Mission_Update(&mission, Observation{terminal_in_reach = true, interact_held = true}, 1.0 / 60)
+	Mission_Update(&mission, Observation{at_extraction = true}, 0.1)
+	testing.expect(t, !mission.done[.Reach_Extraction]) // The fuel is still standing.
+	objective, any := Mission_Current_Objective(mission)
+	testing.expect(t, any && objective == .Destroy_Fuel)
+	Mission_Update(&mission, Observation{fuel_destroyed = true}, 0.1)
+	Mission_Update(&mission, Observation{at_extraction = true}, 0.1)
+	testing.expect_value(t, mission.status, Mission_Status.Complete)
+}
+
+@(test)
+test_the_rescue_mission_ignores_the_fuel_depot :: proc(t: ^testing.T) {
+	mission := Mission_Create(.Rescue)
+	Mission_Start(&mission)
+	Mission_Update(&mission, Observation{fuel_destroyed = true}, 0.1)
+	testing.expect(t, !mission.done[.Destroy_Fuel])
+}
+
+@(test)
+test_each_mission_keeps_its_own_best_time :: proc(t: ^testing.T) {
+	profile := Profile{}
+	testing.expect(t, Profile_Record_Completion(&profile, 300, .Rescue))
+	testing.expect(t, Profile_Record_Completion(&profile, 500, .Night_Raid)) // First night run is a best of its own.
+	testing.expect(t, !Profile_Record_Completion(&profile, 600, .Night_Raid))
+	testing.expect_value(t, profile.best_seconds, 300)
+	testing.expect_value(t, profile.night_best_seconds, 500)
+	restored := Save_Parse(Save_Format(profile))
+	testing.expect_value(t, restored.night_best_seconds, 500)
+}
