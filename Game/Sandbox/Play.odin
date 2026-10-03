@@ -530,6 +530,7 @@ play_draw_hud :: proc(sandbox: ^Sandbox, width, height: i32) {
 	if player.pickup_flash > 0 do Render.Hud_Text(hud, (w - Render.Hud_Text_Width("PICKED UP", scale)) / 2, h * 0.7, "PICKED UP", scale, {0.7, 1, 0.7, min(player.pickup_flash, 1)})
 	binoculars_draw_hud(play, w, h, scale)
 	scope_draw_hud(play, w, h, scale)
+	compass_draw_hud(play, w, scale)
 	map_draw_hud(sandbox, w, h, scale)
 	mission_draw_hud(play, w, h, scale)
 	if play.paused do draw_pause_screen(play, w, h, scale)

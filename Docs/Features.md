@@ -177,3 +177,4 @@
 | Second mission, Night Raid (fuel tanks as targets, no hostage, 21:30, separate best time) | `Game/Mission/Mission.odin` : `Variant`, `Variant_Objectives`; `Game/Sandbox/MissionPlay.odin` : `place_fuel_targets` |
 | Squad shouts (a soldier who spots trouble alerts mates within 22 m) and body discovery | `Game/Gameplay/Battle.odin` : `shout`, `discover_bodies` |
 | Pause menu (Esc, Q quits) | `Game/Sandbox/Play.odin` : `play_handle_pause`, `draw_pause_screen` |
+| Compass strip with objective marker | `Game/Sandbox/Compass.odin` : `compass_draw_hud`, `bearing_relative_degrees` |

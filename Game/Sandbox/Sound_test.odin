@@ -30,3 +30,18 @@ test_pan_follows_which_side_the_sound_is_on_and_turns_with_the_listener :: proc(
 	_, turned := spatialize(1, {0, 0, -10}, {0, 0, 0}, math.PI / 2)
 	testing.expect(t, turned > 0.99)
 }
+
+// Seam: bearing_relative_degrees and heading_degrees. Facing -Z (north, yaw 0): east (+X) is 90 degrees right, west 90 left, south is
+// behind (180); turning left (positive yaw) by 90 degrees faces west, where north is then 90 degrees to the right.
+@(test)
+test_bearings_are_measured_clockwise_from_the_way_the_player_faces :: proc(t: ^testing.T) {
+	origin := [3]f32{}
+	testing.expect(t, abs(bearing_relative_degrees(origin, 0, {0, 0, -10})) < 1e-3)
+	testing.expect(t, abs(bearing_relative_degrees(origin, 0, {10, 0, 0}) - 90) < 1e-3)
+	testing.expect(t, abs(bearing_relative_degrees(origin, 0, {-10, 0, 0}) + 90) < 1e-3)
+	testing.expect(t, abs(abs(bearing_relative_degrees(origin, 0, {0, 0, 10})) - 180) < 1e-3)
+	testing.expect(t, abs(bearing_relative_degrees(origin, math.PI / 2, {0, 0, -10}) - 90) < 1e-3)
+	testing.expect(t, abs(heading_degrees(0)) < 1e-3)
+	testing.expect(t, abs(heading_degrees(math.PI / 2) - 270) < 1e-3) // Facing west is 270 degrees clockwise from north.
+	testing.expect(t, abs(heading_degrees(-math.PI / 2) - 90) < 1e-3)
+}
