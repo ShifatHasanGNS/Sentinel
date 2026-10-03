@@ -61,3 +61,33 @@ test_crouching_slows_the_player_and_lowers_the_eye :: proc(t: ^testing.T) {
 	travelled := -battle.player.controller.position.z // Facing -Z.
 	testing.expect(t, abs(travelled - WALK_SPEED * CROUCH_SPEED_FACTOR) < 0.2) // One second at half walking speed, sprint ignored.
 }
+
+// Seam: Battle_Update with the silenced pistol. A normal shot alerts a soldier 40 m away; a suppressed one does not, until he is close.
+@(test)
+test_a_silenced_shot_is_heard_only_from_close_by :: proc(t: ^testing.T) {
+	for silenced in ([2]bool{false, true}) {
+		battle := Battle_Create(FLAT_GROUND, nil, {0, 0, 0}, 5)
+		Battle_Add_Enemy(&battle, .Enemy, {0, 0, 40}, 0, nil) // Facing away (+Z), 40 m behind the player's back... player faces -Z.
+		battle.enemies[0].character.heading_radians = 0
+		battle.player.current = .Silenced_Pistol if silenced else .Pistol
+		battle.player.yaw_radians = math.PI // Face +Z toward him: he is in front but facing away, 40 m: beyond sight range scale.
+		for _ in 0 ..< 5 do Battle_Update(&battle, Player_Input{fire = true}, 1.0 / 30)
+		if silenced do testing.expect_value(t, battle.enemies[0].ai.state, Ai_State.Patrol)
+		else do testing.expect_value(t, battle.enemies[0].ai.state, Ai_State.Alert)
+		Battle_Destroy(&battle)
+	}
+}
+
+@(test)
+test_a_silenced_shot_leaves_no_muzzle_flash :: proc(t: ^testing.T) {
+	battle := Battle_Create(FLAT_GROUND, nil, {0, 0, 0}, 5)
+	defer Battle_Destroy(&battle)
+	battle.player.current = .Silenced_Pistol
+	Battle_Update(&battle, Player_Input{fire = true}, 1.0 / 30)
+	flashes := 0
+	for effect in battle.effects do if effect.kind == .Muzzle_Flash {
+		flashes += 1
+		testing.expect(t, effect.silenced)
+	}
+	testing.expect_value(t, flashes, 1)
+}

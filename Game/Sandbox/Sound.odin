@@ -14,7 +14,7 @@ ROLLOFF_METERS :: f32(10.0)
 // Every sound the game makes, generated at startup, and the voices that must be adjusted while they play.
 Sound_Bank :: struct {
 	device:        ^Audio.Device,
-	rifle, sniper, pistol, launcher, explosion: Audio.Sound,
+	rifle, sniper, pistol, launcher, explosion, silenced: Audio.Sound,
 	step_a, step_b, click, impact, ricochet, chime, creak: Audio.Sound,
 	engine_light, engine_heavy, rotor, alarm: Audio.Sound,
 	engine_voice, rotor_voice, alarm_voice: u32,
@@ -33,6 +33,7 @@ sound_create :: proc(enabled: bool) -> (bank: Sound_Bank) {
 	bank.pistol = Audio.Synth_Gunshot(0.03, 140, 5000, 0.8, 13)
 	bank.launcher = Audio.Synth_Gunshot(0.16, 45, 2500, 1.2, 14)
 	bank.explosion = Audio.Synth_Explosion(15)
+	bank.silenced = Audio.Synth_Gunshot(0.02, 110, 1100, 0.5, 25)
 	bank.step_a, bank.step_b = Audio.Synth_Footstep(0.35, 16), Audio.Synth_Footstep(0.3, 17)
 	bank.click = Audio.Synth_Click(18)
 	bank.impact, bank.ricochet = Audio.Synth_Impact(false, 19), Audio.Synth_Impact(true, 20)
@@ -47,7 +48,7 @@ sound_create :: proc(enabled: bool) -> (bank: Sound_Bank) {
 sound_destroy :: proc(bank: ^Sound_Bank) {
 	if bank.device == nil do return
 	Audio.Device_Destroy(bank.device)
-	for sound in ([]^Audio.Sound{&bank.rifle, &bank.sniper, &bank.pistol, &bank.launcher, &bank.explosion, &bank.step_a, &bank.step_b, &bank.click, &bank.impact, &bank.ricochet, &bank.chime, &bank.creak, &bank.engine_light, &bank.engine_heavy, &bank.rotor, &bank.alarm}) {
+	for sound in ([]^Audio.Sound{&bank.rifle, &bank.sniper, &bank.pistol, &bank.launcher, &bank.explosion, &bank.silenced, &bank.step_a, &bank.step_b, &bank.click, &bank.impact, &bank.ricochet, &bank.chime, &bank.creak, &bank.engine_light, &bank.engine_heavy, &bank.rotor, &bank.alarm}) {
 		Audio.Sound_Destroy(sound)
 	}
 	bank^ = {}
@@ -84,6 +85,7 @@ weapon_sound :: proc(bank: ^Sound_Bank, kind: Weapons.Weapon_Kind) -> ^Audio.Sou
 	case .Sniper_Rifle: return &bank.sniper
 	case .Pistol: return &bank.pistol
 	case .Rocket_Launcher, .Grenade: return &bank.launcher
+	case .Silenced_Pistol: return &bank.silenced
 	}
 	return &bank.rifle
 }
@@ -101,6 +103,7 @@ sound_update :: proc(sandbox: ^Sandbox, delta_seconds: f32) {
 			own := la.length(effect.position - Gameplay.Player_Eye(player)) < 2
 			sound := weapon_sound(&play.sound, player.current) if own else &play.sound.rifle
 			if play.driving != nil && own do sound = &play.sound.rifle
+			if effect.silenced do sound = &play.sound.silenced
 			play_at(play, sound, 0.9, effect.position, 1 if own else 0.95 + 0.1 * f32(int(effect.position.x * 7) % 3))
 		case .Impact:
 			play_at(play, &play.sound.impact, 0.5, effect.position, 0.85 + 0.3 * f32(int(effect.position.z * 5) % 3) / 2)

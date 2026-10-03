@@ -11,6 +11,7 @@ FOOTSTEP_RADIUS_SPRINT :: 18.0
 FOOTSTEP_RADIUS_WALK :: 9.0
 FOOTSTEP_RADIUS_CROUCH_WALK :: 3.0
 SHOT_RADIUS_METERS :: 70.0
+SILENCED_SHOT_RADIUS :: 9.0 // A suppressed pistol is heard about as far as footsteps.
 CROUCH_SPEED_FACTOR :: 0.5
 
 // How easy the player is to spot, as a multiplier on how far enemies and cameras see: crouching and keeping still both help,

@@ -169,3 +169,6 @@
 | Procedural sounds (gunshots, explosion, footsteps, engine, rotor, alarm, chime, creak) | `Engine/Audio/Synth.odin` |
 | Audio output device (miniaudio) | `Engine/Audio/Device.odin` |
 | Game sounds: shots, impacts, blasts, footsteps, reload, vehicles, alarm, doors, pickups | `Game/Sandbox/Sound.odin` : `sound_update`, `spatialize` |
+| Silenced pistol (key 6): no flash or tracer, heard only from 9 m | `Game/Weapons/Behavior.odin` : `silenced`; `Game/Gameplay/Battle.odin` : `shot_noise_radius` |
+| Aim down sights (right mouse), 4x sniper scope with mask | `Game/Sandbox/Optics.odin` : `update_aim`, `scope_draw_hud`, `aim_zoom_for` |
+| Dropped weapons (walk over to resupply) | `Game/Gameplay/Pickup.odin` |

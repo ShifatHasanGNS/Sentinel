@@ -58,6 +58,7 @@ Effect :: struct {
 	end:      [3]f32,
 	age:      f32,
 	lifetime: f32,
+	silenced: bool, // A suppressed shot: drawn without a flash, heard only faintly.
 }
 
 Projectile_Entity :: struct {
@@ -77,7 +78,7 @@ Battle :: struct {
 	projectiles: [dynamic]Projectile_Entity,
 	effects:     [dynamic]Effect,
 	seed:        u32,
-	noise_this_frame: bool, // The player fired this frame: enemies within hearing range notice.
+	shot_noise_radius: f32, // How far this frame's shot (if any) carries; 0 when the player did not shoot.
 }
 
 Battle_Create :: proc(ground: World.Ground, solids: []World.Solid, spawn: [3]f32, seed: u32) -> (battle: Battle) {
@@ -104,7 +105,7 @@ Battle_Add_Enemy :: proc(battle: ^Battle, variant: Characters.Soldier_Variant, p
 }
 
 Battle_Update :: proc(battle: ^Battle, input: Player_Input, delta_seconds: f32) {
-	battle.noise_this_frame = false
+	battle.shot_noise_radius = 0
 	update_player(battle, input, delta_seconds)
 	health_before := battle.player.health.current
 	for index in 0 ..< len(battle.enemies) do update_enemy(battle, index, delta_seconds)
@@ -121,7 +122,7 @@ Battle_Add_Target :: proc(battle: ^Battle, position: [3]f32, radius, health: f32
 
 // A bullet from anything but the player's own hands (a vehicle's gun): traced, with a flash, a tracer and an impact.
 Battle_Fire_Bullet :: proc(battle: ^Battle, origin, direction: [3]f32, damage, range_meters: f32) {
-	battle.noise_this_frame = true
+	battle.shot_noise_radius = SHOT_RADIUS_METERS
 	result := Resolve_Hitscan(battle, origin, direction, damage, range_meters)
 	end := origin + direction * (result.distance if result.kind != .None else range_meters)
 	append(&battle.effects, Effect{kind = .Muzzle_Flash, position = origin, lifetime = EFFECT_FLASH_SECONDS})
@@ -139,7 +140,7 @@ Battle_Alert_Nearby :: proc(battle: ^Battle, position: [3]f32, radius: f32) {
 
 // A rocket or grenade-like shell in flight; it detonates on impact or at the end of its life like the player's.
 Battle_Spawn_Projectile :: proc(battle: ^Battle, kind: Weapons.Weapon_Kind, position, velocity: [3]f32) {
-	battle.noise_this_frame = true
+	battle.shot_noise_radius = SHOT_RADIUS_METERS
 	append(&battle.effects, Effect{kind = .Muzzle_Flash, position = position, lifetime = EFFECT_FLASH_SECONDS})
 	append(&battle.projectiles, Projectile_Entity{body = World.Projectile{position, velocity}, kind = kind})
 }
@@ -218,7 +219,9 @@ damage_enemy :: proc(battle: ^Battle, index: int, damage: f32, zone: Hit_Zone, f
 	if killed {
 		Enemy_Ai_Kill(&enemy.ai)
 		battle.player.kills += 1
-		Battle_Add_Pickup(battle, .Ammo, enemy.controller.position + {0.4, 0, 0.3}, Characters.Soldier_Weapon(enemy.character.variant)) // The soldier's spare magazines fall beside him.
+		weapon := Characters.Soldier_Weapon(enemy.character.variant)
+		Battle_Add_Pickup(battle, .Ammo, enemy.controller.position + {0.4, 0, 0.3}, weapon)
+		Battle_Add_Pickup(battle, .Weapon, enemy.controller.position + {-0.4, 0, 0.2}, weapon) // The soldier's own weapon falls beside him. // The soldier's spare magazines fall beside him.
 	} else {
 		Enemy_Ai_Notice(&enemy.ai, from)
 		Characters.Character_Hit(&enemy.character, la.normalize([3]f32{enemy.controller.position.x - from.x, 0, enemy.controller.position.z - from.z}))
@@ -248,14 +251,14 @@ update_player :: proc(battle: ^Battle, input: Player_Input, delta_seconds: f32) 
 fire_player_weapon :: proc(battle: ^Battle, stats: Weapons.Weapon_Stats) {
 	player := &battle.player
 	player.shots_fired += 1
-	battle.noise_this_frame = true
+	battle.shot_noise_radius = SILENCED_SHOT_RADIUS if stats.silenced else SHOT_RADIUS_METERS
 	origin, aim := Player_Eye(player^), Player_Forward(player^)
 	roll := proc(battle: ^Battle, salt: i32) -> f32 {
 		return Procedural.Hash_To_Unit_Float(Procedural.Hash_Lattice_3(i32(battle.player.shots_fired), salt, 31, battle.seed))
 	}
 	direction := World.Spread_Direction(aim, math.to_radians(stats.spread_degrees), roll(battle, 1), roll(battle, 2))
 	muzzle := origin + aim * 0.7
-	append(&battle.effects, Effect{kind = .Muzzle_Flash, position = muzzle, lifetime = EFFECT_FLASH_SECONDS})
+	append(&battle.effects, Effect{kind = .Muzzle_Flash, position = muzzle, lifetime = EFFECT_FLASH_SECONDS, silenced = stats.silenced})
 	if stats.muzzle_speed > 0 {
 		append(&battle.projectiles, Projectile_Entity{body = World.Projectile{muzzle, direction * stats.muzzle_speed}, kind = player.current})
 		return
@@ -307,7 +310,7 @@ enemy_senses :: proc(battle: ^Battle, enemy: Enemy) -> (senses: Ai_Senses) {
 	distance := la.length(to_player)
 	clear := true
 	if distance > SIGHT_RANGE_METERS * SPRINT_VISIBILITY { // Beyond anything that could be seen: skip the costly line-of-sight ray.
-		senses.heard_shot = la.length(senses.player_position - enemy.controller.position) < Player_Noise_Radius(battle.player, battle.noise_this_frame)
+		senses.heard_shot = la.length(senses.player_position - enemy.controller.position) < max(Player_Noise_Radius(battle.player, false), battle.shot_noise_radius)
 		return senses
 	}
 	if distance > 1e-3 {
@@ -315,7 +318,7 @@ enemy_senses :: proc(battle: ^Battle, enemy: Enemy) -> (senses: Ai_Senses) {
 		clear = !blocker.hit || blocker.distance > distance - 0.5
 	}
 	senses.sees_player = Can_See(eye, Enemy_Forward(enemy), player_eye, clear, Player_Visibility(battle.player))
-	senses.heard_shot = la.length(senses.player_position - enemy.controller.position) < Player_Noise_Radius(battle.player, battle.noise_this_frame)
+	senses.heard_shot = la.length(senses.player_position - enemy.controller.position) < max(Player_Noise_Radius(battle.player, false), battle.shot_noise_radius)
 	return senses
 }
 

@@ -11,6 +11,7 @@ Weapon_Kind :: enum {
 	Pistol,
 	Rocket_Launcher,
 	Grenade,
+	Silenced_Pistol,
 }
 
 Weapon_Build :: proc(kind: Weapon_Kind) -> Procedural.Assembly {
@@ -22,6 +23,7 @@ Weapon_Build :: proc(kind: Weapon_Kind) -> Procedural.Assembly {
 	case .Pistol: pistol(&parts)
 	case .Rocket_Launcher: rocket_launcher(&parts)
 	case .Grenade: grenade(&parts)
+	case .Silenced_Pistol: silenced_pistol(&parts)
 	}
 	return Procedural.Assembly_Build(parts[:])
 }
@@ -83,6 +85,14 @@ pistol :: proc(parts: ^Parts) {
 	barrel(parts, 0.008, 0.03, {0, 0.03, 0.16}, .Gunmetal)
 	box(parts, {0.012, 0.006, 0.045}, {0, -0.005, 0.045}, .Gunmetal)
 	box(parts, {0.008, 0.012, 0.008}, {0, 0.055, 0.13}, .Gunmetal)
+}
+
+// The pistol with a suppressor: a long thin cylinder screwed onto the muzzle, and raised sights to clear it.
+@(private = "file")
+silenced_pistol :: proc(parts: ^Parts) {
+	pistol(parts)
+	barrel(parts, 0.02, 0.15, {0, 0.03, 0.255}, .Gunmetal)
+	box(parts, {0.008, 0.02, 0.008}, {0, 0.065, 0.12}, .Gunmetal)
 }
 
 @(private = "file")

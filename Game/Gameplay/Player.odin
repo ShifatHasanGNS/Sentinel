@@ -59,7 +59,7 @@ Player_Respawn :: proc(player: ^Player) {
 	player.damage_flash, player.hit_marker, player.seconds_since_damage, player.armor = 0, 0, 0, 0
 	for kind in Weapons.Weapon_Kind {
 		stats := Weapons.Weapon_Stats_For(kind)
-		reserve_magazines := 6 if kind == .Rifle || kind == .Pistol else 4
+		reserve_magazines := 6 if kind == .Rifle || kind == .Pistol || kind == .Silenced_Pistol else 4
 		player.weapons[kind] = Weapons.Weapon_State_Create(stats, reserve_magazines)
 	}
 	player.current = .Rifle

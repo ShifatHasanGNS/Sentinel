@@ -7,6 +7,7 @@ import "../Base"
 import "../Catalogue"
 import "../Gameplay"
 import "../Mission"
+import "../Weapons"
 import "../Vehicles"
 import "core:fmt"
 import "core:math"
@@ -41,9 +42,42 @@ update_optics_keys :: proc(play: ^Play, input: ^Platform.Input, delta_seconds: f
 	play.binocular_raise += clamp(target - play.binocular_raise, -BINOCULAR_RAISE_PER_SECOND * delta_seconds, BINOCULAR_RAISE_PER_SECOND * delta_seconds)
 }
 
+// Zoom of a weapon when aimed down its sights (hold the right mouse button): the sniper rifle has a 4x scope, the rifle a red-dot at
+// 1.5x, pistols barely zoom. Heavy launchers do not zoom.
+aim_zoom_for :: proc(kind: Weapons.Weapon_Kind) -> f32 {
+	#partial switch kind {
+	case .Sniper_Rifle: return 4.0
+	case .Rifle: return 1.5
+	case .Pistol, .Silenced_Pistol: return 1.25
+	}
+	return 1.0
+}
+
+AIM_RAISE_PER_SECOND :: 7.0
+
+// Called each frame on foot: right mouse aims down the sights (smoothly), the binoculars override it.
+update_aim :: proc(play: ^Play, input: ^Platform.Input, delta_seconds: f32) {
+	wants := (Platform.Input_Mouse_Down(input, .Right) || play.aim_held) && play.driving == nil && !play.binoculars && !Gameplay.Health_Is_Dead(play.battle.player.health)
+	target: f32 = 1 if wants else 0
+	play.aim += clamp(target - play.aim, -AIM_RAISE_PER_SECOND * delta_seconds, AIM_RAISE_PER_SECOND * delta_seconds)
+}
+
+// A scoped sniper rifle blacks out the screen around a circular view with crosshair lines.
+scope_draw_hud :: proc(play: ^Play, width, height, scale: f32) {
+	if play.aim < 0.75 || play.battle.player.current != .Sniper_Rifle || play.driving != nil do return
+	hud := &play.hud
+	radius := min(width, height) * 0.42
+	draw_binocular_mask(hud, width, height, radius)
+	line := [4]f32{0, 0, 0, 0.9}
+	Render.Hud_Rect(hud, width / 2 - 1, height / 2 - radius, 2, 2 * radius, line)
+	Render.Hud_Rect(hud, width / 2 - radius, height / 2 - 1, 2 * radius, 2, line)
+	Render.Hud_Rect(hud, width / 2 - 3, height / 2 - 3, 6, 6, {1, 0.2, 0.2, 0.9})
+}
+
 // How magnified the view is now: 1 normally, the chosen zoom with the binoculars up, blended in log space while they move.
 binocular_current_zoom :: proc(play: ^Play) -> f32 {
-	return math.pow(play.binocular_zoom, play.binocular_raise)
+	aim_zoom := math.pow(aim_zoom_for(play.battle.player.current), play.aim)
+	return math.pow(play.binocular_zoom, play.binocular_raise) * aim_zoom
 }
 
 // The mouse turns the view more slowly the more it is zoomed, so a binocular view is not twitchy.

@@ -10,6 +10,7 @@ Weapon_Stats :: struct {
 	range_meters:            f32,
 	explosion_radius_meters: f32,
 	automatic:               bool,
+	silenced:                bool, // No muzzle flash, a quiet report, and soldiers hear it only from close by.
 }
 
 Weapon_Stats_For :: proc(kind: Weapon_Kind) -> Weapon_Stats {
@@ -18,6 +19,7 @@ Weapon_Stats_For :: proc(kind: Weapon_Kind) -> Weapon_Stats {
 	case .Sniper_Rifle: return {damage = 90, fire_interval_seconds = 1.2, magazine_size = 5, reload_seconds = 3, spread_degrees = 0.1, range_meters = 800}
 	case .Pistol: return {damage = 18, fire_interval_seconds = 0.25, magazine_size = 12, reload_seconds = 1.5, spread_degrees = 2, range_meters = 120}
 	case .Rocket_Launcher: return {damage = 160, fire_interval_seconds = 1, magazine_size = 1, reload_seconds = 3, spread_degrees = 0.3, muzzle_speed = 45, range_meters = 400, explosion_radius_meters = 5}
+	case .Silenced_Pistol: return {damage = 20, fire_interval_seconds = 0.28, magazine_size = 10, reload_seconds = 1.6, spread_degrees = 1.5, range_meters = 100, silenced = true}
 	case .Grenade: return {damage = 120, fire_interval_seconds = 1, magazine_size = 1, reload_seconds = 0, spread_degrees = 0, muzzle_speed = 14, range_meters = 60, explosion_radius_meters = 6}
 	}
 	unreachable()

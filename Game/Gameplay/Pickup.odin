@@ -6,6 +6,7 @@ import la "core:math/linalg"
 PICKUP_RADIUS_METERS :: 1.3
 MEDKIT_HEAL :: 50.0
 DROPPED_MAGAZINES :: 2
+WEAPON_DROP_MAGAZINES :: 1
 
 // Supplies lying on the ground, collected by walking over them (as in Project I.G.I.): dead soldiers drop ammunition for the weapon
 // they carried (a sniper's is for the sniper rifle), and
@@ -13,6 +14,7 @@ DROPPED_MAGAZINES :: 2
 Pickup_Kind :: enum {
 	Ammo,
 	Medkit,
+	Weapon, // A dropped weapon: walking over it supplies that weapon's ammunition (the player already has the whole arsenal).
 }
 
 Pickup :: struct {
@@ -37,6 +39,10 @@ collect_pickups :: proc(battle: ^Battle) {
 		switch pickup.kind {
 		case .Ammo:
 			player.weapons[pickup.weapon].reserve += DROPPED_MAGAZINES * Weapons.Weapon_Stats_For(pickup.weapon).magazine_size
+			pickup.taken = true
+		case .Weapon:
+			state := &player.weapons[pickup.weapon]
+			state.reserve += Weapons.Weapon_Stats_For(pickup.weapon).magazine_size * WEAPON_DROP_MAGAZINES
 			pickup.taken = true
 		case .Medkit:
 			if player.health.current >= player.health.maximum do continue

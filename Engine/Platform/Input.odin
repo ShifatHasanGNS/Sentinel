@@ -55,6 +55,7 @@ Key :: enum {
 	X,
 	F9,
 	F11,
+	Num_6,
 }
 
 @(private = "file")
@@ -89,6 +90,7 @@ glfw_keys := [Key]i32{
 	.X = glfw.KEY_X,
 	.F9 = glfw.KEY_F9,
 	.F11 = glfw.KEY_F11,
+	.Num_6 = glfw.KEY_6,
 }
 
 Input_Key_Down :: proc(input: ^Input, key: Key) -> bool {

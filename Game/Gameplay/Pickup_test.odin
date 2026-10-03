@@ -39,8 +39,9 @@ test_a_killed_soldier_drops_ammunition :: proc(t: ^testing.T) {
 	defer Battle_Destroy(&battle)
 	for _ in 0 ..< 10 do Resolve_Hitscan(&battle, {0, 1.5, 0}, {0, 0, 1}, 50, 100)
 	testing.expect(t, !Enemy_Is_Alive(battle.enemies[0]))
-	testing.expect_value(t, len(battle.pickups), 1)
+	testing.expect_value(t, len(battle.pickups), 2) // His spare magazines and his weapon.
 	testing.expect_value(t, battle.pickups[0].kind, Pickup_Kind.Ammo)
+	testing.expect_value(t, battle.pickups[1].kind, Pickup_Kind.Weapon)
 }
 
 @(test)

@@ -356,6 +356,9 @@ pickups_items :: proc(play: ^Play, items: ^[dynamic]Render.Draw_Item) {
 		case .Ammo:
 			box(play, items, base, {0.3, 0.16, 0.18}, {}, .Olive_Paint, {})
 			box(play, items, base, {0.08, 0.2, 0.06}, {0.06, 0.1, 0}, .Gunmetal, {})
+		case .Weapon:
+			box(play, items, base, {0.1, 0.07, 0.8}, {}, .Gunmetal, {})
+			box(play, items, base, {0.06, 0.18, 0.1}, {0, -0.1, -0.18}, .Rubber, {})
 		case .Medkit:
 			box(play, items, base, {0.4, 0.2, 0.28}, {}, .Concrete, {0.25, 0.25, 0.25})
 			box(play, items, base, {0.2, 0.012, 0.06}, {0, 0.105, 0}, .Rubber, {1.4, 0.05, 0.05})

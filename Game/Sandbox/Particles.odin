@@ -74,7 +74,7 @@ Particles_Spawn_From_Effects :: proc(particles: ^Particles, effects: []Gameplay.
 		if effect.age > delta_seconds * 1.5 do continue
 		switch effect.kind {
 		case .Muzzle_Flash:
-			if la.length(effect.position - eye) < 2 do continue // The player's own muzzle is at the camera: no smoke in the face.
+			if effect.silenced || la.length(effect.position - eye) < 2 do continue // The player's own muzzle is at the camera: no smoke in the face.
 			for _ in 0 ..< 2 do emit(particles, .Muzzle_Smoke, effect.position, random_direction(particles) * 0.25 + {0, 0.3, 0}, 1.4, 0.12)
 		case .Impact:
 			for _ in 0 ..< 4 do emit(particles, .Dust, effect.position, effect.end * 0.8 + random_direction(particles) * 0.7, 0.9, 0.08)

@@ -98,6 +98,8 @@ Play :: struct {
 	flashlight_on: bool,
 	binoculars:    bool,
 	binocular_zoom: f32,
+	aim:           f32, // 0 hip .. 1 aimed down the sights.
+	aim_held:      bool, // Aiming forced on (for screenshots).
 	binocular_raise: f32, // 0 down .. 1 fully up.
 	binoculars_was_down: bool,
 	map_open:      bool,
@@ -147,6 +149,11 @@ play_create :: proc(sandbox: ^Sandbox, demo: bool, fly: bool, drive: string, ove
 	if drive != "" do board_named_vehicle(play, drive)
 	play.map_open, play.binoculars = overlay == "map", overlay == "binoculars"
 	play.autoplay = overlay == "autoplay"
+	if overlay == "scope" {
+		play.battle.player.current = .Sniper_Rifle
+		play.aim = 1
+		play.aim_held = true
+	}
 	if overlay == "smoke" do Gameplay.Battle_Detonate(&play.battle, {6, sandbox.terrain.base_height_meters, 88}, 6, 0) // A harmless blast in view, for checking smoke.
 	play.binocular_zoom = BINOCULAR_ZOOM_START
 	play.binocular_raise = 1 if play.binoculars else 0
@@ -224,6 +231,7 @@ play_update :: proc(sandbox: ^Sandbox, input: ^Platform.Input, delta_seconds: f3
 	if play.mode == .Play && play.driving == nil do interact_on_foot(play, interact_pressed)
 	Base.Doors_Update(play.doors[:], &play.battle.collision, delta_seconds)
 	update_optics_keys(play, input, delta_seconds)
+	update_aim(play, input, delta_seconds)
 	flashlight_down := Platform.Input_Key_Down(input, .F)
 	if flashlight_down && !play.flashlight_was_down do play.flashlight_on = !play.flashlight_on
 	play.flashlight_was_down = flashlight_down
@@ -298,8 +306,8 @@ collect_input :: proc(input: ^Platform.Input) -> (result: Gameplay.Player_Input)
 	result.crouch = Platform.Input_Key_Down(input, .C)
 	result.jump = Platform.Input_Key_Down(input, .Space)
 	result.respawn = Platform.Input_Key_Down(input, .Enter)
-	keys := [5]Platform.Key{.Num_1, .Num_2, .Num_3, .Num_4, .Num_5}
-	weapons := [5]Weapons.Weapon_Kind{.Rifle, .Pistol, .Sniper_Rifle, .Rocket_Launcher, .Grenade}
+	keys := [6]Platform.Key{.Num_1, .Num_2, .Num_3, .Num_4, .Num_5, .Num_6}
+	weapons := [6]Weapons.Weapon_Kind{.Rifle, .Pistol, .Sniper_Rifle, .Rocket_Launcher, .Grenade, .Silenced_Pistol}
 	for key, index in keys do if Platform.Input_Key_Down(input, key) do result.select = weapons[index]
 	return result
 }
@@ -368,7 +376,8 @@ play_items :: proc(sandbox: ^Sandbox, items, shadow_items: ^[dynamic]Render.Draw
 		flashlight.casts_shadow = true
 		append(&lights, flashlight)
 	}
-	if body_shown do add_held_weapon(play, items)
+	scoped := play.aim > 0.75 && play.battle.player.current == .Sniper_Rifle // Through the scope the rifle itself is out of view.
+	if body_shown && !scoped do add_held_weapon(play, items)
 	return lights
 }
 
@@ -377,6 +386,7 @@ add_effect :: proc(play: ^Play, effect: Gameplay.Effect, items: ^[dynamic]Render
 	fade := 1 - effect.age / effect.lifetime
 	switch effect.kind {
 	case .Tracer:
+		if effect.silenced do return
 		// A real tracer is a short glowing streak flying along the bullet's path, not a beam joining gun and target: draw a few metres
 		// of the path at the point the round has reached by now.
 		start := effect.position
@@ -392,6 +402,7 @@ add_effect :: proc(play: ^Play, effect: Gameplay.Effect, items: ^[dynamic]Render
 		model := along_axis(start + direction * ((head + tail) / 2), direction) * la.matrix4_scale_f32({TRACER_THICKNESS_METERS, TRACER_THICKNESS_METERS, head - tail})
 		append(items, effect_item(&play.effect_cube, model, [3]f32{9, 6.5, 2.5}))
 	case .Muzzle_Flash:
+		if effect.silenced do return // A suppressed shot has no flash.
 		// The player's own flash sits at the camera and would fill the screen, so only its light is kept.
 		if la.length(effect.position - Gameplay.Player_Eye(play.battle.player)) > 2 {
 			append(items, effect_item(&play.effect_sphere, sphere_matrix(effect.position, 0.1), [3]f32{14, 10, 4} * fade))
@@ -479,7 +490,7 @@ play_draw_hud :: proc(sandbox: ^Sandbox, width, height: i32) {
 	scale := max(h / 360, 2)
 	if play.mode == .Play && player.damage_flash > 0 do draw_damage_vignette(hud, w, h, player.damage_flash)
 	if play.mode == .Play && !Gameplay.Health_Is_Dead(player.health) {
-		draw_crosshair(hud, w / 2, h / 2, scale, player.hit_marker > 0)
+		if !(play.aim > 0.75 && player.current == .Sniper_Rifle) do draw_crosshair(hud, w / 2, h / 2, scale, player.hit_marker > 0)
 		if play.driving == nil do draw_vitals(hud, player, w, h, scale)
 		else do draw_vehicle_hud(play, w, h, scale)
 	}
@@ -493,6 +504,7 @@ play_draw_hud :: proc(sandbox: ^Sandbox, width, height: i32) {
 	cameras_draw_hud(play, w, scale)
 	if player.pickup_flash > 0 do Render.Hud_Text(hud, (w - Render.Hud_Text_Width("PICKED UP", scale)) / 2, h * 0.7, "PICKED UP", scale, {0.7, 1, 0.7, min(player.pickup_flash, 1)})
 	binoculars_draw_hud(play, w, h, scale)
+	scope_draw_hud(play, w, h, scale)
 	map_draw_hud(sandbox, w, h, scale)
 	mission_draw_hud(play, w, h, scale)
 	Render.Hud_Flush(hud, width, height)
