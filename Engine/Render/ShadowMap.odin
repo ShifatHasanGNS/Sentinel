@@ -46,18 +46,20 @@ Shadow_Map_Render_Layers :: proc(shadow_map: ^Shadow_Map, matrices: []matrix[4, 
 		GPU.Framebuffer_Set_Depth_Layer(&shadow_map.target, &shadow_map.depth, i32(index))
 		GPU.Framebuffer_Bind(&shadow_map.target)
 		gl.Clear(gl.DEPTH_BUFFER_BIT)
-		draw_casters(&shadow_map.shader, view_projection, items, false)
-		draw_casters(&shadow_map.instanced_shader, view_projection, items, true)
+		frustum := Frustum_From_View_Projection(view_projection)
+		draw_casters(&shadow_map.shader, view_projection, frustum, items, false)
+		draw_casters(&shadow_map.instanced_shader, view_projection, frustum, items, true)
 	}
 	gl.Disable(gl.POLYGON_OFFSET_FILL)
 }
 
 @(private = "file")
-draw_casters :: proc(shader: ^GPU.Shader, view_projection: matrix[4, 4]f32, items: []Draw_Item, instanced: bool) {
+draw_casters :: proc(shader: ^GPU.Shader, view_projection: matrix[4, 4]f32, frustum: Frustum, items: []Draw_Item, instanced: bool) {
 	GPU.Shader_Use(shader)
 	GPU.Shader_Set(shader, "u_LightViewProjection", view_projection)
 	for &item in items {
 		if item.mesh.instanced != instanced do continue
+		if bounds, known := item.bounds.?; known && !Frustum_Intersects_Aabb(frustum, bounds.lowest, bounds.highest) do continue // Outside this cascade's light frustum: its depth would never be seen.
 		GPU.Shader_Set(shader, "u_Model", item.model)
 		Mesh_Draw(item.mesh)
 	}

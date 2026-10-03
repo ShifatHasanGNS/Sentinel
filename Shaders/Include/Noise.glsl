@@ -20,6 +20,19 @@ uint hash_cell(ivec2 cell, int period, uint seed) {
 	return hash_u32(uint(wrapped.x) ^ hash_u32(uint(wrapped.y) ^ seed));
 }
 
+// One of 16 unit directions chosen by the low hash bits: a table lookup instead of cos/sin of a random angle (Perlin's 2002
+// "improved noise" does the same with a small gradient set). Sixteen evenly spaced directions show no lattice alignment.
+const vec2 GRADIENTS[16] = vec2[16](
+	vec2(1.0, 0.0), vec2(0.9238795, 0.3826834), vec2(0.7071068, 0.7071068), vec2(0.3826834, 0.9238795),
+	vec2(0.0, 1.0), vec2(-0.3826834, 0.9238795), vec2(-0.7071068, 0.7071068), vec2(-0.9238795, 0.3826834),
+	vec2(-1.0, 0.0), vec2(-0.9238795, -0.3826834), vec2(-0.7071068, -0.7071068), vec2(-0.3826834, -0.9238795),
+	vec2(0.0, -1.0), vec2(0.3826834, -0.9238795), vec2(0.7071068, -0.7071068), vec2(0.9238795, -0.3826834)
+);
+
+vec2 gradient_direction(uint hash) {
+	return GRADIENTS[hash >> 28u];
+}
+
 // 2D Perlin noise: random unit gradients on the lattice, blended with the quintic fade 6t^5 - 15t^4 + 10t^3.
 // Unit gradients bound the raw value by sqrt(2)/2, so the sqrt(2) factor maps the range to [-1, 1].
 float gradient_noise(vec2 position, int period, uint seed) {
@@ -29,8 +42,7 @@ float gradient_noise(vec2 position, int period, uint seed) {
 	float corner[4];
 	for (int index = 0; index < 4; index++) {
 		ivec2 step = ivec2(index & 1, index >> 1);
-		float angle = hash_to_unit(hash_cell(cell + step, period, seed)) * 6.2831853;
-		corner[index] = dot(vec2(cos(angle), sin(angle)), offset - vec2(step));
+		corner[index] = dot(gradient_direction(hash_cell(cell + step, period, seed)), offset - vec2(step));
 	}
 	return mix(mix(corner[0], corner[1], fade.x), mix(corner[2], corner[3], fade.x), fade.y) * 1.4142136;
 }

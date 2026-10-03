@@ -4,6 +4,11 @@ import "core:math"
 
 import "../Procedural"
 
+Bounds :: struct {
+	lowest:  [3]f32,
+	highest: [3]f32,
+}
+
 Draw_Item :: struct {
 	mesh:               ^Mesh,
 	model:              matrix[4, 4]f32,
@@ -13,6 +18,7 @@ Draw_Item :: struct {
 	illumination_model: Illumination_Model,
 	emission:           [3]f32, // Linear radiance added regardless of lighting (lamps, glowing parts).
 	terrain:            bool, // Blend materials by slope and height instead of using material_layer.
+	bounds:             Maybe(Bounds), // World-space box, when known: lets the shadow pass skip the item for cascades that cannot see it.
 	transparency:       f32, // 0 opaque .. 1 invisible. Drawn by screen-door dithering, since a deferred G-buffer holds one surface per pixel.
 }
 

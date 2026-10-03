@@ -15,6 +15,7 @@ BASE_SEED :: 5
 LOAD_RADIUS_CHUNKS :: 4
 UNLOAD_RADIUS_CHUNKS :: 6
 CHUNK_BUILDS_PER_FRAME_MAX :: 1
+PROP_SHADOW_KEEP_METERS :: 60.0
 BLOOM_STRENGTH :: 0.06
 SHAFT_STRENGTH :: 0.2
 SSAO_RADIUS_METERS :: 0.8
@@ -237,7 +238,7 @@ gather_items :: proc(sandbox: ^Sandbox, camera: Render.Camera) -> (items, shadow
 
 @(private = "file")
 terrain_item :: proc(chunk: ^Chunk) -> Render.Draw_Item {
-	return Render.Draw_Item{mesh = &chunk.mesh, model = la.MATRIX4F32_IDENTITY, uv_scale = {1, 1}, illumination_model = .Cook_Torrance, terrain = true}
+	return Render.Draw_Item{mesh = &chunk.mesh, model = la.MATRIX4F32_IDENTITY, uv_scale = {1, 1}, illumination_model = .Cook_Torrance, terrain = true, bounds = Render.Bounds{chunk.lowest, chunk.highest}}
 }
 
 @(private = "file")
@@ -268,7 +269,7 @@ collect_instances :: proc(sandbox: ^Sandbox, frustum: Render.Frustum, camera_pos
 	clear(&sandbox.bush_instances)
 	clear(&sandbox.grass_instances)
 	for _, &chunk in sandbox.chunks {
-		if chunk_matters(chunk, frustum, camera_position) do for point in chunk.scatter do place_prop(sandbox, point, camera_position)
+		if chunk_matters(chunk, frustum, camera_position) do for point in chunk.scatter do if prop_is_needed(point, frustum, camera_position) do place_prop(sandbox, point, camera_position)
 		if Render.Frustum_Intersects_Aabb(frustum, chunk.lowest, chunk.highest) do for point in chunk.grass do place_grass(sandbox, point, camera_position)
 	}
 	Render.Mesh_Set_Instances(&sandbox.props.tree_trunk, sandbox.trunk_instances[:min(len(sandbox.trunk_instances), TREE_CAPACITY)])
@@ -293,6 +294,16 @@ place_grass :: proc(sandbox: ^Sandbox, point: Procedural.Scatter_Point, camera_p
 	if offset.x * offset.x + offset.z * offset.z > GRASS_DRAW_DISTANCE_METERS * GRASS_DRAW_DISTANCE_METERS do return
 	model := la.matrix4_translate_f32(point.position) * la.matrix4_rotate_f32(point.yaw_radians, {0, 1, 0}) * la.matrix4_scale_f32({point.scale, point.scale, point.scale})
 	append(&sandbox.grass_instances, Render.Instance{model = model, material_layer = f32(Materials.Surface_Material.Grass)})
+}
+
+// Per-instance culling: a prop is kept when it is in view, or close enough that its shadow may fall into view (a 6 m tree at a low sun
+// casts about 25 m, so 60 m is generous). Everything else is dropped before it costs a vertex.
+@(private = "file")
+prop_is_needed :: proc(point: Procedural.Scatter_Point, frustum: Render.Frustum, camera_position: [3]f32) -> bool {
+	radius := 4 * point.scale if point.variant < TREE_VARIANT_LIMIT else 1.5 * point.scale
+	if Render.Frustum_Intersects_Sphere(frustum, point.position + {0, radius * 0.6, 0}, radius) do return true
+	offset := point.position - camera_position
+	return offset.x * offset.x + offset.z * offset.z < PROP_SHADOW_KEEP_METERS * PROP_SHADOW_KEEP_METERS
 }
 
 @(private = "file")

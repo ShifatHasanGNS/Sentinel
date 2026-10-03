@@ -80,14 +80,14 @@ create_lights :: proc() -> (lights: [dynamic]Render.Light) {
 }
 
 as_draw_item :: proc(item: ^Gallery_Item) -> Render.Draw_Item {
-	return Render.Draw_Item{&item.mesh, item.model, i32(item.material), item.uv_scale, item.triplanar, item.illumination_model, {}, false, 0}
+	return Render.Draw_Item{&item.mesh, item.model, i32(item.material), item.uv_scale, item.triplanar, item.illumination_model, {}, false, nil, 0}
 }
 
 // A small emissive sphere marking each local light's position.
 @(private = "file")
 bulb_draw_item :: proc(showroom: ^Showroom, light: Render.Light) -> Render.Draw_Item {
 	model := la.matrix4_translate_f32(light.position) * la.matrix4_scale_f32({BULB_RADIUS_METERS, BULB_RADIUS_METERS, BULB_RADIUS_METERS})
-	return Render.Draw_Item{&showroom.bulb, model, i32(Materials.Surface_Material.Concrete), {1, 1}, false, .Lambert, light.color * 6, false, 0}
+	return Render.Draw_Item{&showroom.bulb, model, i32(Materials.Surface_Material.Concrete), {1, 1}, false, .Lambert, light.color * 6, false, nil, 0}
 }
 
 @(private = "file")

@@ -8,16 +8,36 @@ in vec2 v_uv;
 out vec4 color;
 
 #ifdef BLUR
-uniform sampler2D u_Ao;
-uniform vec2 u_TexelSize;
+uniform sampler2D u_Ao;     // Half resolution.
+uniform vec2 u_TexelSize;   // Of u_Ao.
 
-// The sampling pattern repeats every 4 pixels, so a 4x4 box average cancels it exactly.
+uniform vec2 u_NearFar;
+
+// Distance along the view axis from the nonlinear depth: z = 2nf / (f + n - (2d - 1)(f - n)), one multiply-add and a divide per tap
+// (reconstructing the world position for each of the 16 taps would cost more than the sampling it serves).
+float view_distance(vec2 uv) {
+	float depth = texture(u_GDepth, uv).r;
+	return depth >= 1.0 ? 1e4 : 2.0 * u_NearFar.x * u_NearFar.y / (u_NearFar.y + u_NearFar.x - (2.0 * depth - 1.0) * (u_NearFar.y - u_NearFar.x));
+}
+
+// Depth-aware (bilateral) upsample from half resolution. Each of the 4x4 half-resolution texels around the pixel contributes with a
+// weight that falls off with the difference in view distance, so occlusion never bleeds across a silhouette. The 4x4 footprint also
+// averages away the 4x4 sampling pattern, as the full-resolution box blur did.
 void main() {
-	float sum = 0.0;
-	for (int y = -2; y < 2; y++) {
-		for (int x = -2; x < 2; x++) sum += texture(u_Ao, v_uv + (vec2(x, y) + 0.5) * u_TexelSize).r;
+	float center = view_distance(v_uv);
+	float tolerance = 0.04 * center + 0.05;
+	vec2 base = floor(v_uv / u_TexelSize - 1.5) + 0.5;
+	float sum = 0.0, total = 0.0;
+	for (int y = 0; y < 4; y++) {
+		for (int x = 0; x < 4; x++) {
+			vec2 uv = (base + vec2(x, y)) * u_TexelSize;
+			float difference = (view_distance(uv) - center) / tolerance;
+			float weight = exp(-difference * difference) + 1e-4;
+			sum += weight * texture(u_Ao, uv).r;
+			total += weight;
+		}
 	}
-	color = vec4(vec3(sum / 16.0), 1.0);
+	color = vec4(vec3(sum / total), 1.0);
 }
 #else
 uniform mat4 u_ViewProjection;
