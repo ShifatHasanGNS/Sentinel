@@ -56,6 +56,10 @@ play_sandbox_once :: proc(window: ^Platform.Window, input: ^Platform.Input, conf
 		finished = proc(user: rawptr) -> bool {
 			return Sandbox.Sandbox_Restart_Requested((^Sandbox.Sandbox)(user))
 		},
+		handles_escape = config.capture_frames == 0 && config.benchmark_frames == 0,
+		wants_quit = proc(user: rawptr) -> bool {
+			return Sandbox.Sandbox_Quit_Requested((^Sandbox.Sandbox)(user))
+		},
 	})
 	return Sandbox.Sandbox_Restart_Requested(&sandbox), sandbox.play.next_variant
 }

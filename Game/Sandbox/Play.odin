@@ -89,6 +89,11 @@ Play :: struct {
 	mouse_idle_seconds: f32,
 	demo_seconds:  f32,
 	restart_requested: bool,
+	pause_enabled: bool,
+	sound_muted:   bool,
+	quit_requested: bool,
+	paused:        bool,
+	escape_was_down: bool,
 	next_variant:  Mission.Variant, // Which mission the next playthrough is (R repeats this one, N switches).
 	autoplay:      bool,
 	autoplay_seconds: f32,
@@ -157,6 +162,7 @@ play_create :: proc(sandbox: ^Sandbox, demo: bool, fly: bool, drive: string, ove
 	play.map_open, play.binoculars = overlay == "map", overlay == "binoculars"
 	play.autoplay = overlay == "autoplay"
 	redirected := os.get_env("SENTINEL_SAVE_DIR", context.temp_allocator) != ""
+	play.pause_enabled = interactive && !demo
 	play.save_enabled = (interactive && !demo && !fly && drive == "" && overlay == "") || (redirected && overlay == "autoplay")
 	if play.save_enabled {
 		play.profile = profile_load()
@@ -166,6 +172,7 @@ play_create :: proc(sandbox: ^Sandbox, demo: bool, fly: bool, drive: string, ove
 			sync_camera_to_player(sandbox)
 		}
 	}
+	if overlay == "pause" do play.paused = true
 	if overlay == "scope" {
 		play.battle.player.current = .Sniper_Rifle
 		play.aim = 1
@@ -525,6 +532,7 @@ play_draw_hud :: proc(sandbox: ^Sandbox, width, height: i32) {
 	scope_draw_hud(play, w, h, scale)
 	map_draw_hud(sandbox, w, h, scale)
 	mission_draw_hud(play, w, h, scale)
+	if play.paused do draw_pause_screen(play, w, h, scale)
 	Render.Hud_Flush(hud, width, height)
 }
 
@@ -652,5 +660,35 @@ projectile_items :: proc(play: ^Play, items: ^[dynamic]Render.Draw_Item, lights:
 		append(items, Render.Draw_Item{mesh = &play.effect_sphere, model = sphere_matrix(flame, 0.07), material_layer = i32(Materials.Surface_Material.Gunmetal), uv_scale = {1, 1}, illumination_model = .Lambert, emission = {12, 6, 1.5}})
 		append(lights, Render.Light_Point(flame, {1, 0.6, 0.25}, 60, 10))
 		Particles_Trail(&play.particles, flame)
+	}
+}
+
+// Escape pauses and resumes (the cursor is freed while paused); Q quits from the pause screen. Returns true while paused, so the
+// caller skips the frame's simulation. Does nothing when the window is not interactive (captures, benchmarks).
+play_handle_pause :: proc(sandbox: ^Sandbox, input: ^Platform.Input) -> bool {
+	play := &sandbox.play
+	if !play.pause_enabled do return false
+	escape_down := Platform.Input_Key_Down(input, .Escape)
+	if escape_down && !play.escape_was_down {
+		play.paused = !play.paused
+		Platform.Input_Capture_Mouse(input, !play.paused)
+		play.sound_muted = play.paused
+		if play.sound.device != nil do play.sound.device.mixer.master = 0 if play.paused else 0.8
+	}
+	play.escape_was_down = escape_down
+	if play.paused && Platform.Input_Key_Down(input, .Q) do play.quit_requested = true
+	return play.paused
+}
+
+draw_pause_screen :: proc(play: ^Play, width, height, scale: f32) {
+	hud := &play.hud
+	Render.Hud_Rect(hud, 0, 0, width, height, {0, 0, 0, 0.65})
+	title := "PAUSED"
+	Render.Hud_Text(hud, (width - Render.Hud_Text_Width(title, scale * 3)) / 2, height * 0.34, title, scale * 3, {1, 0.9, 0.4, 1})
+	lines := [?]string{"ESC  RESUME", "F11  FULLSCREEN", "Q  QUIT"}
+	y := height * 0.5
+	for line in lines {
+		Render.Hud_Text(hud, (width - Render.Hud_Text_Width(line, scale * 1.4)) / 2, y, line, scale * 1.4, {1, 1, 1, 0.95})
+		y += 14 * scale * 1.4
 	}
 }

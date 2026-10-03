@@ -107,6 +107,7 @@ Sandbox_Destroy :: proc(sandbox: ^Sandbox) {
 
 // scripted_seconds >= 0 flies a fixed circuit (for repeatable benchmarks); otherwise the player plays, or flies (Tab).
 Sandbox_Update :: proc(sandbox: ^Sandbox, clock: Platform.Clock, input: ^Platform.Input, scripted_seconds: f32) {
+	if play_handle_pause(sandbox, input) do return // Paused: the world holds still.
 	if scripted_seconds >= 0 {
 		sandbox.camera = scripted_camera(sandbox.terrain^, scripted_seconds)
 		play_update_idle(sandbox, clock.delta_seconds)
@@ -348,4 +349,8 @@ Sandbox_Report :: proc(sandbox: ^Sandbox) {
 
 Sandbox_Restart_Requested :: proc(sandbox: ^Sandbox) -> bool {
 	return sandbox.play.restart_requested
+}
+
+Sandbox_Quit_Requested :: proc(sandbox: ^Sandbox) -> bool {
+	return sandbox.play.quit_requested
 }

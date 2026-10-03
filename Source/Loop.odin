@@ -15,6 +15,8 @@ Scene :: struct {
 	render: proc(user: rawptr, window: Platform.Window),
 	report: proc(user: rawptr), // Optional; called when a benchmark ends.
 	finished: proc(user: rawptr) -> bool, // Optional; the loop ends when this returns true (the scene wants to be recreated).
+	handles_escape: bool, // The scene reacts to Escape itself (a pause menu); the loop then leaves it alone.
+	wants_quit: proc(user: rawptr) -> bool, // Optional; true makes the loop close the window.
 }
 
 Run_Loop :: proc(window: ^Platform.Window, input: ^Platform.Input, config: Config, scene: Scene) {
@@ -31,11 +33,12 @@ Run_Loop :: proc(window: ^Platform.Window, input: ^Platform.Input, config: Confi
 		if fullscreen_down && !fullscreen_was_down do Platform.Window_Toggle_Fullscreen(window)
 		if cursor_down && !cursor_was_down && config.capture_frames == 0 && config.benchmark_frames == 0 do Platform.Input_Capture_Mouse(input, !input.captured)
 		fullscreen_was_down, cursor_was_down = fullscreen_down, cursor_down
-		if Platform.Input_Key_Down(input, .Escape) do Platform.Window_Request_Close(window)
+		if !scene.handles_escape && Platform.Input_Key_Down(input, .Escape) do Platform.Window_Request_Close(window)
 		scripted_seconds: f32 = f32(frame) * BENCHMARK_FRAME_SECONDS if config.benchmark_frames > 0 else -1
 		scene.update(scene.user, clock, input, scripted_seconds)
 		scene.render(scene.user, window^)
 		if scene.finished != nil && scene.finished(scene.user) do break
+		if scene.wants_quit != nil && scene.wants_quit(scene.user) do Platform.Window_Request_Close(window)
 		if frame > BENCHMARK_WARMUP_FRAMES && config.benchmark_frames > 0 do append(&frame_milliseconds, clock.delta_seconds * 1000)
 		if frame == config.capture_frames {
 			GPU.Screenshot_Save(config.capture_path, int(window.framebuffer_width), int(window.framebuffer_height))
