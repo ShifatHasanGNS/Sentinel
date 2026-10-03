@@ -40,6 +40,7 @@ TRACER_THICKNESS_METERS :: 0.025
 EXPLOSION_VISUAL_RADIUS_METERS :: 4.0
 // A tracer seen end-on from the muzzle would be a square filling the crosshair, so the player's tracers start a few meters out.
 TRACER_SKIP_METERS :: 4.0
+TRACER_STREAK_METERS :: 3.5
 FLASHLIGHT_INTENSITY :: 90.0
 FLASHLIGHT_RANGE_METERS :: 40.0
 CHARACTERS_PER_VARIANT :: 64
@@ -352,6 +353,7 @@ play_items :: proc(sandbox: ^Sandbox, items, shadow_items: ^[dynamic]Render.Draw
 	}
 	for effect in play.battle.effects do add_effect(play, effect, items, &lights)
 	Particles_Items(play, items)
+	projectile_items(play, items, &lights)
 	mission_items(play, items, &lights)
 	pickups_items(play, items)
 	cameras_items(play, items)
@@ -370,13 +372,20 @@ add_effect :: proc(play: ^Play, effect: Gameplay.Effect, items: ^[dynamic]Render
 	fade := 1 - effect.age / effect.lifetime
 	switch effect.kind {
 	case .Tracer:
+		// A real tracer is a short glowing streak flying along the bullet's path, not a beam joining gun and target: draw a few metres
+		// of the path at the point the round has reached by now.
 		start := effect.position
 		if la.length(start - Gameplay.Player_Eye(play.battle.player)) < 2 do start += la.normalize0(effect.end - start) * TRACER_SKIP_METERS
 		span := effect.end - start
 		length := la.length(span)
 		if length < 1e-3 || la.dot(span, effect.end - effect.position) <= 0 do return
-		model := along_axis(start + span / 2, span / length) * la.matrix4_scale_f32({TRACER_THICKNESS_METERS, TRACER_THICKNESS_METERS, length})
-		append(items, effect_item(&play.effect_cube, model, [3]f32{9, 6.5, 2.5} * fade))
+		direction := span / length
+		progress := clamp(effect.age / effect.lifetime, 0, 1) * length
+		streak := min(TRACER_STREAK_METERS, length)
+		head := min(progress + streak, length)
+		tail := max(head - streak, 0)
+		model := along_axis(start + direction * ((head + tail) / 2), direction) * la.matrix4_scale_f32({TRACER_THICKNESS_METERS, TRACER_THICKNESS_METERS, head - tail})
+		append(items, effect_item(&play.effect_cube, model, [3]f32{9, 6.5, 2.5}))
 	case .Muzzle_Flash:
 		// The player's own flash sits at the camera and would fill the screen, so only its light is kept.
 		if la.length(effect.position - Gameplay.Player_Eye(play.battle.player)) > 2 {
@@ -584,5 +593,26 @@ draw_damage_vignette :: proc(hud: ^Render.Hud, w, h, amount: f32) {
 		Render.Hud_Rect(hud, inset, h - inset - thickness, w - 2 * inset, thickness, color)
 		Render.Hud_Rect(hud, inset, inset + thickness, thickness, h - 2 * inset - 2 * thickness, color)
 		Render.Hud_Rect(hud, w - inset - thickness, inset + thickness, thickness, h - 2 * inset - 2 * thickness, color)
+	}
+}
+
+// Rockets and shells in flight: a dark body along the velocity with a glowing motor and a light; a grenade is a small olive ball. A rocket
+// also leaves a smoke trail (one puff per frame, see Particles).
+@(private = "file")
+projectile_items :: proc(play: ^Play, items: ^[dynamic]Render.Draw_Item, lights: ^[dynamic]Render.Light) {
+	for projectile in play.battle.projectiles {
+		if projectile.kind == .Grenade {
+			append(items, Render.Draw_Item{mesh = &play.effect_sphere, model = sphere_matrix(projectile.position, 0.05), material_layer = i32(Materials.Surface_Material.Olive_Paint), uv_scale = {1, 1}, illumination_model = .Cook_Torrance})
+			continue
+		}
+		speed := la.length(projectile.velocity)
+		if speed < 1e-3 do continue
+		direction := projectile.velocity / speed
+		body := along_axis(projectile.position, direction) * la.matrix4_scale_f32({0.05, 0.05, 0.55})
+		append(items, Render.Draw_Item{mesh = &play.effect_cube, model = body, material_layer = i32(Materials.Surface_Material.Gunmetal), uv_scale = {1, 1}, illumination_model = .Cook_Torrance})
+		flame := projectile.position - direction * 0.32
+		append(items, Render.Draw_Item{mesh = &play.effect_sphere, model = sphere_matrix(flame, 0.07), material_layer = i32(Materials.Surface_Material.Gunmetal), uv_scale = {1, 1}, illumination_model = .Lambert, emission = {12, 6, 1.5}})
+		append(lights, Render.Light_Point(flame, {1, 0.6, 0.25}, 60, 10))
+		Particles_Trail(&play.particles, flame)
 	}
 }

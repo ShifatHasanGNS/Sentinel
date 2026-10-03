@@ -10,9 +10,11 @@ import la "core:math/linalg"
 ROCKET_GRAVITY :: [3]f32{0, -0.6, 0}
 GRENADE_GRAVITY :: [3]f32{0, -9.81, 0}
 GRENADE_FUSE_SECONDS :: 2.5
+GRENADE_RESTITUTION :: 0.35
+GRENADE_FRICTION :: 0.6
 ROCKET_LIFETIME_SECONDS :: 6.0
 HEARING_RANGE_METERS :: 70.0
-EFFECT_TRACER_SECONDS :: 0.08
+EFFECT_TRACER_SECONDS :: 0.12
 EFFECT_FLASH_SECONDS :: 0.06
 EFFECT_IMPACT_SECONDS :: 0.35
 EFFECT_EXPLOSION_SECONDS :: 0.6
@@ -377,7 +379,11 @@ update_projectiles :: proc(battle: ^Battle, delta_seconds: f32) {
 		distance := la.length(travel)
 		fuse: f32 = GRENADE_FUSE_SECONDS if projectile.kind == .Grenade else ROCKET_LIFETIME_SECONDS
 		detonation: Maybe([3]f32)
-		if distance > 1e-5 do detonation = projectile_impact(battle^, previous, travel / distance, distance)
+		if distance > 1e-5 && projectile.kind == .Grenade {
+			bounce_grenade(battle^, projectile, previous, travel / distance, distance)
+		} else if distance > 1e-5 {
+			detonation = projectile_impact(battle^, previous, travel / distance, distance)
+		}
 		if position, struck := detonation.?; struck || projectile.age >= fuse {
 			Battle_Detonate(battle, position if struck else projectile.position, stats.explosion_radius_meters, stats.damage)
 			unordered_remove(&battle.projectiles, index)
@@ -385,6 +391,22 @@ update_projectiles :: proc(battle: ^Battle, delta_seconds: f32) {
 		}
 		index += 1
 	}
+}
+
+// A grenade does not go off on contact: it bounces off walls and the ground, losing most of its speed (restitution 0.35 along the
+// surface normal, friction 0.6 along it), and rolls to rest until its fuse burns down.
+@(private = "file")
+bounce_grenade :: proc(battle: Battle, grenade: ^Projectile_Entity, previous, direction: [3]f32, distance: f32) {
+	hit := World.Raycast_World(battle.collision, battle.ground, previous, direction, distance)
+	if !hit.hit do return
+	normal := hit.normal
+	velocity := grenade.velocity
+	along_normal := la.dot(velocity, normal)
+	if along_normal >= 0 do return
+	tangent := velocity - normal * along_normal
+	grenade.velocity = tangent * GRENADE_FRICTION - normal * along_normal * GRENADE_RESTITUTION
+	grenade.position = hit.point + normal * 0.03
+	if la.length(grenade.velocity) < 0.4 do grenade.velocity = {}
 }
 
 // Where a projectile's last step hits something solid, if it does: a wall, the ground, or a living body.

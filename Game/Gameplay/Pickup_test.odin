@@ -51,3 +51,20 @@ test_a_sniper_drops_sniper_rifle_ammunition :: proc(t: ^testing.T) {
 	for _ in 0 ..< 10 do Resolve_Hitscan(&battle, {0, 1.5, 0}, {0, 0, 1}, 50, 100)
 	testing.expect_value(t, battle.pickups[0].weapon, Weapons.Weapon_Kind.Sniper_Rifle)
 }
+
+// Seam: Battle_Update with a thrown grenade. It must not explode on touching the ground; it bounces, settles near where it landed,
+// and goes off when the fuse runs out.
+@(test)
+test_a_grenade_bounces_and_waits_for_its_fuse :: proc(t: ^testing.T) {
+	battle := Battle_Create(FLAT_GROUND, nil, {0, 0, 0}, 1)
+	defer Battle_Destroy(&battle)
+	append(&battle.projectiles, Projectile_Entity{body = {position = {0, 1.5, 0}, velocity = {0, 2, -8}}, kind = .Grenade})
+	for _ in 0 ..< 45 do Battle_Update(&battle, {}, 1.0 / 30) // 1.5 s: it has hit the ground by now.
+	testing.expect_value(t, len(battle.projectiles), 1)
+	testing.expect(t, battle.projectiles[0].position.y >= 0 && battle.projectiles[0].position.y < 0.5)
+	for _ in 0 ..< 45 do Battle_Update(&battle, {}, 1.0 / 30)
+	testing.expect_value(t, len(battle.projectiles), 0) // Exploded at 2.5 s.
+	exploded := false
+	for effect in battle.effects do if effect.kind == .Explosion do exploded = true
+	testing.expect(t, exploded)
+}

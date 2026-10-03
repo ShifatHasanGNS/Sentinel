@@ -144,3 +144,8 @@ Particles_Items :: proc(play: ^Play, items: ^[dynamic]Render.Draw_Item) {
 		append(items, Render.Draw_Item{mesh = &play.effect_sphere, model = model, material_layer = i32(Materials.Surface_Material.Rubber), uv_scale = {1, 1}, illumination_model = .Lambert})
 	}
 }
+
+// One puff left behind a rocket motor.
+Particles_Trail :: proc(particles: ^Particles, position: [3]f32) {
+	emit(particles, .Muzzle_Smoke, position, random_direction(particles) * 0.15, 1.8, 0.16)
+}
