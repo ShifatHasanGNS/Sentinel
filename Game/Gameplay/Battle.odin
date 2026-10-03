@@ -306,6 +306,10 @@ enemy_senses :: proc(battle: ^Battle, enemy: Enemy) -> (senses: Ai_Senses) {
 	to_player := player_eye - eye
 	distance := la.length(to_player)
 	clear := true
+	if distance > SIGHT_RANGE_METERS * SPRINT_VISIBILITY { // Beyond anything that could be seen: skip the costly line-of-sight ray.
+		senses.heard_shot = la.length(senses.player_position - enemy.controller.position) < Player_Noise_Radius(battle.player, battle.noise_this_frame)
+		return senses
+	}
 	if distance > 1e-3 {
 		blocker := World.Raycast_World(battle.collision, battle.ground, eye, to_player / distance, distance)
 		clear = !blocker.hit || blocker.distance > distance - 0.5

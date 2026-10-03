@@ -127,6 +127,12 @@ World_Hit :: struct {
 @(private = "file")
 closer_solid_hit :: proc(result: ^World_Hit, origin, direction: [3]f32, solid: Solid, index: int, nearest: f32) -> f32 {
 	if solid.disabled do return nearest
+	// Broad phase: a ray that misses the sphere around the solid cannot hit it. Costs a dot product and a compare, where Ray_Solid
+	// spends two sines and two cosines turning the ray into the solid's axes.
+	to_center := solid.center - origin
+	along := la.dot(to_center, direction)
+	radius_squared := la.dot(solid.half_extents, solid.half_extents)
+	if la.dot(to_center, to_center) - along * along > radius_squared || (along < 0 && la.dot(to_center, to_center) > radius_squared) do return nearest
 	hit := Ray_Solid(origin, direction, solid)
 	if !hit.hit || hit.distance > nearest do return nearest
 	result^ = World_Hit{ray = hit, kind = .Box, box_index = index}

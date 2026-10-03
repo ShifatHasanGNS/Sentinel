@@ -1,12 +1,14 @@
 package GPU
 
 import "core:fmt"
+import "core:mem"
 import "core:strings"
 import gl "vendor:OpenGL"
 
 Shader :: struct {
 	program:                  u32,
 	uniform_locations:        map[string]i32,
+	last_values:              map[i32]Uniform_Value, // What each uniform was last set to; an identical set is skipped (program state persists).
 	tolerate_missing_uniforms: bool, // For generic setters where a given shader may legitimately not use every uniform.
 }
 
@@ -38,9 +40,15 @@ Shader_Create_From_Source :: proc(vertex_source, fragment_source: string, label:
 	return shader, true
 }
 
+Uniform_Value :: struct {
+	bytes: [64]u8, // Up to a mat4.
+	size:  int,
+}
+
 Shader_Destroy :: proc(shader: ^Shader) {
 	for name in shader.uniform_locations do delete(name)
 	delete(shader.uniform_locations)
+	delete(shader.last_values)
 	gl.DeleteProgram(shader.program)
 	shader^ = {}
 }
@@ -60,37 +68,67 @@ Shader_Set :: proc {
 	Shader_Set_mat4,
 }
 
+// Skips a set when the uniform already holds exactly these bytes. A draw call per scene item sets about nine uniforms, most of them
+// the same as the previous item's, and each skipped call is a driver round trip saved.
+@(private = "file")
+unchanged :: proc(shader: ^Shader, location: i32, value: ^$T) -> bool {
+	size := size_of(T)
+	cached, present := shader.last_values[location]
+	if present && cached.size == size && mem.compare(cached.bytes[:size], mem.byte_slice(value, size)) == 0 do return true
+	entry: Uniform_Value
+	entry.size = size
+	copy(entry.bytes[:size], mem.byte_slice(value, size))
+	shader.last_values[location] = entry
+	return false
+}
+
 Shader_Set_i32 :: proc(shader: ^Shader, name: string, value: i32) {
-	gl.ProgramUniform1i(shader.program, uniform_location(shader, name), value)
+	value := value
+	location := uniform_location(shader, name)
+	if unchanged(shader, location, &value) do return
+	gl.ProgramUniform1i(shader.program, location, value)
 }
 
 Shader_Set_f32 :: proc(shader: ^Shader, name: string, value: f32) {
-	gl.ProgramUniform1f(shader.program, uniform_location(shader, name), value)
+	value := value
+	location := uniform_location(shader, name)
+	if unchanged(shader, location, &value) do return
+	gl.ProgramUniform1f(shader.program, location, value)
 }
 
 Shader_Set_vec2 :: proc(shader: ^Shader, name: string, value: [2]f32) {
 	value := value
-	gl.ProgramUniform2fv(shader.program, uniform_location(shader, name), 1, &value[0])
+	location := uniform_location(shader, name)
+	if unchanged(shader, location, &value) do return
+	gl.ProgramUniform2fv(shader.program, location, 1, &value[0])
 }
 
 Shader_Set_vec3 :: proc(shader: ^Shader, name: string, value: [3]f32) {
 	value := value
-	gl.ProgramUniform3fv(shader.program, uniform_location(shader, name), 1, &value[0])
+	location := uniform_location(shader, name)
+	if unchanged(shader, location, &value) do return
+	gl.ProgramUniform3fv(shader.program, location, 1, &value[0])
 }
 
 Shader_Set_vec4 :: proc(shader: ^Shader, name: string, value: [4]f32) {
 	value := value
-	gl.ProgramUniform4fv(shader.program, uniform_location(shader, name), 1, &value[0])
+	location := uniform_location(shader, name)
+	if unchanged(shader, location, &value) do return
+	gl.ProgramUniform4fv(shader.program, location, 1, &value[0])
 }
 
 Shader_Set_mat3 :: proc(shader: ^Shader, name: string, value: matrix[3, 3]f32) {
 	value := value
-	gl.ProgramUniformMatrix3fv(shader.program, uniform_location(shader, name), 1, false, &value[0, 0])
+	location := uniform_location(shader, name)
+	if unchanged(shader, location, &value) do return
+	gl.ProgramUniformMatrix3fv(shader.program, location, 1, false, &value[0, 0])
 }
 
 Shader_Set_mat4 :: proc(shader: ^Shader, name: string, value: matrix[4, 4]f32) {
 	value := value
-	gl.ProgramUniformMatrix4fv(shader.program, uniform_location(shader, name), 1, false, &value[0, 0])
+	location := uniform_location(shader, name)
+	if unchanged(shader, location, &value) do return
+	gl.ProgramUniformMatrix4fv(shader.program, location, 1, false, &value[0, 0])
 }
 
 Shader_Bind_Uniform_Block :: proc(shader: ^Shader, block_name: cstring, binding: u32) {

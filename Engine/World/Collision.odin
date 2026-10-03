@@ -97,9 +97,18 @@ is_blocked :: proc(world: Collision_World, position: [3]f32, height: f32) -> boo
 	return false
 }
 
+// Broad phase with no trigonometry: the solid fits inside a circle of radius hypot(half_x, half_z) about its centre, so a body farther
+// than that plus its own radius cannot touch it, whatever the solid's heading.
+@(private = "file")
+within_reach :: proc(solid: Solid, position: [3]f32) -> bool {
+	dx, dz := position.x - solid.center.x, position.z - solid.center.z
+	reach := math.sqrt(solid.half_extents.x * solid.half_extents.x + solid.half_extents.z * solid.half_extents.z) + CONTROLLER_RADIUS_METERS
+	return dx * dx + dz * dz <= reach * reach
+}
+
 @(private = "file")
 blocks :: proc(solid: Solid, position: [3]f32, height: f32) -> bool {
-	if solid.disabled do return false
+	if solid.disabled || !within_reach(solid, position) do return false
 	top, bottom := solid.center.y + solid.half_extents.y, solid.center.y - solid.half_extents.y
 	if top <= position.y + STEP_HEIGHT_METERS || bottom >= position.y + height do return false
 	return circle_overlaps_solid(position, solid)
@@ -127,7 +136,7 @@ support_height :: proc(world: Collision_World, ground: Ground, position: [3]f32)
 @(private = "file")
 raised_by :: proc(solid: Solid, position: [3]f32, height: f32) -> f32 {
 	top := solid.center.y + solid.half_extents.y
-	if solid.disabled || top > position.y + STEP_HEIGHT_METERS + 1e-4 || top <= height do return height
+	if solid.disabled || !within_reach(solid, position) || top > position.y + STEP_HEIGHT_METERS + 1e-4 || top <= height do return height
 	return top if circle_overlaps_solid(position, solid) else height
 }
 
