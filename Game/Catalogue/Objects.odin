@@ -5,6 +5,7 @@ import "../Materials"
 import "core:fmt"
 import "core:math"
 import "core:strings"
+import "core:sync"
 
 // Every object the base is built from. Objects stand on y = 0, face +Z; buildings are long along X, vehicles along Z.
 Object_Kind :: enum {
@@ -224,8 +225,13 @@ Object_Info :: struct {
 @(private = "file")
 info_cache: [Object_Kind]Maybe(Object_Info)
 
+@(private = "package")
+cache_lock: sync.Recursive_Mutex // Test packages run in parallel threads; the caches are filled under this lock.
+
 // Computed on first use and kept for the life of the program.
 Catalogue_Info :: proc(kind: Object_Kind) -> Object_Info {
+	sync.recursive_mutex_lock(&cache_lock)
+	defer sync.recursive_mutex_unlock(&cache_lock)
 	if info, cached := info_cache[kind].?; cached do return info
 	assembly := Catalogue_Build(kind)
 	defer Procedural.Assembly_Destroy(&assembly)

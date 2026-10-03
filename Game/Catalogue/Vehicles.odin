@@ -2,6 +2,7 @@ package Catalogue
 
 import "../../Engine/Procedural"
 import World "../../Engine/World"
+import "core:sync"
 
 Wheel_Mount :: struct {
 	position: [3]f32, // Vehicle frame; y is the wheel's radius (its axle height).
@@ -67,6 +68,8 @@ spec_cache: [Object_Kind]Maybe(Vehicle_Spec)
 
 // Built on first use and kept for the life of the program. Only the five vehicle kinds have one.
 Catalogue_Vehicle_Spec :: proc(kind: Object_Kind) -> ^Vehicle_Spec {
+	sync.recursive_mutex_lock(&cache_lock)
+	defer sync.recursive_mutex_unlock(&cache_lock)
 	if spec_cache[kind] == nil {
 		spec_cache[kind] = vehicle_spec_for(kind)
 	}
