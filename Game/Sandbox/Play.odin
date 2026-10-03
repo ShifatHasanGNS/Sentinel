@@ -35,7 +35,7 @@ RECOIL_KICK_METERS :: 0.06
 RECOIL_DECAY_PER_SECOND :: 10.0
 DEMO_TURN_RADIANS_PER_SECOND :: 5.0
 DEMO_ENGAGE_DISTANCE_METERS :: 22.0
-EFFECT_SPHERE_SEGMENTS :: 12
+EFFECT_SPHERE_SEGMENTS :: 20
 TRACER_THICKNESS_METERS :: 0.025
 EXPLOSION_VISUAL_RADIUS_METERS :: 4.0
 // A tracer seen end-on from the muzzle would be a square filling the crosshair, so the player's tracers start a few meters out.
@@ -141,6 +141,7 @@ play_create :: proc(sandbox: ^Sandbox, demo: bool, fly: bool, drive: string, ove
 	if drive != "" do board_named_vehicle(play, drive)
 	play.map_open, play.binoculars = overlay == "map", overlay == "binoculars"
 	play.autoplay = overlay == "autoplay"
+	if overlay == "smoke" do Gameplay.Battle_Detonate(&play.battle, {6, sandbox.terrain.base_height_meters, 88}, 6, 0) // A harmless blast in view, for checking smoke.
 	play.binocular_zoom = BINOCULAR_ZOOM_START
 	play.binocular_raise = 1 if play.binoculars else 0
 	return true

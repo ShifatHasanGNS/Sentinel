@@ -173,6 +173,7 @@ draw_geometry_item :: proc(shader: ^GPU.Shader, item: ^Draw_Item) {
 	GPU.Shader_Set(shader, "u_IlluminationModel", i32(item.illumination_model))
 	GPU.Shader_Set(shader, "u_Emission", item.emission)
 	GPU.Shader_Set(shader, "u_Terrain", i32(item.terrain))
+	GPU.Shader_Set(shader, "u_Transparency", item.transparency)
 	Mesh_Draw(item.mesh)
 }
 

@@ -13,6 +13,7 @@ Draw_Item :: struct {
 	illumination_model: Illumination_Model,
 	emission:           [3]f32, // Linear radiance added regardless of lighting (lamps, glowing parts).
 	terrain:            bool, // Blend materials by slope and height instead of using material_layer.
+	transparency:       f32, // 0 opaque .. 1 invisible. Drawn by screen-door dithering, since a deferred G-buffer holds one surface per pixel.
 }
 
 Sky :: struct {

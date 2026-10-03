@@ -41,6 +41,9 @@ void main() {
 	gl_Position = u_ViewProjection * world_position;
 }
 #stage fragment
+#ifndef INSTANCED
+uniform mat4 u_Model;
+#endif
 flat in float v_layer;
 in vec3 v_world_position;
 in vec3 v_world_normal;
@@ -58,11 +61,26 @@ uniform bool u_Triplanar;
 uniform int u_IlluminationModel;
 uniform vec3 u_Emission;
 uniform float u_GroundLevel;
+uniform float u_Transparency;
+
+// Screen-door transparency: a 4x4 ordered (Bayer) threshold per pixel drops that fraction of fragments. FXAA and SSAO blur the
+// pattern, so a puff reads as thinning smoke even though the G-buffer stores one opaque surface per pixel.
+float bayer_threshold(vec2 pixel) {
+	const float pattern[16] = float[16](0.0, 8.0, 2.0, 10.0, 12.0, 4.0, 14.0, 6.0, 3.0, 11.0, 1.0, 9.0, 15.0, 7.0, 13.0, 5.0);
+	ivec2 cell = ivec2(pixel) & 3;
+	return (pattern[cell.y * 4 + cell.x] + 0.5) / 16.0;
+}
 uniform vec3 u_CameraPosition;
 const float DETAIL_DISTANCE_METERS = 25.0; // Fine detail and weathering are for close surfaces: farther away they are sub-pixel.
 const float WEATHER_DISTANCE_METERS = 80.0;
 
 void main() {
+#ifndef INSTANCED
+	// Each item shifts the pattern by its own offset (from where it is), so overlapping puffs fill each other's holes instead of
+	// stacking identical screens.
+	vec2 shift = floor(fract(vec2(u_Model[3].x * 0.731 + u_Model[3].y * 0.297, u_Model[3].z * 0.613 + u_Model[3].y * 0.419)) * 4.0);
+	if (u_Transparency > 0.0 && bayer_threshold(gl_FragCoord.xy + shift) < u_Transparency) discard;
+#endif
 	vec3 geometric_normal = normalize(v_world_normal);
 	vec3 triplanar_position = v_world_position * u_TriplanarScale;
 	vec3 position_dx = dFdx(triplanar_position); // Taken here, in uniform control flow, for the textureGrad calls below.

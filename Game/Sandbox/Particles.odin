@@ -80,10 +80,11 @@ Particles_Spawn_From_Effects :: proc(particles: ^Particles, effects: []Gameplay.
 			for _ in 0 ..< 4 do emit(particles, .Dust, effect.position, effect.end * 0.8 + random_direction(particles) * 0.7, 0.9, 0.08)
 			if la.length(effect.end) > 0.5 do add_decal(particles, effect.position, la.normalize(effect.end))
 		case .Explosion:
-			for _ in 0 ..< 16 {
+			for _ in 0 ..< 28 {
 				direction := random_direction(particles)
-				emit(particles, .Blast_Smoke, effect.position + direction * 0.5, direction * (2 + 3 * random_unit(particles)) + {0, 1.5, 0}, 3 + 2 * random_unit(particles), 0.8 + 0.8 * random_unit(particles))
+				emit(particles, .Blast_Smoke, effect.position + direction * 0.4, direction * (1.5 + 3 * random_unit(particles)) + {0, 2, 0}, 6 + 4 * random_unit(particles), 0.6 + 0.7 * random_unit(particles))
 			}
+			for _ in 0 ..< 12 do emit(particles, .Dust, effect.position, random_direction(particles) * 6 + {0, 4, 0}, 1.4, 0.15) // Flung debris and dirt.
 		case .Tracer:
 		}
 	}
@@ -114,10 +115,17 @@ Particles_Update :: proc(particles: ^Particles, delta_seconds: f32) {
 	}
 }
 
-// Radius factor over a puff's life: swells fast to full size by 25% and then dwindles, so it grows from nothing and vanishes.
+// Radius factor over a puff's life: it swells quickly and keeps growing slowly as it spreads.
 puff_scale :: proc(puff: Puff) -> f32 {
 	t := clamp(puff.age / puff.lifetime, 0, 1)
-	return math.sin(math.PI * math.pow(t, 0.55)) * (1 + 1.5 * t)
+	return (1 - math.exp(-8 * t)) * (1 + 1.6 * t)
+}
+
+// How see-through a puff is: dense when young, thinning to nothing by the end of its life (smoke dilutes as it spreads).
+puff_transparency :: proc(puff: Puff) -> f32 {
+	t := clamp(puff.age / puff.lifetime, 0, 1)
+	base: f32 = 0.35 if puff.kind == .Blast_Smoke else 0.5
+	return base + (1 - base) * t * t
 }
 
 // Draw items: puffs as grey (or brown for dust, charcoal for blasts) spheres, decals as flattened black discs.
@@ -128,8 +136,8 @@ Particles_Items :: proc(play: ^Play, items: ^[dynamic]Render.Draw_Item) {
 		if radius < 0.005 do continue
 		layer := Materials.Surface_Material.Concrete
 		if puff.kind == .Dust do layer = .Sand
-		if puff.kind == .Blast_Smoke do layer = .Asphalt
-		append(items, Render.Draw_Item{mesh = &play.effect_sphere, model = sphere_matrix(puff.position, radius), material_layer = i32(layer), uv_scale = {1, 1}, triplanar = true, illumination_model = .Oren_Nayar})
+		if puff.kind == .Blast_Smoke do layer = .Fabric_Dark
+		append(items, Render.Draw_Item{mesh = &play.effect_sphere, model = sphere_matrix(puff.position, radius), material_layer = i32(layer), uv_scale = {1, 1}, triplanar = true, illumination_model = .Oren_Nayar, transparency = puff_transparency(puff)})
 	}
 	for decal in particles.decals {
 		model := along_axis(decal.position, decal.normal) * la.matrix4_scale_f32({decal.radius, decal.radius, 0.004})
