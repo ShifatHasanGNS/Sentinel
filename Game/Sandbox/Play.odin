@@ -13,6 +13,7 @@ import "../Vehicles"
 import "../Weapons"
 import "core:fmt"
 import "core:math"
+import "core:os"
 import la "core:math/linalg"
 import "core:strings"
 
@@ -59,6 +60,11 @@ Weapon_View_Group :: struct {
 Play :: struct {
 	battle:        Gameplay.Battle,
 	mission:       Mission_Play,
+	profile:       Mission.Profile,
+	save_enabled:  bool,
+	was_dead:      bool,
+	completion_saved: bool,
+	new_best:      bool,
 	sound:         Sound_Bank,
 	last_pickup_flash: f32,
 	particles:     Particles,
@@ -114,7 +120,7 @@ terrain_height :: proc(data: rawptr, x, z: f32) -> f32 {
 	return Procedural.Terrain_Height((^Procedural.Terrain)(data)^, x, z)
 }
 
-play_create :: proc(sandbox: ^Sandbox, demo: bool, fly: bool, drive: string, overlay: string, interactive: bool) -> (ok: bool) {
+play_create :: proc(sandbox: ^Sandbox, demo: bool, fly: bool, drive: string, overlay: string, interactive: bool, resume: bool) -> (ok: bool) {
 	play := &sandbox.play
 	play.sound = sound_create(interactive && !demo)
 	base_height := sandbox.terrain.base_height_meters
@@ -149,6 +155,16 @@ play_create :: proc(sandbox: ^Sandbox, demo: bool, fly: bool, drive: string, ove
 	if drive != "" do board_named_vehicle(play, drive)
 	play.map_open, play.binoculars = overlay == "map", overlay == "binoculars"
 	play.autoplay = overlay == "autoplay"
+	redirected := os.get_env("SENTINEL_SAVE_DIR", context.temp_allocator) != ""
+	play.save_enabled = (interactive && !demo && !fly && drive == "" && overlay == "") || (redirected && overlay == "autoplay")
+	if play.save_enabled {
+		play.profile = profile_load()
+		if resume && play.profile.checkpoint.valid {
+			checkpoint_apply_to_mission(play, play.profile.checkpoint)
+			checkpoint_apply_to_player(play, play.profile.checkpoint)
+			sync_camera_to_player(sandbox)
+		}
+	}
 	if overlay == "scope" {
 		play.battle.player.current = .Sniper_Rifle
 		play.aim = 1
@@ -264,6 +280,7 @@ play_update :: proc(sandbox: ^Sandbox, input: ^Platform.Input, delta_seconds: f3
 	Particles_Update(&play.particles, delta_seconds)
 	update_view_motion(play, delta_seconds)
 	sound_update(sandbox, delta_seconds)
+	save_update(play)
 	if play.battle.player.shots_fired != play.shots_seen {
 		play.shots_seen = play.battle.player.shots_fired
 		play.recoil = RECOIL_KICK_METERS

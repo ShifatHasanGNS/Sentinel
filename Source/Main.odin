@@ -35,7 +35,7 @@ run_sandbox :: proc(window: ^Platform.Window, input: ^Platform.Input, config: Co
 
 // One playthrough; returns true when the player asked to play again.
 play_sandbox_once :: proc(window: ^Platform.Window, input: ^Platform.Input, config: Config) -> (restart: bool) {
-	sandbox, ok := Sandbox.Sandbox_Create(window.framebuffer_width, window.framebuffer_height, config.time_hours, config.view, config.demo, config.drive, config.overlay, (config.capture_frames == 0 && config.benchmark_frames == 0) || config.briefing)
+	sandbox, ok := Sandbox.Sandbox_Create(window.framebuffer_width, window.framebuffer_height, config.time_hours, config.view, config.demo, config.drive, config.overlay, (config.capture_frames == 0 && config.benchmark_frames == 0) || config.briefing, config.resume)
 	if !ok do os.exit(1)
 	defer Sandbox.Sandbox_Destroy(&sandbox)
 	Run_Loop(window, input, config, Scene{

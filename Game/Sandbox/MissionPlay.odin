@@ -176,7 +176,7 @@ mission_draw_hud :: proc(play: ^Play, width, height, scale: f32) {
 	mission := &play.mission
 	switch mission.state.status {
 	case .Briefing: draw_briefing(hud, width, height, scale)
-	case .Complete: draw_mission_complete(hud, mission, width, height, scale)
+	case .Complete: draw_mission_complete(play, hud, mission, width, height, scale)
 	case .Active: if !play.map_open do draw_objectives(play, width, height, scale)
 	}
 }
@@ -240,13 +240,14 @@ draw_briefing :: proc(hud: ^Render.Hud, width, height, scale: f32) {
 }
 
 @(private = "file")
-draw_mission_complete :: proc(hud: ^Render.Hud, mission: ^Mission_Play, width, height, scale: f32) {
+draw_mission_complete :: proc(play: ^Play, hud: ^Render.Hud, mission: ^Mission_Play, width, height, scale: f32) {
 	Render.Hud_Rect(hud, 0, 0, width, height, {0, 0, 0, 0.6})
 	title := "MISSION COMPLETE"
 	seconds := int(mission.state.elapsed_seconds)
 	Render.Hud_Text(hud, (width - Render.Hud_Text_Width(title, scale * 3)) / 2, height * 0.38, title, scale * 3, {0.5, 1, 0.6, 1})
 	line := fmt.tprintf("TIME %d:%02d", seconds / 60, seconds % 60)
 	Render.Hud_Text(hud, (width - Render.Hud_Text_Width(line, scale * 1.5)) / 2, height * 0.5, line, scale * 1.5, {1, 1, 1, 0.95})
+	if best := best_time_text(play); best != "" do Render.Hud_Text(hud, (width - Render.Hud_Text_Width(best, scale * 1.2)) / 2, height * 0.55, best, scale * 1.2, {1, 0.9, 0.4, 1})
 	hint := "PRESS R TO PLAY AGAIN    ESC TO QUIT"
 	Render.Hud_Text(hud, (width - Render.Hud_Text_Width(hint, scale * 1.1)) / 2, height * 0.6, hint, scale * 1.1, {1, 1, 1, 0.85})
 }

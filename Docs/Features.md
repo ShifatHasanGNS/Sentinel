@@ -172,3 +172,5 @@
 | Silenced pistol (key 6): no flash or tracer, heard only from 9 m | `Game/Weapons/Behavior.odin` : `silenced`; `Game/Gameplay/Battle.odin` : `shot_noise_radius` |
 | Aim down sights (right mouse), 4x sniper scope with mask | `Game/Sandbox/Optics.odin` : `update_aim`, `scope_draw_hud`, `aim_zoom_for` |
 | Dropped weapons (walk over to resupply) | `Game/Gameplay/Pickup.odin` |
+| Save format (checkpoint and best time, plain text, damage-tolerant parser) | `Game/Mission/Save.odin` : `Save_Format`, `Save_Parse`, `Profile_Record_Completion` |
+| Checkpoints after each objective, respawn at the last one, `--continue`, best time on the complete screen | `Game/Sandbox/SaveGame.odin` : `save_update`, `checkpoint_capture` |
