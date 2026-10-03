@@ -119,13 +119,14 @@ play_create :: proc(sandbox: ^Sandbox, demo: bool, fly: bool, drive: string, ove
 	if demo do spawn = {0, 0, 52}
 	spawn.y = terrain_height(sandbox.terrain, spawn.x, spawn.z)
 	play.battle = Gameplay.Battle_Create(ground, boxes[:], spawn, 99)
+	play.battle.collision.ladders = Base.Layout_Ladders(sandbox.base.layout, base_height)
 	mission_create(play, sandbox, interactive && !demo && !fly)
 	cameras_create(play, sandbox)
 	play.doors = Base.Layout_Doors(sandbox.base.layout, base_height)
 	Base.Doors_Register(play.doors[:], &play.battle.collision)
 	play.door_renderer = Base.Door_Renderer_Create(play.doors[:])
 	vehicles_create(play, sandbox)
-	spawn_garrison(&play.battle, sandbox.terrain)
+	spawn_garrison(&play.battle, sandbox.terrain, sandbox.base.layout)
 	play.soldiers = Characters.Character_Renderer_Create(CHARACTERS_PER_VARIANT)
 	play.hud = Render.Hud_Create() or_return
 	for kind in Weapons.Weapon_Kind {
@@ -175,15 +176,18 @@ upload_unit :: proc(mesh: Procedural.Mesh) -> Render.Mesh {
 
 // Gate guards, snipers beside the watchtowers, and three patrols through the compound.
 @(private = "file")
-spawn_garrison :: proc(battle: ^Gameplay.Battle, terrain: ^Procedural.Terrain) {
+spawn_garrison :: proc(battle: ^Gameplay.Battle, terrain: ^Procedural.Terrain, layout: Base.Layout) {
 	ground := terrain.base_height_meters
 	at :: proc(x, y, z: f32) -> [3]f32 {
 		return {x, y, z}
 	}
 	for x in ([2]f32{-6, 6}) do Gameplay.Battle_Add_Enemy(battle, .Guard, at(x, ground, 48), 0, nil)
-	for angle in ([4]f32{45, 135, 225, 315}) {
-		position := [2]f32{math.cos(math.to_radians(angle)), math.sin(math.to_radians(angle))} * 57
-		Gameplay.Battle_Add_Enemy(battle, .Sniper, at(position.x, ground, position.y), math.atan2(-position.x, -position.y) + math.PI, nil)
+	// A sniper up in each watchtower's lookout, watching the approach (the towers face outward).
+	for placement in layout.placements {
+		if placement.kind != .Watchtower do continue
+		yaw := math.to_radians(placement.yaw_degrees)
+		lookout := [3]f32{placement.x, ground, placement.z} + World.rotate_about_y({0.5, 6.25, -0.3}, yaw)
+		Gameplay.Battle_Add_Enemy(battle, .Sniper, lookout, yaw, nil)
 	}
 	west_loop := [][3]f32{at(-32, ground, -34), at(-32, ground, 34), at(-20, ground, 34), at(-20, ground, -34)}
 	yard_loop := [][3]f32{at(-12, ground, -20), at(14, ground, -20), at(14, ground, 18), at(-12, ground, 18)}

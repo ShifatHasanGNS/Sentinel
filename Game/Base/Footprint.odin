@@ -116,3 +116,14 @@ Layout_Solids :: proc(layout: Layout, ground_height_meters: f32) -> (solids: [dy
 	}
 	return solids
 }
+
+// Every ladder in the layout as a climbable volume turned with its object.
+Layout_Ladders :: proc(layout: Layout, ground_height_meters: f32) -> (ladders: [dynamic]World.Solid) {
+	for placement in layout.placements {
+		yaw := math.to_radians(placement.yaw_degrees)
+		for box in Catalogue.Catalogue_Ladders(placement.kind) {
+			append(&ladders, World.Solid_From_Object_Box(box, {placement.x, ground_height_meters, placement.z}, yaw))
+		}
+	}
+	return ladders
+}

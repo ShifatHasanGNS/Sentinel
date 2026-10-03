@@ -8,6 +8,8 @@ JUMP_SPEED_METERS_PER_SECOND :: 4.6
 CONTROLLER_RADIUS_METERS :: 0.35
 CONTROLLER_HEIGHT_METERS :: 1.8
 CONTROLLER_CROUCH_HEIGHT_METERS :: 1.1
+CLIMB_SPEED_METERS_PER_SECOND :: 1.8
+LADDER_REACH_METERS :: 0.45 // How far from the ladder's face a body can be and still hold on.
 STEP_HEIGHT_METERS :: 0.35 // Ledges up to this tall are stepped onto; taller ones are walls.
 GROUND_SNAP_METERS :: 0.35 // On the ground, drops up to this far are walked down; larger ones are falls.
 SUBSTEP_SECONDS_MAX :: 1.0 / 60 // Longer steps are split, so fast motion cannot skip over a thin wall.
@@ -23,11 +25,13 @@ Ground :: struct {
 Collision_World :: struct {
 	boxes:     [dynamic]Solid,
 	temporary: [dynamic]Solid,
+	ladders:   [dynamic]Solid, // Climbable volumes; the solid's local +Z is the side a climber stands on.
 }
 
 Collision_World_Destroy :: proc(world: ^Collision_World) {
 	delete(world.boxes)
 	delete(world.temporary)
+	delete(world.ladders)
 }
 
 // A character body: a vertical cylinder whose bottom (position) is at the feet.
@@ -50,6 +54,10 @@ Controller_Step :: proc(controller: ^Controller, world: Collision_World, ground:
 	step := delta_seconds / f32(substeps)
 	for _ in 0 ..< substeps {
 		move_horizontally(controller, world, wish * step)
+		if ladder, on_ladder := ladder_at(world, controller.position); on_ladder {
+			climb(controller, world, ground, ladder, wish, step)
+			continue
+		}
 		resolve_vertically(controller, world, ground, jump, step)
 	}
 }
@@ -161,4 +169,37 @@ Controller_Set_Crouch :: proc(controller: ^Controller, world: Collision_World, c
 		return
 	}
 	if controller.crouching && !is_blocked(world, controller.position, CONTROLLER_HEIGHT_METERS) do controller.crouching = false
+}
+
+// The ladder the body is holding, if any: its feet within the ladder's height span and its circle within reach of the volume.
+@(private = "file")
+ladder_at :: proc(world: Collision_World, position: [3]f32) -> (ladder: Solid, found: bool) {
+	for candidate in world.ladders {
+		local := to_local(candidate, position)
+		bottom, top := -candidate.half_extents.y, candidate.half_extents.y
+		if local.y < bottom - 0.05 || local.y > top - 0.1 do continue
+		if abs(local.x) > candidate.half_extents.x + LADDER_REACH_METERS || abs(local.z) > candidate.half_extents.z + LADDER_REACH_METERS do continue
+		return candidate, true
+	}
+	return {}, false
+}
+
+// On a ladder gravity is suspended: pushing toward the ladder climbs, pulling away climbs down, and at the bottom the feet rest on
+// whatever is below. Reaching the top hands over to normal walking (the platform there becomes the support).
+@(private = "file")
+climb :: proc(controller: ^Controller, world: Collision_World, ground: Ground, ladder: Solid, wish: [2]f32, step: f32) {
+	inward := rotate_about_y({0, 0, -1}, ladder.yaw_radians)
+	toward := wish.x * inward.x + wish.y * inward.z
+	vertical: f32 = 0
+	if toward > 0.1 do vertical = CLIMB_SPEED_METERS_PER_SECOND
+	else if toward < -0.1 do vertical = -CLIMB_SPEED_METERS_PER_SECOND
+	controller.velocity.y = vertical
+	controller.position.y += vertical * step
+	support := support_height(world, ground, controller.position)
+	if controller.position.y <= support {
+		controller.position.y, controller.velocity.y = support, 0
+		controller.on_ground = true
+	} else {
+		controller.on_ground = false
+	}
 }

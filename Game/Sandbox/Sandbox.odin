@@ -168,6 +168,7 @@ camera_for_view :: proc(view: string) -> Fly_Camera {
 	case "barracks": return Fly_Camera_Looking_At({-31, 11.7, -4}, {-44, 11.5, -2})
 	case "camera": return Fly_Camera_Looking_At({-30, 15.5, 33}, {-43.8, 16, 43.8})
 	case "field": return Fly_Camera_Looking_At({10, 9, 215}, {10, 5, 190})
+	case "tower": return Fly_Camera_Looking_At({-36, 16, 58}, {-43.8, 16, 43.8})
 	case "command": return Fly_Camera_Looking_At({-20, 24, 62}, {-8, 11, -12})
 	}
 	return Fly_Camera{position = {-150, 45, 190}, yaw_radians = -0.67, pitch_radians = -0.15}

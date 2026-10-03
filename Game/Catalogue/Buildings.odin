@@ -193,7 +193,7 @@ watchtower :: proc() -> (parts: Parts) {
 			add_part(&parts, Procedural.Part{primitive = Procedural.Cylinder(0.13, 6, 10, 2), position = {x, 3, z}, deformers = {0 = Procedural.Taper{1.3, 1}}, material = layer(.Wood), solid = true})
 		}
 	}
-	add_collision_box(&parts, {2.5, 3.2, 2.5}, {0, 1.6, 0}) // The legs stand 2.2 m apart: a body fits between them, and a tower is a link in the perimeter, so its base is closed.
+	add_collision_box(&parts, {2.5, 6.0, 2.5}, {0, 3.0, 0}) // The legs stand 2.2 m apart: a body fits between them, and a tower is a link in the perimeter, so its base is closed.
 	for height in ([2]f32{1.8, 3.8}) {
 		add_box(&parts, {2.3, 0.08, 0.08}, {0, height, 1.1}, .Wood, false)
 		add_box(&parts, {2.3, 0.08, 0.08}, {0, height, -1.1}, .Wood, false)
@@ -201,11 +201,18 @@ watchtower :: proc() -> (parts: Parts) {
 		add_box(&parts, {0.08, 0.08, 2.3}, {-1.1, height, 0}, .Wood, false)
 	}
 	add_box(&parts, {3, 0.2, 3}, {0, 6.1, 0}, .Wood)
-	add_box(&parts, {2.6, 1.6, 2.6}, {0, 7, 0}, .Wood)
-	add_box(&parts, {2.7, 0.7, 0.1}, {0, 7.2, 1.35}, .Glass, false, {}, {0.9, 0.65, 0.3})
-	add_part(&parts, Procedural.Part{primitive = Procedural.Cone(2.2, 0.9, 4), position = {0, 8.25, 0}, rotation_degrees = {0, 45, 0}, material = layer(.Painted_Metal), solid = true})
+	// An open lookout: waist-high parapets (a gap at the front-left where the ladder arrives), corner posts and a raised roof.
+	add_box(&parts, {3, 1.05, 0.1}, {0, 6.72, -1.45}, .Wood)
+	add_box(&parts, {0.1, 1.05, 3}, {-1.45, 6.72, 0}, .Wood)
+	add_box(&parts, {0.1, 1.05, 3}, {1.45, 6.72, 0}, .Wood)
+	add_box(&parts, {1.35, 1.05, 0.1}, {0.825, 6.72, 1.45}, .Wood)
+	add_box(&parts, {0.55, 1.05, 0.1}, {-1.225, 6.72, 1.45}, .Wood)
+	for x in ([2]f32{-1.4, 1.4}) {
+		for z in ([2]f32{-1.4, 1.4}) do add_box(&parts, {0.1, 2.35, 0.1}, {x, 7.4, z}, .Wood, false)
+	}
+	add_part(&parts, Procedural.Part{primitive = Procedural.Cone(2.2, 0.9, 4), position = {0, 9.0, 0}, rotation_degrees = {0, 45, 0}, material = layer(.Painted_Metal), solid = true})
 	add_cylinder_z(&parts, 0.18, 0.5, {1.1, 7.6, 1.5}, .Painted_Metal, false, 12)
-	add_box(&parts, {0.08, 6.2, 0.4}, {-0.4, 3.1, 1.45}, .Wood, false)
+	add_ladder(&parts, {-0.4, 0, 1.5}, 6.2)
 	return parts
 }
 
@@ -279,4 +286,22 @@ radar_station :: proc() -> (parts: Parts) {
 	add_part(&parts, Procedural.Part{primitive = Procedural.Cylinder(0.05, 1.6, 8), position = {0, 4.9, 1.0}, rotation_degrees = {-55, 0, 0}, material = layer(.Rusted_Metal)})
 	add_box(&parts, {1.4, 1.2, 0.08}, {0, 1.0, 1.24}, .Rusted_Metal, false)
 	return parts
+}
+
+// A ladder standing at `foot` (its base centre) on a wall facing +Z: two rails and a rung every 0.3 m.
+@(private = "package")
+add_ladder :: proc(parts: ^Parts, foot: [3]f32, height: f32) {
+	for x in ([2]f32{-0.22, 0.22}) do add_box(parts, {0.05, height, 0.06}, foot + {x, height / 2, 0}, .Wood, false)
+	for index in 1 ..< int(height / 0.3) do add_box(parts, {0.44, 0.04, 0.04}, foot + {0, f32(index) * 0.3, 0}, .Wood, false)
+}
+
+@(rodata)
+WATCHTOWER_LADDERS := [1]Procedural.Collision_Box{{{-0.65, 0, 1.45}, {-0.15, 6.3, 1.6}}}
+
+// Climbable volumes in an object's frame (their +Z face is where the climber stands).
+Catalogue_Ladders :: proc(kind: Object_Kind) -> []Procedural.Collision_Box {
+	#partial switch kind {
+	case .Watchtower: return WATCHTOWER_LADDERS[:]
+	}
+	return nil
 }

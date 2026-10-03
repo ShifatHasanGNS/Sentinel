@@ -155,3 +155,7 @@
 | Moving tank tracks (links on a stadium path, the two sides running opposite ways when pivoting) | `Game/Vehicles/VehicleRender.odin` : `append_track_links`; `Game/Catalogue/Vehicles.odin` : `Track_Spec` |
 | Vehicle suspension (critically damped pitch and roll springs: braking noses down, turns lean out) | `Game/Vehicles/Vehicle.odin` : `step_suspension` |
 | Tyre treads and wheel nuts | `Game/Catalogue/Objects.odin` : `add_wheel` |
+| Screen-door (dithered) transparency for smoke | `Shaders/Geometry.glsl` : `bayer_threshold`; `Engine/Render/Scene.odin` : `Draw_Item.transparency` |
+| Supplies: dropped ammunition, medkits, walk-over pickup | `Game/Gameplay/Pickup.odin`; drawn in `Game/Sandbox/MissionPlay.odin` : `pickups_items` |
+| Alarm reinforcements and radioed alarms | `Game/Sandbox/SecurityCameras.odin` : `send_reinforcements` |
+| Ladders and climbing (watchtower lookouts with snipers) | `Engine/World/Collision.odin` : `climb`; `Game/Catalogue/Buildings.odin` : `Catalogue_Ladders`; `Game/Base/Footprint.odin` : `Layout_Ladders` |
