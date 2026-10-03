@@ -196,10 +196,10 @@ add_gable_roof :: proc(parts: ^Parts, length, depth, rise, base_y: f32, position
 add_window :: proc(parts: ^Parts, size: [2]f32, x, y, z: f32) {
 	add_box(parts, {size.x, size.y, 0.1}, {x, y, z}, .Glass, false, {}, {0.9, 0.65, 0.3})
 	bar := f32(0.07)
-	add_box(parts, {size.x + 2 * bar, bar, 0.16}, {x, y + size.y / 2 + bar / 2, z + 0.03}, .Painted_Metal, false)
-	add_box(parts, {size.x + 2 * bar, bar, 0.16}, {x, y - size.y / 2 - bar / 2, z + 0.03}, .Painted_Metal, false)
-	for side in ([2]f32{-1, 1}) do add_box(parts, {bar, size.y, 0.16}, {x + side * (size.x / 2 + bar / 2), y, z + 0.03}, .Painted_Metal, false)
-	add_box(parts, {size.x, 0.04, 0.14}, {x, y, z + 0.04}, .Painted_Metal, false)
+	add_box(parts, {size.x + 2 * bar, bar, 0.16}, {x, y + size.y / 2 + bar / 2, z + 0.03}, .Gunmetal, false)
+	add_box(parts, {size.x + 2 * bar, bar, 0.16}, {x, y - size.y / 2 - bar / 2, z + 0.03}, .Gunmetal, false)
+	for side in ([2]f32{-1, 1}) do add_box(parts, {bar, size.y, 0.16}, {x + side * (size.x / 2 + bar / 2), y, z + 0.03}, .Gunmetal, false)
+	add_box(parts, {size.x, 0.04, 0.14}, {x, y, z + 0.04}, .Gunmetal, false)
 	add_box(parts, {size.x + 0.3, 0.07, 0.3}, {x, y - size.y / 2 - bar - 0.035, z + 0.1}, .Concrete, false)
 }
 

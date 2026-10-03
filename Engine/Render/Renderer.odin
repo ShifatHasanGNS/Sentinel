@@ -29,6 +29,8 @@ Renderer :: struct {
 	hdr:             GPU.Framebuffer,
 	ldr:             GPU.Framebuffer,
 	bloom:           Bloom,
+	previous_hdr:    GPU.Framebuffer, // Last frame's lit image, which screen-space reflections sample.
+	previous_view_projection: matrix[4, 4]f32,
 	ssao:            Ssao,
 	geometry:        GPU.Shader,
 	geometry_instanced: GPU.Shader,
@@ -55,6 +57,7 @@ Renderer_Create :: proc(width, height: i32) -> (renderer: Renderer, ok: bool) {
 	renderer.gbuffer = GPU.Framebuffer_Create({width, height, {.SRGB8_A8, .RGBA16F, .RGBA16F}, .Depth32F})
 	renderer.hdr = GPU.Framebuffer_Create({width, height, {.RGBA16F}, .None})
 	renderer.ldr = GPU.Framebuffer_Create({width, height, {.RGBA8}, .None})
+	renderer.previous_hdr = GPU.Framebuffer_Create({width, height, {.RGBA16F}, .None})
 	renderer.bloom = Bloom_Create(width, height) or_return
 	renderer.ssao = Ssao_Create(width, height) or_return
 	renderer.fullscreen = GPU.Fullscreen_Pass_Create()
@@ -78,6 +81,7 @@ Renderer_Destroy :: proc(renderer: ^Renderer) {
 	Bloom_Destroy(&renderer.bloom)
 	Ssao_Destroy(&renderer.ssao)
 	GPU.Framebuffer_Destroy(&renderer.ldr)
+	GPU.Framebuffer_Destroy(&renderer.previous_hdr)
 	GPU.Framebuffer_Destroy(&renderer.hdr)
 	GPU.Framebuffer_Destroy(&renderer.gbuffer)
 	GPU.Shader_Destroy(&renderer.fxaa)
@@ -92,6 +96,7 @@ Renderer_Render :: proc(renderer: ^Renderer, frame: Frame, width, height: i32) {
 	GPU.Framebuffer_Resize(&renderer.gbuffer, width, height)
 	GPU.Framebuffer_Resize(&renderer.hdr, width, height)
 	GPU.Framebuffer_Resize(&renderer.ldr, width, height)
+	GPU.Framebuffer_Resize(&renderer.previous_hdr, width, height)
 	for &timer in renderer.timers do GPU.Timer_Collect(&timer)
 	timed(renderer, .Sky_Lut, proc(renderer: ^Renderer, frame: Frame) {
 		Sky_Lut_Render(&renderer.sky_lut, frame.sky.to_sun, frame.sky.sun_intensity)
@@ -99,6 +104,7 @@ Renderer_Render :: proc(renderer: ^Renderer, frame: Frame, width, height: i32) {
 	timed(renderer, .Shadows, shadow_pass, frame)
 	timed(renderer, .Geometry, geometry_pass, frame)
 	if frame.ssao_radius_meters > 0 do timed(renderer, .Ssao, ssao_pass, frame)
+	keep_previous_frame(renderer)
 	lighting_pass(renderer, frame)
 	timed(renderer, .Post, post_pass, frame)
 }
@@ -221,6 +227,7 @@ light_base :: proc(renderer: ^Renderer, frame: Frame) {
 	GPU.Shader_Set(shader, "u_SsaoEnabled", i32(frame.ssao_radius_meters > 0))
 	if frame.sun_shadows do Shadow_Map_Bind(shader, &renderer.shadows, renderer.cascades)
 	GPU.Fullscreen_Pass_Draw(&renderer.fullscreen)
+	renderer.previous_view_projection = frame.camera.view_projection
 }
 
 @(private = "file")
@@ -309,4 +316,13 @@ set_interior_uniforms :: proc(shader: ^GPU.Shader, interiors: []Interior_Volume)
 		GPU.Shader_Set(shader, fmt.tprintf("u_InteriorTurn[%d]", index), [2]f32{math.cos(volume.yaw_radians), math.sin(volume.yaw_radians)})
 		GPU.Shader_Set(shader, fmt.tprintf("u_InteriorHalf[%d]", index), volume.half_extents)
 	}
+}
+
+// Copies last frame's lit image aside before this frame overwrites it (a GPU-side blit, no read-back).
+@(private = "file")
+keep_previous_frame :: proc(renderer: ^Renderer) {
+	gl.BindFramebuffer(gl.READ_FRAMEBUFFER, renderer.hdr.id)
+	gl.BindFramebuffer(gl.DRAW_FRAMEBUFFER, renderer.previous_hdr.id)
+	gl.BlitFramebuffer(0, 0, renderer.hdr.width, renderer.hdr.height, 0, 0, renderer.previous_hdr.width, renderer.previous_hdr.height, gl.COLOR_BUFFER_BIT, gl.NEAREST)
+	gl.BindFramebuffer(gl.FRAMEBUFFER, 0)
 }

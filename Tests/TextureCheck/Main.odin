@@ -150,6 +150,7 @@ check_every_material_tiles_and_has_detail :: proc(checks: ^Support.Checks) {
 	pixels := make([][4]u8, int(set.size) * int(set.size))
 	defer delete(pixels)
 	for layer in 0 ..< set.layer_count {
+		if Materials.Surface_Material(layer) == .Glass do continue // Glass is meant to be plain: its look is its reflection.
 		GPU.Texture_Read_Layer(&set.albedo, layer, pixels)
 		Support.expect(checks, standard_deviation(pixels, 0) > 2)
 		GPU.Texture_Read_Layer(&set.normal, layer, pixels)
