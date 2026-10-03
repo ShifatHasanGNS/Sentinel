@@ -12,7 +12,9 @@ import la "core:math/linalg"
 CAMERA_TARGET_RADIUS_METERS :: 0.4
 CAMERA_HEALTH :: 20.0
 ALARM_ALERT_RADIUS_METERS :: 90.0
-ALARM_REFRESH_SECONDS :: 3.0 // While the alarm sounds, soldiers are re-told where the player was this often.
+ALARM_REFRESH_SECONDS :: 3.0
+REINFORCEMENT_WAVES_MAX :: 2
+REINFORCEMENTS_PER_WAVE :: 3 // While the alarm sounds, soldiers are re-told where the player was this often.
 LED_ACTIVE_EMISSION :: [3]f32{7, 0.4, 0.3}
 LED_OFF_EMISSION :: [3]f32{0.15, 0.03, 0.03}
 
@@ -92,6 +94,8 @@ cameras_update :: proc(sandbox: ^Sandbox, delta_seconds: f32) {
 		sees := !Gameplay.Health_Is_Dead(player.health) && camera_has_clear_line(play, instance.camera.position, target) && Mission.Camera_Sees(instance.camera, play.clock_seconds, target, true, Gameplay.Player_Visibility(player))
 		if Mission.Camera_Update(&instance.camera, sees, delta_seconds) do raise_alarm(play, target)
 	}
+	// A soldier who is shooting at the player radios it in: the base goes on alarm even without a camera.
+	for enemy in play.battle.enemies do if Gameplay.Enemy_Is_Alive(enemy) && enemy.ai.state == .Attack && enemy.ai.state_seconds > 1.5 do raise_alarm(play, target)
 	if Mission.Alarm_Active(play.alarm) {
 		play.alarm_refresh_seconds -= delta_seconds
 		if play.alarm_refresh_seconds <= 0 {
@@ -106,6 +110,22 @@ raise_alarm :: proc(play: ^Play, position: [3]f32) {
 	was_quiet := !Mission.Alarm_Active(play.alarm)
 	Mission.Alarm_Raise(&play.alarm)
 	if was_quiet do play.alarm_refresh_seconds = 0
+	if was_quiet && play.reinforcement_waves < REINFORCEMENT_WAVES_MAX do send_reinforcements(play, position)
+}
+
+// Each new alarm (up to two) turns out a squad from the barracks doors, already hunting toward where the player was seen.
+@(private = "file")
+send_reinforcements :: proc(play: ^Play, toward: [3]f32) {
+	play.reinforcement_waves += 1
+	doors := 0
+	for door in play.doors {
+		if doors >= REINFORCEMENTS_PER_WAVE do break
+		if door.spec.style != .Plank do continue
+		outside := door.hinge + World.rotate_about_y({door.spec.side * door.spec.width / 2, 0, 1.6}, door.yaw_radians)
+		index := Gameplay.Battle_Add_Enemy(&play.battle, .Enemy, outside, door.yaw_radians, nil)
+		Gameplay.Enemy_Ai_Notice(&play.battle.enemies[index].ai, toward)
+		doors += 1
+	}
 }
 
 @(private = "file")

@@ -71,6 +71,7 @@ Battle :: struct {
 	player:      Player,
 	enemies:     [dynamic]Enemy,
 	targets:     [dynamic]Target,
+	pickups:     [dynamic]Pickup,
 	projectiles: [dynamic]Projectile_Entity,
 	effects:     [dynamic]Effect,
 	seed:        u32,
@@ -90,6 +91,7 @@ Battle_Destroy :: proc(battle: ^Battle) {
 	for &enemy in battle.enemies do Enemy_Destroy(&enemy)
 	delete(battle.enemies)
 	delete(battle.targets)
+	delete(battle.pickups)
 	delete(battle.projectiles)
 	delete(battle.effects)
 }
@@ -105,6 +107,7 @@ Battle_Update :: proc(battle: ^Battle, input: Player_Input, delta_seconds: f32) 
 	health_before := battle.player.health.current
 	for index in 0 ..< len(battle.enemies) do update_enemy(battle, index, delta_seconds)
 	regenerate_player(&battle.player, health_before, delta_seconds)
+	collect_pickups(battle)
 	update_projectiles(battle, delta_seconds)
 	update_effects(battle, delta_seconds)
 }
@@ -213,6 +216,7 @@ damage_enemy :: proc(battle: ^Battle, index: int, damage: f32, zone: Hit_Zone, f
 	if killed {
 		Enemy_Ai_Kill(&enemy.ai)
 		battle.player.kills += 1
+		Battle_Add_Pickup(battle, .Ammo, enemy.controller.position + {0.4, 0, 0.3}) // The soldier's spare magazines fall beside him.
 	} else {
 		Enemy_Ai_Notice(&enemy.ai, from)
 		Characters.Character_Hit(&enemy.character, la.normalize([3]f32{enemy.controller.position.x - from.x, 0, enemy.controller.position.z - from.z}))
@@ -225,6 +229,7 @@ update_player :: proc(battle: ^Battle, input: Player_Input, delta_seconds: f32) 
 	player := &battle.player
 	player.damage_flash = max(player.damage_flash - DAMAGE_FLASH_DECAY_PER_SECOND * delta_seconds, 0)
 	player.hit_marker = max(player.hit_marker - delta_seconds, 0)
+	player.pickup_flash = max(player.pickup_flash - delta_seconds, 0)
 	if Health_Is_Dead(player.health) {
 		if input.respawn do Player_Respawn(player)
 		return

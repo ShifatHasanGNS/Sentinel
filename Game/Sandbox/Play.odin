@@ -66,6 +66,7 @@ Play :: struct {
 	camera_meshes: Camera_Meshes,
 	alarm:         Mission.Alarm,
 	alarm_refresh_seconds: f32,
+	reinforcement_waves: int,
 	clock_seconds: f32,
 	soldiers:      Characters.Character_Renderer,
 	doors:         [dynamic]Base.Door,
@@ -348,6 +349,7 @@ play_items :: proc(sandbox: ^Sandbox, items, shadow_items: ^[dynamic]Render.Draw
 	for effect in play.battle.effects do add_effect(play, effect, items, &lights)
 	Particles_Items(play, items)
 	mission_items(play, items, &lights)
+	pickups_items(play, items)
 	cameras_items(play, items)
 	if play.flashlight_on && play.mode == .Play {
 		player := play.battle.player
@@ -457,7 +459,7 @@ play_draw_hud :: proc(sandbox: ^Sandbox, width, height: i32) {
 	player := play.battle.player
 	w, h := f32(width), f32(height)
 	scale := max(h / 360, 2)
-	if play.mode == .Play && player.damage_flash > 0 do Render.Hud_Rect(hud, 0, 0, w, h, {0.8, 0, 0, 0.4 * player.damage_flash})
+	if play.mode == .Play && player.damage_flash > 0 do draw_damage_vignette(hud, w, h, player.damage_flash)
 	if play.mode == .Play && !Gameplay.Health_Is_Dead(player.health) {
 		draw_crosshair(hud, w / 2, h / 2, scale, player.hit_marker > 0)
 		if play.driving == nil do draw_vitals(hud, player, w, h, scale)
@@ -471,6 +473,7 @@ play_draw_hud :: proc(sandbox: ^Sandbox, width, height: i32) {
 	else if play.mode == .Play && play.door_in_reach && !Gameplay.Health_Is_Dead(player.health) do Render.Hud_Text(hud, (w - Render.Hud_Text_Width("E  OPEN / CLOSE", scale)) / 2, h * 0.62, "E  OPEN / CLOSE", scale, {1, 1, 1, 0.9})
 	if Gameplay.Health_Is_Dead(player.health) do draw_death_screen(hud, w, h, scale)
 	cameras_draw_hud(play, w, scale)
+	if player.pickup_flash > 0 do Render.Hud_Text(hud, (w - Render.Hud_Text_Width("PICKED UP", scale)) / 2, h * 0.7, "PICKED UP", scale, {0.7, 1, 0.7, min(player.pickup_flash, 1)})
 	binoculars_draw_hud(play, w, h, scale)
 	map_draw_hud(sandbox, w, h, scale)
 	mission_draw_hud(play, w, h, scale)
@@ -562,4 +565,20 @@ update_view_motion :: proc(play: ^Play, delta_seconds: f32) {
 	play.sway *= math.exp(-SWAY_RETURN_PER_SECOND * delta_seconds)
 	play.sway += last_look_delta * SWAY_METERS_PER_RADIAN * 0.35
 	play.sway = {clamp(play.sway.x, -0.06, 0.06), clamp(play.sway.y, -0.05, 0.05)}
+}
+
+// Being hit darkens and reddens the screen edges (a ring of bands, strongest at the border) instead of tinting the whole view.
+@(private = "file")
+draw_damage_vignette :: proc(hud: ^Render.Hud, w, h, amount: f32) {
+	BANDS :: 8
+	for band in 0 ..< BANDS {
+		inset := f32(band) * min(w, h) * 0.03
+		thickness := min(w, h) * 0.03
+		alpha := amount * 0.45 * (1 - f32(band) / BANDS)
+		color := [4]f32{0.55, 0, 0, alpha}
+		Render.Hud_Rect(hud, inset, inset, w - 2 * inset, thickness, color)
+		Render.Hud_Rect(hud, inset, h - inset - thickness, w - 2 * inset, thickness, color)
+		Render.Hud_Rect(hud, inset, inset + thickness, thickness, h - 2 * inset - 2 * thickness, color)
+		Render.Hud_Rect(hud, w - inset - thickness, inset + thickness, thickness, h - 2 * inset - 2 * thickness, color)
+	}
 }

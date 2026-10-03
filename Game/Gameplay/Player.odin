@@ -15,6 +15,7 @@ PLAYER_REGEN_PER_SECOND :: 8.0
 PITCH_LIMIT_RADIANS :: 1.5
 DAMAGE_FLASH_DECAY_PER_SECOND :: 2.0
 HIT_MARKER_SECONDS :: 0.18
+PICKUP_FLASH_SECONDS :: 1.5
 
 Player :: struct {
 	controller:   World.Controller,
@@ -28,6 +29,7 @@ Player :: struct {
 	seconds_since_damage: f32,
 	armor:        f32, // Fraction of enemy fire absorbed: 0 on foot, high inside an armored vehicle.
 	hit_marker:   f32, // Seconds left of the hit confirmation.
+	pickup_flash: f32, // Seconds left of the "picked up" notice.
 	kills:        int,
 	shots_fired:  u32,
 }

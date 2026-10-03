@@ -68,6 +68,7 @@ mission_create :: proc(play: ^Play, sandbox: ^Sandbox, interactive: bool) {
 	hostage_position := barracks_origin + World.rotate_about_y(HOSTAGE_LOCAL, barracks_yaw)
 	mission.hostage.controller = World.Controller_Create(hostage_position)
 	mission.hostage.character = Characters.Character{variant = .Officer, position = hostage_position, heading_radians = barracks_yaw + math.PI / 2, hide_weapon = true}
+	place_medkits(play, sandbox)
 	mission.radar_target = Gameplay.Battle_Add_Target(&play.battle, mission.radar_dish, RADAR_DISH_RADIUS_METERS, RADAR_HEALTH)
 	ground_height := terrain_height(sandbox.terrain, EXTRACTION_POSITION_XZ.x, EXTRACTION_POSITION_XZ.y)
 	mission.extraction = {EXTRACTION_POSITION_XZ.x, ground_height, EXTRACTION_POSITION_XZ.y}
@@ -321,4 +322,44 @@ autoplay_step :: proc(sandbox: ^Sandbox, delta_seconds: f32) -> (held, pressed: 
 		fmt.eprintfln("AUTOPLAY mission complete at %.1fs", now)
 	}
 	return
+}
+
+// A medical kit on the floor of each building with a room (in its own frame), as supplies are scattered through I.G.I.'s bases.
+@(private = "file")
+place_medkits :: proc(play: ^Play, sandbox: ^Sandbox) {
+	ground := sandbox.terrain.base_height_meters
+	for placement in sandbox.base.layout.placements {
+		local: [3]f32
+		#partial switch placement.kind {
+		case .Barracks: local = {5, 0.3, 1.0}
+		case .Headquarters: local = {5.5, 0.3, -2}
+		case .Guard_Post: local = {0.6, 0.1, -0.6}
+		case .Bunker: local = {1.2, 0.1, -1.4}
+		case: continue
+		}
+		position := [3]f32{placement.x, ground, placement.z} + World.rotate_about_y(local, math.to_radians(placement.yaw_degrees))
+		Gameplay.Battle_Add_Pickup(&play.battle, .Medkit, position)
+	}
+}
+
+// Draw items for pickups still on the ground: an olive magazine pouch, or a white case with a red cross. Both bob a little and turn
+// slowly so they catch the eye, as pickups do in games of the era.
+pickups_items :: proc(play: ^Play, items: ^[dynamic]Render.Draw_Item) {
+	for pickup in play.battle.pickups {
+		if pickup.taken do continue
+		spin := la.matrix4_rotate_f32(play.clock_seconds * 1.2, {0, 1, 0})
+		base := la.matrix4_translate_f32(pickup.position + {0, 0.12 + 0.03 * math.sin(play.clock_seconds * 3), 0}) * spin
+		box :: proc(play: ^Play, items: ^[dynamic]Render.Draw_Item, model: matrix[4, 4]f32, size: [3]f32, offset: [3]f32, material: Materials.Surface_Material, emission: [3]f32) {
+			append(items, Render.Draw_Item{mesh = &play.effect_cube, model = model * la.matrix4_translate_f32(offset) * la.matrix4_scale_f32(size), material_layer = i32(material), uv_scale = {1, 1}, triplanar = true, illumination_model = .Cook_Torrance, emission = emission})
+		}
+		switch pickup.kind {
+		case .Ammo:
+			box(play, items, base, {0.3, 0.16, 0.18}, {}, .Olive_Paint, {})
+			box(play, items, base, {0.08, 0.2, 0.06}, {0.06, 0.1, 0}, .Gunmetal, {})
+		case .Medkit:
+			box(play, items, base, {0.4, 0.2, 0.28}, {}, .Concrete, {0.25, 0.25, 0.25})
+			box(play, items, base, {0.2, 0.012, 0.06}, {0, 0.105, 0}, .Rubber, {1.4, 0.05, 0.05})
+			box(play, items, base, {0.06, 0.012, 0.2}, {0, 0.105, 0}, .Rubber, {1.4, 0.05, 0.05})
+		}
+	}
 }
