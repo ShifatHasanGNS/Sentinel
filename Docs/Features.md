@@ -160,3 +160,7 @@
 | Alarm reinforcements and radioed alarms | `Game/Sandbox/SecurityCameras.odin` : `send_reinforcements` |
 | Ladders and climbing (watchtower lookouts with snipers) | `Engine/World/Collision.odin` : `climb`; `Game/Catalogue/Buildings.odin` : `Catalogue_Ladders`; `Game/Base/Footprint.odin` : `Layout_Ladders` |
 | Contact shadows (8-step screen-space march toward the sun) | `Shaders/DeferredBase.glsl` : `contact_shadow` |
+| Far-tree level of detail | `Game/Sandbox/Props.odin` : `tree_far_canopy_mesh`; `Game/Sandbox/Sandbox.odin` : `place_prop` |
+| Grenade bounce (restitution, friction, fuse) | `Game/Gameplay/Battle.odin` : `bounce_grenade` |
+| Rockets and shells in flight, motor light, smoke trail | `Game/Sandbox/Play.odin` : `projectile_items`; `Game/Sandbox/Particles.odin` : `Particles_Trail` |
+| Tracer streaks | `Game/Sandbox/Play.odin` : `add_effect` |
