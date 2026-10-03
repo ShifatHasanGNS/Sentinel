@@ -159,3 +159,4 @@
 | Supplies: dropped ammunition, medkits, walk-over pickup | `Game/Gameplay/Pickup.odin`; drawn in `Game/Sandbox/MissionPlay.odin` : `pickups_items` |
 | Alarm reinforcements and radioed alarms | `Game/Sandbox/SecurityCameras.odin` : `send_reinforcements` |
 | Ladders and climbing (watchtower lookouts with snipers) | `Engine/World/Collision.odin` : `climb`; `Game/Catalogue/Buildings.odin` : `Catalogue_Ladders`; `Game/Base/Footprint.odin` : `Layout_Ladders` |
+| Contact shadows (8-step screen-space march toward the sun) | `Shaders/DeferredBase.glsl` : `contact_shadow` |

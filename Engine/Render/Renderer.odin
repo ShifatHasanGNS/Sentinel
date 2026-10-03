@@ -214,6 +214,7 @@ light_base :: proc(renderer: ^Renderer, frame: Frame) {
 	GPU.Shader_Set(shader, "u_MoonIntensity", frame.sky.moon_intensity)
 	Light_Set_Uniforms(shader, "u_Sun", frame.sun)
 	GPU.Shader_Set(shader, "u_CameraForward", frame.camera.forward)
+	GPU.Shader_Set(shader, "u_ViewProjection", frame.camera.view_projection)
 	GPU.Shader_Set(shader, "u_SunShadows", i32(frame.sun_shadows))
 	set_interior_uniforms(shader, frame.interiors)
 	GPU.Shader_Set(shader, "u_Ssao", GPU.Texture_Bind_Next(&renderer.ssao.blurred.colors[0], GPU.Sampler_Nearest_Clamp))
