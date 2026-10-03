@@ -189,6 +189,15 @@ add_gable_roof :: proc(parts: ^Parts, length, depth, rise, base_y: f32, position
 	half := depth / 2
 	add_part(parts, Procedural.Part{primitive = Procedural.Wedge({length, rise, half}), position = {0, base_y + rise / 2, position_z + half / 2}, material = layer(material), solid = true})
 	add_part(parts, Procedural.Part{primitive = Procedural.Wedge({length, rise, half}), position = {0, base_y + rise / 2, position_z - half / 2}, rotation_degrees = {0, 180, 0}, material = layer(material), solid = true})
+
+	// Trim that makes it read as a roof rather than two slabs: a ridge cap along the top, a fascia board and a half-round gutter along
+	// each eave.
+	add_box(parts, {length + 0.1, 0.07, 0.3}, {0, base_y + rise + 0.02, position_z}, material, false)
+	for side in ([2]f32{-1, 1}) {
+		eave_z := position_z + side * half
+		add_box(parts, {length + 0.1, 0.16, 0.05}, {0, base_y - 0.04, eave_z}, .Wood, false)
+		add_cylinder_x(parts, 0.06, length + 0.1, {0, base_y - 0.13, eave_z + side * 0.07}, .Painted_Metal, false, 8)
+	}
 }
 
 // A window on a wall facing +Z: the glowing pane, a frame of four bars standing proud of the wall, a mullion across the middle,
