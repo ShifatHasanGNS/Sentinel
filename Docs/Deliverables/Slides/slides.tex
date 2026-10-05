@@ -1,6 +1,8 @@
 \documentclass[aspectratio=169,12pt]{beamer}
 \usepackage[T1]{fontenc}
-\usepackage{newtxtext,newtxmath}
+\usepackage{libertine}
+\usepackage[libertine]{newtxmath}
+\usepackage[most]{tcolorbox}
 \usepackage{tikz,pgfplots}
 \pgfplotsset{compat=1.17}
 \usetikzlibrary{arrows.meta,positioning,shapes.geometric}
@@ -22,10 +24,12 @@
 \setbeamercolor{block body}{fg=ink,bg=white}
 \setbeamertemplate{navigation symbols}{}
 \setbeamertemplate{itemize items}[circle]
-\setbeamerfont{frametitle}{series=\bfseries,size=\Large}
+\setbeamerfont{frametitle}{series=\bfseries,size=\large}
 \setbeamerfont{block title}{series=\bfseries,size=\small}
 \setbeamertemplate{background canvas}{\includegraphics[width=\paperwidth,height=\paperheight]{backdrops/content.jpg}}
-\setbeamertemplate{blocks}[rounded][shadow=false]
+\newtcolorbox{panelbox}[1]{enhanced,colback=white,colframe=black!10,boxrule=0.4pt,arc=1.2mm,left=9pt,right=6pt,top=4pt,bottom=4pt,
+  borderline west={2.4pt}{0pt}{kuet},drop fuzzy shadow=black!35,before upper={\textcolor{kuet}{\scshape\bfseries\footnotesize #1}\par\smallskip},before skip=3pt,after skip=5pt}
+\renewenvironment{block}[1]{\begin{panelbox}{#1}}{\end{panelbox}}
 \setbeamertemplate{footline}{\hfill\scriptsize\color{ink!60}\insertframenumber\,/\,10\hspace{0.8em}\vspace{0.4em}}
 \setbeamertemplate{frametitle}{%
   \nointerlineskip
@@ -36,6 +40,7 @@
   \end{tikzpicture}%
   \begin{beamercolorbox}[wd=\paperwidth,ht=1.14cm,dp=0cm,leftskip=1.25cm]{frametitle}\vbox to 1.14cm{\vss\hbox{\usebeamerfont{frametitle}\insertframetitle}\vss}\end{beamercolorbox}}
 \tikzset{box/.style={draw=kuet,rounded corners=2pt,align=center,font=\scriptsize,inner sep=3pt,fill=white},arr/.style={-{Stealth[length=2mm]},thick,kuet}}
+\newcommand{\eqimg}[2]{\par\vspace{1pt}\centering\includegraphics[width=#1\linewidth]{equation_images/#2.png}\par\vspace{1pt}}
 \newcommand{\pic}[2]{\includegraphics[width=#1\linewidth]{images/#2}}
 
 \begin{document}
@@ -83,10 +88,7 @@
 No model, image or precomputed file; OpenGL 4.1, no compute shaders.
 \end{block}
 \begin{block}{Objectives}\small
-Layered engine; all content from code; modern renderer; playable game; tested, 16.7\,ms budget.
-\end{block}
-\begin{block}{The game}\small
-Drivable vehicles and helicopter; ladders, doors, stealth enemies; five-objective mission.
+Layered engine; all content from code; modern renderer; a playable game (vehicles, ladders, stealth, five-objective mission); tested, 16.7\,ms budget.
 \end{block}
 \column{0.42\textwidth}
 \centering
@@ -106,10 +108,10 @@ Drivable vehicles and helicopter; ladders, doors, stealth enemies; five-objectiv
 \begin{columns}[T]
 \column{0.4\textwidth}
 \begin{block}{Fractal noise (tiles exactly)}
-\small$\displaystyle F(\mathbf x)=\frac{\sum_{i=0}^{n-1}2^{-i}\nu(2^i\mathbf x)}{\sum_{i=0}^{n-1}2^{-i}}$
+\eqimg{0.8}{fractal}
 \end{block}
 \begin{block}{Vertex push}
-\small$\mathbf p'=\mathbf p+A\,\nu(f\mathbf p)\,\hat n,\ |\mathbf p'-\mathbf p|\le A$
+\eqimg{0.95}{push}
 \end{block}
 \column{0.57\textwidth}
 \begin{itemize}\setlength{\itemsep}{2pt}
@@ -130,52 +132,55 @@ Drivable vehicles and helicopter; ladders, doors, stealth enemies; five-objectiv
 \end{tikzpicture}
 \vspace{4pt}
 \begin{columns}[T]
-\column{0.52\textwidth}\raggedright
+\column{0.52\textwidth}
 \begin{block}{One part: scale, turn, then move}
-$M_{\rm part}=T(\mathbf t)\,R_z R_y R_x\,S(\mathbf s)$\\[1pt]
-\small Right to left: stretched, turned about its own centre, moved last. $(1,0,0)\to S(2,1,1)\to R_y90^\circ\to T(5,0,0)=(5,0,-2)$
+\eqimg{0.95}{mpart}
+\footnotesize Right to left: stretched, turned about its own centre, moved last. $(1,0,0)\to S(2,1,1)\to R_y90^\circ\to T(5,0,0)=(5,0,-2)$
 \end{block}
-\begin{block}{Normals: inverse transpose}
-$\hat n'=\dfrac{(L^{-1})^{\top}\hat n}{\lVert(L^{-1})^{\top}\hat n\rVert}$\\[1pt]
-\small $S=\mathrm{diag}(2,1,1)$: correct $(0.447,0.894,0)$, naive $(0.894,0.447,0)$
+\begin{block}{Normals use the inverse transpose}
+\eqimg{0.5}{nmat}
+\footnotesize $S=\mathrm{diag}(2,1,1)$: correct $(0.447,0.894,0)$, naive $(0.894,0.447,0)$
 \end{block}
 \column{0.45\textwidth}
 \begin{block}{Rotation about $y$}
-\small$R_y(\theta)=\begin{pmatrix}\cos\theta&0&\sin\theta\\0&1&0\\-\sin\theta&0&\cos\theta\end{pmatrix}$
+\eqimg{0.8}{ry}
 \end{block}
-\begin{block}{Hierarchy and screen}
-\small$M_{\rm gun}=M_{\rm hull}\,T(\mathbf c_t)R_y(\theta_t)\,T(\mathbf c_g)R_x(-\theta_g)$\\[2pt]
-$\mathbf p_{\rm clip}=P\,V\,M_{\rm world}\,M_{\rm part}\,\mathbf p$
+\begin{block}{Hierarchy: products down the chain}
+\eqimg{0.98}{mgun}
+\end{block}
+\begin{block}{World to screen}
+\eqimg{0.7}{clip}
 \end{block}
 \end{columns}
 \end{frame}
 
 % 6 ---------------- illumination
 \begin{frame}[c]{4. Illumination models and light sources}
-\centering{\small$\displaystyle L_o=\sum_j f(\mathbf l_j,\mathbf v)\,L_j\,\mathrm{att}_j\,\mathrm{sh}_j\max(0,\mathbf n\!\cdot\!\mathbf l_j)+\mathrm{ambient}\cdot\mathrm{AO}+\mathbf e$}
-\vspace{3pt}
+\begin{panelbox}{Direct light + ambient + emission}\eqimg{0.62}{sum}\end{panelbox}
 \begin{columns}[T]
-\column{0.63\textwidth}\small
-\renewcommand{\arraystretch}{1.5}
-\begin{tabular}{@{}p{2.5cm}l@{}}
-\textbf{Lambert} & $\frac{\mathbf c_d}{\pi}$\\
-\textbf{Phong} & $\frac{\mathbf c_d(1-F_0)}{\pi}+F_0\frac{m+2}{2\pi}(\mathbf r\!\cdot\!\mathbf v)^m$\\
-\textbf{Blinn--Phong} & $\frac{\mathbf c_d(1-F_0)}{\pi}+F_0\frac{m+8}{8\pi}(\mathbf n\!\cdot\!\mathbf h)^m$\\
-\textbf{Oren--Nayar} & $\frac{\mathbf c_d}{\pi}(A+B\max(0,\cos\Delta\varphi)\sin\alpha\tan\beta)$\\
-\textbf{Cook--Torrance} & $\frac{(1-F_l)(1-F_v)\mathbf c_d}{\pi}+DVF$\\
-\textbf{Subsurface} & cosine $\to\frac{\mathbf n\cdot\mathbf l+w}{1+w}$, $w=0.5$
+\column{0.63\textwidth}
+\begin{panelbox}{Six illumination models}
+\renewcommand{\arraystretch}{1.0}
+\begin{tabular}{@{}m{2.75cm}m{4.6cm}@{}}
+\small\textcolor{kuet}{\bfseries Lambert} & \includegraphics[height=0.52cm]{equation_images/lambert.png}\\[3pt]
+\small\textcolor{kuet}{\bfseries Phong} & \includegraphics[height=0.58cm]{equation_images/phong.png}\\[3pt]
+\small\textcolor{kuet}{\bfseries Blinn--Phong} & \includegraphics[height=0.58cm]{equation_images/blinn.png}\\[3pt]
+\small\textcolor{kuet}{\bfseries Oren--Nayar} & \includegraphics[height=0.5cm]{equation_images/oren.png}\\[3pt]
+\small\textcolor{kuet}{\bfseries Cook--Torrance} & \includegraphics[height=0.58cm]{equation_images/ct2.png}\\[3pt]
+\small\textcolor{kuet}{\bfseries Subsurface} & \includegraphics[height=0.5cm]{equation_images/sss.png}
 \end{tabular}
+\end{panelbox}
 \column{0.35\textwidth}
-\begin{block}{Light sources}
-\normalsize Directional: sun, moon\\ Point: lamps, flashes\\ Spot: floodlights (cone)\\ Area: $4\times4$ samples\\[2pt]
-\small $\mathrm{att}=\frac{\mathrm{clamp}(1-(d/R)^4)^2}{d^2+1}$
-\end{block}
+\begin{panelbox}{Light sources}
+\small Directional: sun, moon\\ Point: lamps, flashes\\ Spot: floodlights\\ Area: $4\times4$ samples
+\eqimg{0.98}{att}
+\end{panelbox}
 \pic{0.95}{models.jpg}\\[1pt]{\scriptsize\centering Six models, one sphere each}
 \end{columns}
 \end{frame}
 
 % 7 ---------------- rendering
-\begin{frame}[c]{5. The rendering pipeline: shadows, ambient, tone map}
+\begin{frame}[c]{5. Shadows, ambient light and tone mapping}
 \centering
 \begin{tikzpicture}[node distance=0.15cm and 0.22cm]
 \node[box] (s) {Sky\\table};\node[box,right=of s] (sh) {Shadows\\3 cascades};\node[box,right=of sh] (g) {Geometry\\G-buffer};\node[box,right=of g] (ao) {SSAO};\node[box,right=of ao] (li) {Lighting,\\reflect, fog};\node[box,right=of li] (pa) {Smoke,\\fire};\node[box,right=of pa] (po) {Bloom, ACES,\\FXAA};
@@ -183,16 +188,18 @@ $\mathbf p_{\rm clip}=P\,V\,M_{\rm world}\,M_{\rm part}\,\mathbf p$
 \end{tikzpicture}
 \vspace{3pt}
 \begin{columns}[T]
-\column{0.56\textwidth}\raggedright
-\textbf{Deferred shading:} store colour, normal, shininess, depth first; light each pixel once.
+\column{0.58\textwidth}\raggedright
+\textbf{Deferred shading:} store colour, normal, shininess and depth first; light each pixel once.
 \begin{block}{Cascaded shadow maps}
-\footnotesize$z_i=\lambda n(\frac{r}{n})^{i/N}+(1-\lambda)(n+(r-n)\frac iN)$, $\lambda=0.75$, $N=3$: cuts at 9.1, 24.2, 100\,m; normal-offset lookup, 8 rotated PCF taps.
+\eqimg{0.92}{csm}
+\footnotesize $\lambda=0.75$, $N=3$: cuts at 9.1, 24.2, 100\,m; normal-offset lookup, 8 rotated PCF taps.
 \end{block}
-\begin{block}{Fog, tone map, ambient}
-\footnotesize$C=TC_s+(1-T)C_h,\ T=e^{-kd}$\hfill $C_{\rm out}=\frac{x(2.51x+0.03)}{x(2.43x+0.59)+0.14}$\\ ambient = sky diffuse + split-sum specular, times SSAO.
+\begin{block}{Fog and tone map}
+\eqimg{0.55}{fog}\eqimg{0.55}{aces}
 \end{block}
-\column{0.42\textwidth}
-\pic{1}{dusk.jpg}\\[1pt]{\small\centering Dusk: sun, sky, haze, shadows}
+\column{0.4\textwidth}
+\pic{1}{dusk.jpg}\\[1pt]{\small\centering Dusk: sun, sky, haze, shadows}\\[3pt]
+\small Ambient = sky diffuse + split-sum specular, times SSAO.
 \end{columns}
 \end{frame}
 
