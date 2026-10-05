@@ -59,7 +59,7 @@ test_a_climber_cannot_shoot_or_reload_but_can_again_on_the_lookout :: proc(t: ^t
 	defer delete(solids)
 	ladders := Base.Layout_Ladders(layout, 0)
 	defer delete(ladders)
-	battle := tower_battle(layout, solids[:], ladders[:], ladders[0], 1.0)
+	battle := tower_battle(layout, solids[:], ladders[:], ladders[0], 0.7)
 	defer Battle_Destroy(&battle)
 	ammo := battle.player.weapons[battle.player.current].ammo
 	for _ in 0 ..< 60 do Battle_Update(&battle, Player_Input{move = {0, 1}, fire = true}, 1.0 / 60)

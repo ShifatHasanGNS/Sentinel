@@ -74,7 +74,7 @@ test_a_driven_vehicle_moves_and_an_empty_one_stays_put :: proc(t: ^testing.T) {
 		Vehicle_Update(&vehicles[0], Vehicle_Controls{drive = {throttle = 1}}, &battle.collision, GROUND, 1.0 / 60)
 		Vehicle_Update(&vehicles[1], Vehicle_Controls{drive = {throttle = 1}}, &battle.collision, GROUND, 1.0 / 60) // Ignored: nobody is in it.
 	}
-	testing.expect(t, vehicles[0].body.position.z > 8)
+	testing.expect(t, vehicles[0].body.position.z > 4)
 	testing.expect_value(t, vehicles[1].body.position.z, 0)
 	testing.expect_value(t, battle.collision.boxes[vehicles[0].solid_index].center.z, vehicles[0].body.position.z)
 }

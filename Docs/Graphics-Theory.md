@@ -93,3 +93,9 @@ Each particle is a camera-facing quad. Its shape is a soft disc whose edge is er
 - Ridged (`1 - |n|`, squared) and billow (`|n|`) fbm give creases and rounded lumps.
 - The normal bake uses a Scharr 3x3 gradient (weights 3, 10, 3) instead of central differences. It is more rotation invariant, so diagonal slopes are not weakened.
 - Cavity occlusion: height below its neighbourhood mean (negative Laplacian) darkens albedo and ambient occlusion.
+
+## Aerial perspective and the sky
+
+The haze colour for fog uses the horizontal direction of the view ray, so every pixel on a screen column shares one sample. It therefore uses only the smooth atmosphere (`sky_atmosphere`): stars, sun and moon discs belong to the sky pass alone, or one star at the horizon would streak a whole column.
+
+Clouds sit on two planes (cumulus at 1500 m, cirrus at 7 km). Density is fbm warped in lattice units, scrolled by a wind offset; the detail layer drifts faster than the shape layer so the form slowly changes.

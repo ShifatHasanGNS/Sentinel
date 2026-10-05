@@ -32,6 +32,7 @@ Sky :: struct {
 	to_moon:        [3]f32,
 	moon_color:     [3]f32,
 	moon_intensity: f32,
+	cloud_offset_meters: [2]f32, // How far the wind has carried the cloud layers; the sky shader scrolls its noise by it.
 }
 
 // Which material layers the terrain blends and where the base plateau is (dirt around it).

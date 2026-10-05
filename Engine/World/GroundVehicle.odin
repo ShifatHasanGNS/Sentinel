@@ -67,6 +67,8 @@ Ground_Vehicle_Step :: proc(vehicle: ^Ground_Vehicle, handling: Vehicle_Handling
 	settle_on_ground(vehicle, handling, ground, delta_seconds)
 }
 
+VEHICLE_POWER_FADE :: f32(0.6)
+
 @(private = "file")
 next_speed :: proc(speed: f32, handling: Vehicle_Handling, input: Vehicle_Input, delta_seconds: f32) -> f32 {
 	result := speed
@@ -78,7 +80,9 @@ next_speed :: proc(speed: f32, handling: Vehicle_Handling, input: Vehicle_Input,
 		result = approach(speed, 0, handling.brake * delta_seconds)
 	case input.throttle != 0:
 		limit := handling.speed_forward_max if input.throttle > 0 else -handling.speed_reverse_max
-		result = approach(speed, limit * abs(input.throttle), handling.acceleration * delta_seconds)
+		// Engine power fades toward top speed (thrust = power / speed), so a car pulls hard from rest and eases onto its limit.
+		power_fade := 1 - VEHICLE_POWER_FADE * clamp(abs(speed) / abs(limit), 0, 1)
+		result = approach(speed, limit * abs(input.throttle), handling.acceleration * power_fade * delta_seconds)
 	case:
 		result = approach(speed, 0, handling.drag * delta_seconds)
 	}

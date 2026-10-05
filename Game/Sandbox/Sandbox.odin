@@ -23,12 +23,14 @@ SSAO_RADIUS_METERS :: 0.8
 SHADOW_DISTANCE_METERS :: 100.0
 HOURS_PER_REAL_SECOND :: 0.02 // A full day passes in twenty minutes.
 FIELD_OF_VIEW_DEGREES :: 65.0
+CLOUD_WIND_METERS_PER_SECOND :: [2]f32{14, 5}
 SCRIPTED_FLIGHT_RADIUS_METERS :: 380.0
 SCRIPTED_FLIGHT_SPEED :: 30.0
 
 // An open world of streamed terrain with scattered trees, rocks and bushes under a day/night cycle.
 Sandbox :: struct {
 	renderer:       Render.Renderer,
+	cloud_seconds:  f32,
 	materials:      Procedural.Texture_Set,
 	terrain:        ^Procedural.Terrain, // On the heap: the battle's ground function points at it.
 	scatter_rules:  Procedural.Scatter_Rules,
@@ -114,6 +116,7 @@ Sandbox_Update :: proc(sandbox: ^Sandbox, clock: Platform.Clock, input: ^Platfor
 	} else {
 		play_update(sandbox, input, clock.delta_seconds)
 	}
+	sandbox.cloud_seconds += clock.delta_seconds
 	if sandbox.clock_runs do sandbox.hours = math.mod(sandbox.hours + HOURS_PER_REAL_SECOND * clock.delta_seconds, 24)
 	update_stream(sandbox)
 	for _ in 0 ..< CHUNK_BUILDS_PER_FRAME_MAX {
@@ -131,6 +134,7 @@ Sandbox_Render :: proc(sandbox: ^Sandbox, window: Platform.Window) {
 	for light in Base.Layout_Night_Lights(sandbox.base.layout, sandbox.terrain.base_height_meters, darkness) do append(&lights, light)
 	for light in Base.Layout_Interior_Lights(sandbox.base.layout, sandbox.terrain.base_height_meters) do append(&lights, light)
 	daylight := Gameplay.Daylight_For_Hours(sandbox.hours)
+	daylight.sky.cloud_offset_meters = CLOUD_WIND_METERS_PER_SECOND * sandbox.cloud_seconds
 	frame := Render.Frame{
 		camera = camera,
 		items = items[:],

@@ -6,7 +6,7 @@ LADDER_CLIMB_SPEED :: f32(1.1) // Meters per second up: about three rungs a seco
 LADDER_DESCEND_SPEED :: f32(1.5) // Down is faster (hand over hand, sliding the feet).
 LADDER_ACCELERATION :: f32(5.0)
 LADDER_RUNG_METERS :: f32(0.3)
-LADDER_STANDOFF_METERS :: f32(0.42) // Body center in front of the ladder's face while climbing (body radius plus arm's length).
+LADDER_STANDOFF_METERS :: f32(0.3) // Body center in front of the ladder's face while climbing: the chest is against the rungs.
 LADDER_GRAB_REACH_METERS :: f32(0.9) // How far in front of the face a body can start a climb.
 LADDER_MOUNT_SECONDS :: f32(0.3)
 LADDER_TOP_MOUNT_SECONDS :: f32(0.45)
@@ -66,6 +66,15 @@ bottom_y :: proc(ladder: Solid) -> f32 {
 @(private = "file")
 top_height :: proc(ladder: Solid) -> f32 {
 	return 2 * ladder.half_extents.y
+}
+
+// Height of the ladder's foot above sea level and its length, for code that draws what the climber holds.
+Ladder_Bottom_Meters :: proc(ladder: Solid) -> f32 {
+	return bottom_y(ladder)
+}
+
+Ladder_Top_Meters :: proc(ladder: Solid) -> f32 {
+	return top_height(ladder)
 }
 
 // The world point on the climbing plane at a height: centered on the ladder, STANDOFF in front of its face.

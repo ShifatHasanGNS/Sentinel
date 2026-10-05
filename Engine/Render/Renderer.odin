@@ -222,6 +222,7 @@ light_base :: proc(renderer: ^Renderer, frame: Frame) {
 	GPU.Shader_Set(shader, "u_ToMoon", frame.sky.to_moon)
 	GPU.Shader_Set(shader, "u_MoonColor", frame.sky.moon_color)
 	GPU.Shader_Set(shader, "u_MoonIntensity", frame.sky.moon_intensity)
+	GPU.Shader_Set(shader, "u_CloudOffset", frame.sky.cloud_offset_meters)
 	Light_Set_Uniforms(shader, "u_Sun", frame.sun)
 	GPU.Shader_Set(shader, "u_CameraForward", frame.camera.forward)
 	GPU.Shader_Set(shader, "u_ViewProjection", frame.camera.view_projection)

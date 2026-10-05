@@ -66,7 +66,7 @@ Sky_Colors_For_Sun :: proc(to_sun: [3]f32) -> Sky_Colors {
 	return Sky_Colors{zenith, horizon, horizon * 0.12}
 }
 
-EXPOSURE_NIGHT :: 10.0
+EXPOSURE_NIGHT :: 6.0
 
 // Camera exposure for the sun's elevation (its sine): 1 in daylight, rising to EXPOSURE_NIGHT once the sun is well below
 // the horizon, like the eye adapting to the dark. Log-linear in between so the change looks even.

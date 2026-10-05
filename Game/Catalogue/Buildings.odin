@@ -296,7 +296,7 @@ add_ladder :: proc(parts: ^Parts, foot: [3]f32, height: f32) {
 }
 
 @(rodata)
-WATCHTOWER_LADDERS := [1]Procedural.Collision_Box{{{-0.7, 0, 1.4}, {-0.1, 6.3, 1.62}}}
+WATCHTOWER_LADDERS := [1]Procedural.Collision_Box{{{-0.7, 0, 1.4}, {-0.1, 6.3, 1.56}}}
 
 // Climbable volumes in an object's frame (their +Z face is where the climber stands).
 Catalogue_Ladders :: proc(kind: Object_Kind) -> []Procedural.Collision_Box {

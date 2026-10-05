@@ -129,6 +129,6 @@ void main() {
 	// in-scattered sky light, so far hills fade to the sky behind them (Beer-Lambert, one constant density).
 	float distance_meters = length(surface.position - u_CameraPosition);
 	float transmittance = exp(-FOG_DENSITY_PER_METER * distance_meters);
-	vec3 haze = sky_radiance(normalize(vec3(view.x, 0.0, view.z) * -1.0 + vec3(0.0, 0.02, 0.0)));
+	vec3 haze = sky_atmosphere(normalize(vec3(view.x, 0.0, view.z) * -1.0 + vec3(0.0, 0.02, 0.0)));
 	color = vec4(mix(haze, lit, transmittance), 1.0);
 }

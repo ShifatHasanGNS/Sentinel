@@ -272,8 +272,8 @@ mission_check_start :: proc(play: ^Play, input: ^Platform.Input) {
 mission_items :: proc(play: ^Play, items: ^[dynamic]Render.Draw_Item, lights: ^[dynamic]Render.Light) {
 	mission := &play.mission
 	column := la.matrix4_translate_f32(mission.extraction + {0, BEACON_HEIGHT_METERS / 2, 0})
-	append(items, Render.Draw_Item{mesh = &mission.beacon, model = column, material_layer = i32(Materials.Surface_Material.Gunmetal), uv_scale = {1, 1}, illumination_model = .Lambert, emission = {0.25, 4, 0.7}})
-	append(lights, Render.Light_Point(mission.extraction + {0, 3, 0}, {0.3, 1, 0.5}, 160, 26))
+	append(items, Render.Draw_Item{mesh = &mission.beacon, model = column, material_layer = i32(Materials.Surface_Material.Gunmetal), uv_scale = {1, 1}, illumination_model = .Lambert, emission = {0.04, 0.8, 0.15}})
+	append(lights, Render.Light_Point(mission.extraction + {0, 3, 0}, {0.3, 1, 0.5}, 90, 22))
 	if play.battle.targets[mission.radar_target].destroyed {
 		flicker := 0.7 + 0.3 * math.sin(play.demo_seconds * 13)
 		append(lights, Render.Light_Point(mission.radar_dish + {0, 1, 0}, {1, 0.5, 0.2}, 260 * flicker, 22))

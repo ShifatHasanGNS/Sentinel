@@ -34,36 +34,68 @@ float star_field(vec3 direction) {
 	return chance > 0.996 ? closeness * (0.5 + 6.0 * float(hash & 255u) / 255.0) : 0.0;
 }
 
-// A cloud layer: the view ray meets a plane 1500 m up at xz = direction.xz * 1500 / direction.y. Density is fbm on that plane
-// (coverage threshold gives clear gaps), and the lighting asks how much cloud lies toward the sun: a point with thick cloud
-// between it and the sun is darker (self-shadowing, one extra sample), thin edges glow (silver lining).
+const float CLOUD_WARP_CELLS = 0.7;
+uniform vec2 u_CloudOffset; // Wind drift of the cloud layers, in meters on the cloud plane.
+
+// Cumulus: the view ray meets a plane 1500 m up at xz = direction.xz * 1500 / direction.y. Density is domain-warped fbm there
+// (the warp rolls the edges into billows) and the shape layer drifts with the wind while the detail layer drifts a little
+// faster, so the clouds slowly change form as they move. A coverage threshold leaves clear gaps.
 float cloud_density(vec2 plane_position, int shape_octaves, int detail_octaves) {
-	float shape = fbm(plane_position * 0.0006 / 4096.0, 4096, shape_octaves, 301u) * 0.5 + 0.5;
-	float detail = detail_octaves > 0 ? fbm(plane_position * 0.003 / 4096.0, 4096, detail_octaves, 303u) * 0.5 + 0.5 : shape;
-	return smoothstep(0.4, 0.68, shape * 0.8 + detail * 0.2);
+	vec2 shape_uv = (plane_position + u_CloudOffset) * 0.0006 / 4096.0;
+	vec2 warp = vec2(fbm(shape_uv * 2.0, 4096, 2, 305u), fbm(shape_uv * 2.0 + 0.5, 4096, 2, 307u));
+	float shape = fbm(shape_uv + warp * CLOUD_WARP_CELLS / 4096.0, 4096, shape_octaves, 301u) * 0.5 + 0.5; // The warp is in lattice cells; the noise takes tile units.
+	float detail = shape;
+	if (detail_octaves > 0) {
+		vec2 detail_uv = (plane_position + u_CloudOffset * 1.35) * 0.0032 / 4096.0;
+		detail = fbm(detail_uv, 4096, detail_octaves, 303u) * 0.5 + 0.5;
+	}
+	return smoothstep(0.42, 0.7, shape * 0.78 + detail * 0.22);
 }
 
+// Cirrus: a thin high sheet (7 km) stretched along the wind into fibres, lit but never self-shadowed.
+float cirrus_density(vec3 direction) {
+	vec2 plane_position = direction.xz * 7000.0 / direction.y + u_CloudOffset * 1.8;
+	vec2 stretched = vec2(plane_position.x * 0.00012, plane_position.y * 0.0007) / 4096.0;
+	float fibres = fbm(stretched, 4096, 4, 311u) * 0.5 + 0.5;
+	return smoothstep(0.5, 0.82, fibres) * 0.45;
+}
+
+// Cloud colour: a grey body from the sky's own brightness, a sunlit rim (silver lining) that vanishes with the sun, and
+// moonlight tinting the whole layer at night. The sun term is scaled by how high the sun stands: below the horizon it has
+// no colour to give, so night clouds are not orange.
 vec3 add_clouds(vec3 sky, vec3 direction) {
-	if (direction.y < 0.05) return sky;
+	if (direction.y < 0.04) return sky;
+	float sun_height = smoothstep(-0.05, 0.25, u_ToSun.y);
+	float moon_light = u_MoonIntensity;
+	float fade = smoothstep(0.04, 0.3, direction.y);
 	vec2 plane_position = direction.xz * 1500.0 / direction.y;
-	float density = cloud_density(plane_position, 3, 2);
-	if (density < 0.01) return sky;
-	float toward_sun_density = cloud_density(plane_position + normalize(u_ToSun.xz + vec2(1e-4)) * 220.0, 2, 0); // Cheaper: shading needs only the coarse shape.
-	float shade = clamp(1.0 - 0.7 * max(toward_sun_density - density * 0.4, 0.0), 0.3, 1.0);
-	float silver = pow(1.0 - density, 3.0) * max(dot(direction, u_ToSun), 0.0);
+	float density = cloud_density(plane_position, 4, 3);
+	float high = cirrus_density(direction);
 	float brightness = dot(sky, vec3(0.3, 0.59, 0.11));
-	vec3 cloud = (vec3(brightness * 1.6) + u_SunColor * 0.12 * max(u_ToSun.y, 0.0)) * shade + u_SunColor * silver * 0.6;
-	float fade = smoothstep(0.05, 0.3, direction.y);
-	return mix(sky, cloud, density * 0.85 * fade);
+	vec3 ambient_light = vec3(brightness * 1.5) + u_MoonColor * moon_light * 0.35;
+	vec3 result = mix(sky, ambient_light * 1.1 + u_SunColor * 0.1 * sun_height, high * fade);
+	if (density < 0.01) return result;
+	float toward_sun_density = cloud_density(plane_position + normalize(u_ToSun.xz + vec2(1e-4)) * 220.0, 2, 0);
+	float shade = clamp(1.0 - 0.7 * max(toward_sun_density - density * 0.4, 0.0), 0.3, 1.0);
+	float silver = pow(1.0 - density, 3.0) * max(dot(direction, u_ToSun), 0.0) * sun_height;
+	float moon_rim = pow(1.0 - density, 3.0) * pow(max(dot(direction, u_ToMoon), 0.0), 3.0);
+	vec3 cloud = (ambient_light + u_SunColor * 0.12 * max(u_ToSun.y, 0.0)) * shade + u_SunColor * silver * 0.6 + u_MoonColor * moon_light * moon_rim * 0.8;
+	return mix(result, cloud, density * 0.88 * fade);
 }
 
-vec3 sky_radiance(vec3 direction) {
+// The smooth part of the sky: atmosphere scattering only. Aerial perspective uses this as its haze colour, because the haze
+// direction ignores a pixel's elevation: anything small and bright (a star, the moon) would otherwise paint a whole screen column.
+vec3 sky_atmosphere(vec3 direction) {
 	// Below the horizon the view ray would hit the planet; continue the horizon haze instead, dimmed like distant land.
 	vec3 haze_direction = normalize(vec3(direction.x, max(direction.y, 0.0), direction.z));
 	vec3 scattered = sky_lut_sample(u_SkyLut, haze_direction);
 	// Single scattering loses the blue along the long horizon path; real skies fill it back in by multiple scattering. Blend in the
 	// gradient colours as that fill. Below the horizon the haze dims like distant land.
-	vec3 sky = mix(scattered, sky_gradient(direction), 0.35) * mix(1.0, 0.6, smoothstep(0.0, -0.2, direction.y));
+	return mix(scattered, sky_gradient(direction), 0.35) * mix(1.0, 0.6, smoothstep(0.0, -0.2, direction.y));
+}
+
+vec3 sky_radiance(vec3 direction) {
+	vec3 sky = sky_atmosphere(direction);
 	sky = add_clouds(sky, direction);
 	float night = smoothstep(0.05, -0.2, u_ToSun.y);
 	float above_ground = smoothstep(-0.02, 0.05, direction.y);

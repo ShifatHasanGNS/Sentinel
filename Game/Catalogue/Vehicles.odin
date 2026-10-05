@@ -160,7 +160,7 @@ jeep_spec :: proc() -> (spec: Vehicle_Spec) {
 	spec.seat = {0.4, 1.7, -0.3}
 	spec.armor = 1
 	spec.handling = World.Vehicle_Handling{
-		speed_forward_max = 24, speed_reverse_max = 7, acceleration = 7, brake = 14, drag = 3, wheel_base = 3, steer_angle_max = 0.55,
+		speed_forward_max = 18, speed_reverse_max = 5, acceleration = 2.6, brake = 8, drag = 1.4, wheel_base = 3, steer_angle_max = 0.55,
 		half_width = 1.05, half_length = 2.45, height = 2.0,
 	}
 	return spec
@@ -197,7 +197,7 @@ cargo_truck_spec :: proc() -> (spec: Vehicle_Spec) {
 	spec.seat = {0.5, 2.5, 2.8}
 	spec.armor = 0.9
 	spec.handling = World.Vehicle_Handling{
-		speed_forward_max = 18, speed_reverse_max = 5, acceleration = 4, brake = 10, drag = 2.5, wheel_base = 5.5, steer_angle_max = 0.5,
+		speed_forward_max = 14, speed_reverse_max = 4, acceleration = 1.7, brake = 6.5, drag = 1.2, wheel_base = 5.5, steer_angle_max = 0.5,
 		half_width = 1.2, half_length = 4.2, height = 3.2,
 	}
 	return spec
@@ -232,7 +232,7 @@ armored_carrier_spec :: proc() -> (spec: Vehicle_Spec) {
 	spec.seat = {-0.6, 2.35, 0.2}
 	spec.armor = 0.25
 	spec.handling = World.Vehicle_Handling{
-		speed_forward_max = 16, speed_reverse_max = 5, acceleration = 3.5, brake = 9, drag = 2.5, wheel_base = 4, steer_angle_max = 0.45,
+		speed_forward_max = 12, speed_reverse_max = 4, acceleration = 1.5, brake = 6, drag = 1.2, wheel_base = 4, steer_angle_max = 0.45,
 		half_width = 1.4, half_length = 3.6, height = 2.9,
 	}
 	return spec
@@ -274,7 +274,7 @@ battle_tank_spec :: proc() -> (spec: Vehicle_Spec) {
 	spec.seat = {0, 2.7, -0.6}
 	spec.armor = 0.1
 	spec.handling = World.Vehicle_Handling{
-		speed_forward_max = 11, speed_reverse_max = 5, acceleration = 3.5, brake = 9, drag = 4, turn_rate_max = 0.9, tracked = true,
+		speed_forward_max = 9, speed_reverse_max = 3.5, acceleration = 1.3, brake = 6, drag = 2, turn_rate_max = 0.9, tracked = true,
 		half_width = 1.6, half_length = 3.2, height = 2.7,
 	}
 	return spec
@@ -325,8 +325,8 @@ helicopter_spec :: proc() -> (spec: Vehicle_Spec) {
 	spec.armor = 0.5
 	spec.is_aircraft = true
 	spec.aircraft = World.Aircraft_Handling{
-		climb_speed_max = 7, descent_speed_max = 5, vertical_acceleration = 4,
-		forward_speed_max = 36, strafe_speed_max = 14, horizontal_acceleration = 9,
+		climb_speed_max = 5, descent_speed_max = 4, vertical_acceleration = 1.8,
+		forward_speed_max = 28, strafe_speed_max = 10, horizontal_acceleration = 3.5,
 		yaw_rate_max = 1.5, tilt_max = 0.32, tilt_follow_per_second = 4,
 		spool_up_seconds = 4, spool_down_seconds = 8, lift_rotor_threshold = 0.92,
 		half_width = 1.3, half_length = 5.2, hull_center_z = -2.2, height = 3.7,

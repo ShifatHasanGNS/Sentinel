@@ -23,7 +23,7 @@ test_throttle_accelerates_to_the_top_speed_and_no_further :: proc(t: ^testing.T)
 	world: Collision_World
 	vehicle: Ground_Vehicle
 	drive(&vehicle, CAR, {throttle = 1}, world, FLAT, 1)
-	testing.expect(t, abs(vehicle.speed - 5) < 0.1) // 5 m/s^2 for one second.
+	testing.expect(t, vehicle.speed > 4 && vehicle.speed <= 5) // 5 m/s^2 at rest, a little less as the power fades.
 	drive(&vehicle, CAR, {throttle = 1}, world, FLAT, 10)
 	testing.expect_value(t, vehicle.speed, 20)
 	drive(&vehicle, CAR, {throttle = -1}, world, FLAT, 20)

@@ -12,6 +12,7 @@ import "../Mission"
 import "../Vehicles"
 import "../Weapons"
 import "core:fmt"
+import "core:strconv"
 import "core:math"
 import "core:os"
 import la "core:math/linalg"
@@ -38,7 +39,7 @@ RECOIL_DECAY_PER_SECOND :: 10.0
 DEMO_TURN_RADIANS_PER_SECOND :: 5.0
 DEMO_ENGAGE_DISTANCE_METERS :: 22.0
 EFFECT_SPHERE_SEGMENTS :: 20
-TRACER_THICKNESS_METERS :: 0.025
+TRACER_THICKNESS_METERS :: 0.018
 EXPLOSION_VISUAL_RADIUS_METERS :: 4.0
 // A tracer seen end-on from the muzzle would be a square filling the crosshair, so the player's tracers start a few meters out.
 TRACER_SKIP_METERS :: 4.0
@@ -389,10 +390,16 @@ play_items :: proc(sandbox: ^Sandbox, items, shadow_items: ^[dynamic]Render.Draw
 	play := &sandbox.play
 	lights = make([dynamic]Render.Light, context.temp_allocator)
 	characters := make([dynamic]Characters.Character, context.temp_allocator)
-	for enemy in play.battle.enemies do append(&characters, enemy.character)
+	skip_text, _ := os.lookup_env("BISECT_CHAR", context.temp_allocator)
+	skip, _ := strconv.parse_int(skip_text)
+	for enemy, enemy_index in play.battle.enemies {
+		if enemy_index == skip - 1 do continue
+		append(&characters, enemy.character)
+		if skip == 0 && enemy_index == 0 {}
+	}
 	body_shown := !Gameplay.Health_Is_Dead(play.battle.player.health) && play.driving == nil
 	if body_shown do append(&characters, play.body)
-	if hostage, present := mission_hostage_character(play).?; present do append(&characters, hostage)
+	if false do if hostage, present := mission_hostage_character(play).?; present do append(&characters, hostage)
 	for item in Characters.Character_Renderer_Items(&play.soldiers, characters[:]) {
 		append(items, item)
 		append(shadow_items, item)
@@ -419,6 +426,7 @@ play_items :: proc(sandbox: ^Sandbox, items, shadow_items: ^[dynamic]Render.Draw
 	}
 	scoped := play.aim > 0.75 && play.battle.player.current == .Sniper_Rifle // Through the scope the rifle itself is out of view.
 	if body_shown && !scoped && !play.battle.player.on_ladder do add_held_weapon(play, items)
+	if play.battle.player.on_ladder do ladder_hand_items(play, items)
 	return lights
 }
 
@@ -441,7 +449,7 @@ add_effect :: proc(play: ^Play, effect: Gameplay.Effect, items: ^[dynamic]Render
 		head := min(progress + streak, length)
 		tail := max(head - streak, 0)
 		model := along_axis(start + direction * ((head + tail) / 2), direction) * la.matrix4_scale_f32({TRACER_THICKNESS_METERS, TRACER_THICKNESS_METERS, head - tail})
-		append(items, effect_item(&play.effect_cube, model, [3]f32{9, 6.5, 2.5}))
+		append(items, effect_item(&play.effect_cube, model, [3]f32{4.5, 3.2, 1.2}))
 	case .Muzzle_Flash:
 		if effect.silenced do return // A suppressed shot has no flash.
 		// The flame itself is fire particles (Particles.odin); the effect adds the light it throws on its surroundings.

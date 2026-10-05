@@ -183,3 +183,7 @@
 | Ladder grip state machine: mount, eased climb at 1.1 m/s, step-over at the top, step off the bottom, jump off, grab from the top with E, hold-off against re-grab | `Engine/World/Ladder.odin` : `Controller_Ladder_Step`, `Ladder_Prompt_For` |
 | Ladder feel in play: rung bob, rung knocks, no shooting while climbing, prompts | `Game/Sandbox/Play.odin`; `Game/Sandbox/Sound.odin` : `ladder_sounds` |
 | Warped, ridged and billow noise; Scharr normal bake with cavity AO | Shaders/Include/Noise.glsl: warped_fbm, ridged_fbm, billow_fbm; Shaders/Include/BakeMain.glsl: main |
+| Wind-driven cumulus and cirrus clouds, moonlit at night | Shaders/Include/Sky.glsl: cloud_density, cirrus_density, add_clouds; Game/Sandbox/Sandbox.odin: CLOUD_WIND_METERS_PER_SECOND |
+| Sky haze without stars (stars no longer paint vertical lines) | Shaders/Include/Sky.glsl: sky_atmosphere; Shaders/DeferredBase.glsl: main |
+| Hands and sleeves gripping rungs, hand over hand | Game/Sandbox/LadderHands.odin: ladder_hand_items |
+| Vehicle power curve (thrust fades toward top speed) | Engine/World/GroundVehicle.odin: next_speed |
