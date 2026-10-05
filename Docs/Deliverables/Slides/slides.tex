@@ -6,22 +6,35 @@
 \usetikzlibrary{arrows.meta,positioning,shapes.geometric}
 \usepackage{booktabs,tabularx,amsmath}
 
-\definecolor{kuet}{RGB}{0,122,61}
-\definecolor{ink}{RGB}{15,27,45}
+\definecolor{kuet}{RGB}{15,143,133}
+\definecolor{ink}{RGB}{30,41,59}
+\definecolor{deep}{RGB}{11,18,32}
+\definecolor{bright}{RGB}{45,212,191}
+\definecolor{amber}{RGB}{245,158,11}
+\definecolor{lightfg}{RGB}{199,210,224}
 \usetheme{default}
 \usecolortheme{default}
-\setbeamercolor{frametitle}{fg=white,bg=kuet}
+\setbeamercolor{frametitle}{fg=white,bg=}
 \setbeamercolor{normal text}{fg=ink}
 \setbeamercolor{itemize item}{fg=kuet}
-\setbeamercolor{block title}{fg=white,bg=kuet}
-\setbeamercolor{block body}{bg=kuet!8}
+\setbeamercolor{enumerate item}{fg=kuet}
+\setbeamercolor{block title}{fg=kuet,bg=white}
+\setbeamercolor{block body}{fg=ink,bg=white}
 \setbeamertemplate{navigation symbols}{}
 \setbeamertemplate{itemize items}[circle]
-\setbeamerfont{frametitle}{series=\bfseries,size=\large}
-\setbeamerfont{block title}{size=\small}
-\setbeamertemplate{footline}{\hfill\scriptsize\color{gray}Sentinel \quad \insertframenumber/10\hspace{0.6em}\vspace{0.4em}}
+\setbeamerfont{frametitle}{series=\bfseries,size=\Large}
+\setbeamerfont{block title}{series=\bfseries,size=\small}
+\setbeamertemplate{background canvas}{\includegraphics[width=\paperwidth,height=\paperheight]{backdrops/content.jpg}}
+\setbeamertemplate{blocks}[rounded][shadow=false]
+\setbeamertemplate{footline}{\hfill\scriptsize\color{ink!60}\insertframenumber\,/\,10\hspace{0.8em}\vspace{0.4em}}
 \setbeamertemplate{frametitle}{%
-  \nointerlineskip\begin{beamercolorbox}[wd=\paperwidth,ht=2.6ex,dp=1.2ex,leftskip=1.2em]{frametitle}\usebeamerfont{frametitle}\insertframetitle\end{beamercolorbox}}
+  \nointerlineskip
+  \begin{tikzpicture}[remember picture,overlay]
+    \node[anchor=north west,inner sep=0] at (current page.north west){\includegraphics[width=\paperwidth,height=1.14cm]{backdrops/header.jpg}};
+    \fill[bright] (current page.north west)++(0,-1.14cm) rectangle ++(\paperwidth,-0.05cm);
+    \fill[amber] ([xshift=0.5cm,yshift=-0.38cm]current page.north west) rectangle ++(0.09cm,-0.4cm);
+  \end{tikzpicture}%
+  \begin{beamercolorbox}[wd=\paperwidth,ht=1.14cm,dp=0cm,leftskip=1.25cm]{frametitle}\vbox to 1.14cm{\vss\hbox{\usebeamerfont{frametitle}\insertframetitle}\vss}\end{beamercolorbox}}
 \tikzset{box/.style={draw=kuet,rounded corners=2pt,align=center,font=\scriptsize,inner sep=3pt,fill=white},arr/.style={-{Stealth[length=2mm]},thick,kuet}}
 \newcommand{\pic}[2]{\includegraphics[width=#1\linewidth]{images/#2}}
 
@@ -30,15 +43,14 @@
 % 1 ---------------- cover
 \begin{frame}[plain]
 \begin{tikzpicture}[remember picture,overlay]
-  \fill[ink] (current page.south west) rectangle (current page.north east);
-  \fill[kuet] ([xshift=1.4cm,yshift=-0.0cm]current page.north west) rectangle ++(0.12,-9cm);
-  \node[anchor=west,text=white!60,font=\scriptsize] at ([xshift=2.1cm,yshift=-1.0cm]current page.north west) {KHULNA UNIVERSITY OF ENGINEERING \& TECHNOLOGY \,|\, CSE 4102};
-  \node[anchor=west,text=white,font=\fontsize{46}{50}\selectfont\bfseries] at ([xshift=2.1cm,yshift=-3.2cm]current page.north west) {Sentinel};
-  \node[anchor=west,text=white,font=\Large,align=left] at ([xshift=2.1cm,yshift=-4.75cm]current page.north west) {A Fully Procedural Game Engine\\and Open-World Military Shooter};
-  \fill[kuet] ([xshift=2.1cm,yshift=-5.85cm]current page.north west) rectangle ++(1.6,-0.05);
-  \node[anchor=west,text=white!75,font=\small,align=left] at ([xshift=2.1cm,yshift=-6.6cm]current page.north west) {Nothing is loaded from a model, image or sound file:\\everything is generated from code and a seed.};
-  \node[anchor=west,text=white,font=\small,align=left] at ([xshift=2.1cm,yshift=-8.2cm]current page.north west) {\textbf{Md.\ Shifat Hasan} \ \textcolor{white!60}{Roll 2107067}};
-  \node[anchor=east,text=white!75,font=\scriptsize,align=right] at ([xshift=-1.0cm,yshift=-8.2cm]current page.north east) {Instructors: Md Tajmilur Rahman, Md.\ Mubtashim Abrar Nihal\\4th Year 1st Term \,|\, October 7, 2026};
+  \node[anchor=north west,inner sep=0] at (current page.north west){\includegraphics[width=\paperwidth,height=\paperheight]{backdrops/cover.jpg}};
+  \node[anchor=west,text=lightfg,font=\scriptsize] at ([xshift=1.2cm,yshift=-0.95cm]current page.north west) {KHULNA UNIVERSITY OF ENGINEERING \& TECHNOLOGY \ $\cdot$ \ CSE 4102};
+  \fill[amber] ([xshift=1.25cm,yshift=-1.5cm]current page.north west) rectangle ++(1.1cm,-0.06cm);
+  \node[anchor=west,text=white,font=\fontsize{50}{54}\selectfont\bfseries] at ([xshift=1.2cm,yshift=-2.7cm]current page.north west) {Sentinel};
+  \node[anchor=west,text=white!90!bright,font=\Large,align=left] at ([xshift=1.2cm,yshift=-4.5cm]current page.north west) {A Fully Procedural Game Engine\\and Open-World Military Shooter};
+  \node[anchor=west,text=bright,font=\normalsize\itshape,align=left] at ([xshift=1.2cm,yshift=-5.95cm]current page.north west) {Nothing is loaded from a model, image or sound file:\\everything is generated from code and a seed.};
+  \node[anchor=west,text=white,font=\large,align=left] at ([xshift=1.2cm,yshift=-7.45cm]current page.north west) {\textbf{Md.\ Shifat Hasan}\\[-1pt]\footnotesize\textcolor{lightfg}{Roll 2107067 \ $\cdot$ \ 4th Year 1st Term}};
+  \node[anchor=east,text=lightfg,font=\scriptsize,align=right] at ([xshift=-1.0cm,yshift=-8.2cm]current page.north east) {Instructors: Md Tajmilur Rahman, Md.\ Mubtashim Abrar Nihal\\Computer Graphics and Image Processing Laboratory \ $\cdot$ \ October 7, 2026};
 \end{tikzpicture}
 \end{frame}
 
@@ -197,8 +209,9 @@
 
 % 10 ---------------- references + thanks
 \begin{frame}{References}
-\begin{columns}[T]
-\column{0.49\textwidth}\fontsize{9}{10.5}\selectfont\setlength{\parskip}{1.5pt}
+\setbeamertemplate{footline}{}
+\vspace*{-12pt}\begin{columns}[T]
+\column{0.49\textwidth}\fontsize{8.2}{9.3}\selectfont\setlength{\parskip}{1pt}
 [1] K. Perlin, ``Improving noise,'' \emph{ACM TOG}, 21(3), 2002.\par
 [2] S. Worley, ``A cellular texture basis function,'' \emph{SIGGRAPH}, 1996.\par
 [3] R. Cook, K. Torrance, ``A reflectance model for computer graphics,'' \emph{ACM TOG}, 1(1), 1982.\par
@@ -207,7 +220,7 @@
 [6] S. Hillaire, ``A scalable and production ready sky and atmosphere rendering technique,'' \emph{CGF}, 39(4), 2020.\par
 [7] R. Dimitrov, ``Cascaded shadow maps,'' NVIDIA, 2007.\par
 [8] M. Oren, S. Nayar, ``Generalization of Lambert's reflectance model,'' \emph{SIGGRAPH}, 1994.
-\column{0.49\textwidth}\fontsize{9}{10.5}\selectfont\setlength{\parskip}{1.5pt}
+\column{0.49\textwidth}\fontsize{8.2}{9.3}\selectfont\setlength{\parskip}{1pt}
 [9] K. Narkowicz, ``ACES filmic tone mapping curve,'' 2016.\par
 [10] J. Jimenez, ``Next generation post processing in Call of Duty: Advanced Warfare,'' SIGGRAPH, 2014.\par
 [11] T. Lottes, ``FXAA,'' NVIDIA, 2009.\par
@@ -217,7 +230,11 @@
 [15] H. Scharr, ``Optimal operators in digital image processing,'' Ph.D., Heidelberg, 2000.\par
 [16] T. Akenine-M\"oller et al., \emph{Real-Time Rendering}, 4th ed., CRC Press, 2018.
 \end{columns}
-\vspace{-2pt}
-\begin{center}{\Large\bfseries\color{kuet}Thank you} \ \ {\normalsize Questions are welcome \ $\cdot$ \ Md.\ Shifat Hasan, Roll 2107067}\end{center}
+\begin{tikzpicture}[remember picture,overlay]
+  \node[anchor=south west,inner sep=0] at (current page.south west){\includegraphics[width=\paperwidth,height=1.5cm]{backdrops/band.jpg}};
+  \fill[amber] ([xshift=0.5cm,yshift=0.35cm]current page.south west) rectangle ++(0.09cm,0.8cm);
+  \node[anchor=west,text=white,font=\LARGE\bfseries] at ([xshift=0.9cm,yshift=0.75cm]current page.south west) {Thank you};
+  \node[anchor=east,text=lightfg,font=\small,align=right] at ([xshift=-0.8cm,yshift=0.75cm]current page.south east) {Questions are welcome\\Md.\ Shifat Hasan \ $\cdot$ \ Roll 2107067};
+\end{tikzpicture}
 \end{frame}
 \end{document}
