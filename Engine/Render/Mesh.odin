@@ -3,11 +3,15 @@ package Render
 import "../GPU"
 import "../Procedural"
 
-// One placement of an instanced mesh. Five vec4s: the model matrix columns, then (material layer, padding).
+// One placement of an instanced mesh. Five vec4s: the model matrix columns, then (material layer, tint, sway, spare).
+// tint in [-1, 1] shifts the albedo from cool and dark to warm and light, so a forest is not one green. sway > 0 bends the
+// mesh in the wind, more toward its top; sway > 1 adds leaf flutter on top.
 Instance :: struct {
 	model:          matrix[4, 4]f32,
 	material_layer: f32,
-	padding:        [3]f32,
+	tint:           f32,
+	sway:           f32,
+	spare:          f32,
 }
 
 Mesh :: struct {

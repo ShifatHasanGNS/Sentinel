@@ -119,3 +119,21 @@ float billow_fbm(vec2 uv, int period, int octaves, uint seed) {
 	}
 	return sum / amplitude_total;
 }
+
+// Worley feature lookup: for the nearest point, its distance (x), a stable random roll in [0, 1) (y), and the offset from that
+// point to the sample in cell units (zw). The roll lets a recipe give every cell its own tone or direction (leaves, needles).
+vec4 worley_feature(vec2 uv, int period, uint seed) {
+	vec2 position = uv * float(period);
+	ivec2 cell = ivec2(floor(position));
+	vec4 nearest = vec4(8.0, 0.0, 0.0, 0.0);
+	for (int dy = -1; dy <= 1; dy++) {
+		for (int dx = -1; dx <= 1; dx++) {
+			ivec2 neighbour = cell + ivec2(dx, dy);
+			uint hash = hash_cell(neighbour, period, seed);
+			vec2 point = vec2(neighbour) + vec2(hash_to_unit(hash), hash_to_unit(hash_u32(hash)));
+			float distance_to_point = distance(position, point);
+			if (distance_to_point < nearest.x) nearest = vec4(distance_to_point, hash_to_unit(hash_u32(hash ^ 0x9E3779B9u)), position - point);
+		}
+	}
+	return nearest;
+}

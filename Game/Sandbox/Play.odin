@@ -21,8 +21,6 @@ import "core:strings"
 PLAY_FIELD_OF_VIEW_DEGREES :: 72.0
 PROP_COLLISION_RADIUS_METERS :: 30.0 // Trees and rocks within this distance of the player are solid.
 CROUCHED_BODY :: 0.6 // How far the body model sinks into its crouch pose.
-TREE_TRUNK_HALF_WIDTH_METERS :: 0.2
-TREE_HEIGHT_METERS :: 4.0
 ROCK_HALF_WIDTH_METERS :: 0.8
 ROCK_HEIGHT_METERS :: 1.0
 LADDER_BOB_METERS :: 0.02
@@ -617,8 +615,7 @@ fill_prop_solids :: proc(sandbox: ^Sandbox) {
 prop_solid :: proc(point: Procedural.Scatter_Point) -> (solid: World.Solid, ok: bool) {
 	switch {
 	case point.variant < TREE_VARIANT_LIMIT:
-		half := TREE_TRUNK_HALF_WIDTH_METERS * point.scale
-		height := TREE_HEIGHT_METERS * point.scale
+		half, height := Tree_Solid_For(point)
 		return World.Solid{center = point.position + {0, height / 2, 0}, half_extents = {half, height / 2, half}, yaw_radians = point.yaw_radians}, true
 	case point.variant < ROCK_VARIANT_LIMIT:
 		half := ROCK_HALF_WIDTH_METERS * point.scale

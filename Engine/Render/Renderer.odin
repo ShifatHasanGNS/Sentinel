@@ -164,6 +164,7 @@ draw_geometry_items :: proc(shader: ^GPU.Shader, frame: Frame, instanced: bool) 
 	GPU.Shader_Set(shader, "u_ViewProjection", frame.camera.view_projection)
 	GPU.Shader_Set(shader, "u_TriplanarScale", f32(TRIPLANAR_TILES_PER_METER))
 	GPU.Shader_Set(shader, "u_GroundLevel", frame.ground_level_meters)
+	GPU.Shader_Set(shader, "u_WindSeconds", frame.wind_seconds)
 	GPU.Shader_Set(shader, "u_CameraPosition", frame.camera.position)
 	shading := frame.terrain_shading
 	GPU.Shader_Set(shader, "u_TerrainLayers", [4]f32{f32(shading.grass_layer), f32(shading.dirt_layer), f32(shading.rock_layer), f32(shading.sand_layer)})

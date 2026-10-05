@@ -187,3 +187,7 @@
 | Sky haze without stars (stars no longer paint vertical lines) | Shaders/Include/Sky.glsl: sky_atmosphere; Shaders/DeferredBase.glsl: main |
 | Hands and sleeves gripping rungs, hand over hand | Game/Sandbox/LadderHands.odin: ladder_hand_items |
 | Vehicle power curve (thrust fades toward top speed) | Engine/World/GroundVehicle.odin: next_speed |
+| Four tree species (oak, pine, birch, cypress) with per-tree height, width, lean and tint, wind sway and leaf flutter | Game/Sandbox/Trees.odin: Trees_Create, Tree_Place; Shaders/Geometry.glsl: wind_offset |
+| Bark, birch bark, leaf and needle materials; worley_feature for per-cell leaves and needles | Shaders/Recipes/Bark.glsl, BirchBark.glsl, Leaves.glsl, Needles.glsl; Shaders/Include/Noise.glsl: worley_feature |
+| Turf from blade-tip domes, strands, dry patches and flower specks | Shaders/Recipes/Grass.glsl |
+| Vehicle paint with fine panel lines, fade, scratches and grime | Shaders/Recipes/PaintedMetal.glsl |

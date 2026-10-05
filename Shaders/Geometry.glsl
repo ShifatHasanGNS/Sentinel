@@ -20,20 +20,39 @@ uniform mat4 u_Model;
 uniform float u_Layer;
 #endif
 uniform mat4 u_ViewProjection;
+uniform float u_WindSeconds;
 flat out float v_layer;
+flat out float v_tint;
 out vec3 v_world_position;
 out vec3 v_world_normal;
 out vec4 v_world_tangent;
 out vec2 v_uv;
+// Wind on a tree: a slow gust travels across the land (a sine of position and time), the whole tree leans with it by the square
+// of its height (a cantilever bends little at the root and most at the tip), and leaves flutter on top of that.
+vec2 wind_offset(vec3 world_position, float local_height, float sway) {
+	float gust = 0.5 + 0.5 * sin(u_WindSeconds * 1.3 + world_position.x * 0.05 + world_position.z * 0.03);
+	float bend = clamp(local_height / 9.0, 0.0, 1.0);
+	bend *= bend;
+	vec2 lean = vec2(1.0, 0.35) * (0.04 + 0.1 * gust) * bend;
+	float flutter_amount = clamp(sway - 1.0, 0.0, 1.0) * 0.03;
+	vec2 flutter = vec2(sin(u_WindSeconds * 5.3 + world_position.x * 1.7 + world_position.y), cos(u_WindSeconds * 4.7 + world_position.z * 1.9 + world_position.y * 1.3)) * flutter_amount;
+	return lean * min(sway, 1.0) * 2.0 + flutter;
+}
+
 void main() {
 #ifdef INSTANCED
 	mat4 model = mat4(a_ModelColumn0, a_ModelColumn1, a_ModelColumn2, a_ModelColumn3);
 	v_layer = a_InstanceData.x;
+	v_tint = a_InstanceData.y;
+	float sway = a_InstanceData.z;
 #else
 	mat4 model = u_Model;
 	v_layer = u_Layer;
+	v_tint = 0.0;
+	float sway = 0.0;
 #endif
 	vec4 world_position = model * vec4(a_Position, 1.0);
+	if (sway > 0.0) world_position.xz += wind_offset(world_position.xyz, a_Position.y, sway);
 	v_world_position = world_position.xyz;
 	v_world_normal = mat3(model) * a_Normal;
 	v_world_tangent = vec4(mat3(model) * a_Tangent.xyz, a_Tangent.w);
@@ -45,6 +64,7 @@ void main() {
 uniform mat4 u_Model;
 #endif
 flat in float v_layer;
+flat in float v_tint;
 in vec3 v_world_position;
 in vec3 v_world_normal;
 in vec4 v_world_tangent;
@@ -126,6 +146,7 @@ void main() {
 		}
 		if (orm.r > 0.3 && distance(v_world_position, u_CameraPosition) < WEATHER_DISTANCE_METERS) weather_surface(v_world_position, geometric_normal, u_GroundLevel, albedo, orm); // Glass stays clean.
 	}
+	albedo *= vec3(1.0 + 0.22 * v_tint, 1.0 + 0.08 * v_tint, 1.0 - 0.25 * v_tint); // Per-instance variation: warm and light above zero, cool and dark below.
 	o_Albedo = vec4(albedo, float(u_IlluminationModel) / 255.0);
 	o_Normal = vec4(oct_encode(normal), max(orm.r, 0.045), orm.g);
 	o_Emission = vec4(u_Emission, orm.b);

@@ -81,8 +81,8 @@ upload_groups :: proc(slot: ^[dynamic]Slot_Group, assembly: Procedural.Assembly,
 illumination_for :: proc(material: i32) -> Render.Illumination_Model {
 	switch Materials.Surface_Material(material) {
 	case .Skin: return .Subsurface
-	case .Canvas, .Fabric_Desert, .Fabric_Dark, .Woodland_Camo, .Grass: return .Oren_Nayar
-	case .Concrete, .Rusted_Metal, .Sand, .Dirt, .Rock, .Painted_Metal, .Asphalt, .Wood, .Rubber, .Glass, .Olive_Paint, .Gunmetal: return .Cook_Torrance
+	case .Canvas, .Fabric_Desert, .Fabric_Dark, .Woodland_Camo, .Grass, .Leaves, .Needles: return .Oren_Nayar
+	case .Concrete, .Rusted_Metal, .Sand, .Dirt, .Rock, .Painted_Metal, .Asphalt, .Wood, .Rubber, .Glass, .Olive_Paint, .Gunmetal, .Bark, .Birch_Bark: return .Cook_Torrance
 	}
 	return .Cook_Torrance
 }

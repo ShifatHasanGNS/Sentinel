@@ -5,12 +5,10 @@ import "../../Engine/Render"
 import "core:math"
 import la "core:math/linalg"
 
-TREE_CAPACITY :: 6000
 ROCK_CAPACITY :: 4000
 BUSH_CAPACITY :: 8000
 GRASS_CAPACITY :: 24000
 GRASS_DRAW_DISTANCE_METERS :: 45.0
-TREE_DETAIL_DISTANCE_METERS :: 110.0
 
 // Scatter variant thresholds: [0, TREE) tree, [TREE, ROCK) rock, the rest bush.
 TREE_VARIANT_LIMIT :: 0.30
@@ -19,121 +17,43 @@ ROCK_VARIANT_LIMIT :: 0.45
 // Each prop has a detailed mesh for the camera and a crude proxy for the shadow pass that draws the same instances: a shadow
 // is a silhouette, so a few dozen triangles do the work of a thousand.
 Props :: struct {
-	tree_trunk:         Render.Mesh,
-	tree_canopy:        Render.Mesh,
-	rock:               Render.Mesh,
-	bush:               Render.Mesh,
-	grass:              Render.Mesh,
-	tree_far_trunk:     Render.Mesh, // Distant trees: a few hundred triangles instead of thousands (beyond TREE_DETAIL_DISTANCE_METERS).
-	tree_far_canopy:    Render.Mesh,
-	tree_trunk_shadow:  Render.Mesh,
-	tree_canopy_shadow: Render.Mesh,
-	rock_shadow:        Render.Mesh,
-	bush_shadow:        Render.Mesh,
+	trees:        [Tree_Species]Tree_Meshes,
+	rock:         Render.Mesh,
+	bush:         Render.Mesh,
+	grass:        Render.Mesh,
+	rock_shadow:  Render.Mesh,
+	bush_shadow:  Render.Mesh,
 }
 
 Props_Create :: proc() -> (props: Props) {
-	props.tree_trunk = upload_prop(tree_trunk_mesh(), TREE_CAPACITY)
-	props.tree_canopy = upload_prop(tree_canopy_mesh(), TREE_CAPACITY)
+	props.trees = Trees_Create()
 	props.rock = upload_prop(rock_mesh(), ROCK_CAPACITY)
 	props.bush = upload_prop(bush_mesh(), BUSH_CAPACITY)
 	props.grass = upload_prop(grass_tuft_mesh(), GRASS_CAPACITY)
-	props.tree_far_trunk = upload_prop(placed(Procedural.Cylinder_Create(0.18, 4.4, 5, 1), {0, 2.2, 0}, {1, 1, 1}), TREE_CAPACITY)
-	props.tree_far_canopy = upload_prop(tree_far_canopy_mesh(), TREE_CAPACITY)
-	props.tree_trunk_shadow = upload_shadow_proxy(placed(Procedural.Cylinder_Create(0.2, 4, 5, 1), {0, 2, 0}, {1, 1, 1}), &props.tree_trunk)
-	props.tree_canopy_shadow = upload_shadow_proxy(placed(Procedural.Sphere_Create(2.0, 8, 4), {0, 5.2, 0}, {1, 1.25, 1}), &props.tree_canopy)
 	props.rock_shadow = upload_shadow_proxy(placed(Procedural.Sphere_Create(0.9, 8, 4), {0, 0.25, 0}, {1.2, 0.7, 1}), &props.rock)
 	props.bush_shadow = upload_shadow_proxy(placed(Procedural.Sphere_Create(0.7, 6, 3), {0, 0.35, 0}, {1.3, 0.9, 1.3}), &props.bush)
 	return props
 }
 
 Props_Destroy :: proc(props: ^Props) {
-	Render.Mesh_Destroy(&props.tree_trunk_shadow)
-	Render.Mesh_Destroy(&props.tree_canopy_shadow)
+	Trees_Destroy(&props.trees)
 	Render.Mesh_Destroy(&props.rock_shadow)
 	Render.Mesh_Destroy(&props.bush_shadow)
-	Render.Mesh_Destroy(&props.tree_trunk)
-	Render.Mesh_Destroy(&props.tree_canopy)
 	Render.Mesh_Destroy(&props.rock)
 	Render.Mesh_Destroy(&props.bush)
 	Render.Mesh_Destroy(&props.grass)
-	Render.Mesh_Destroy(&props.tree_far_trunk)
-	Render.Mesh_Destroy(&props.tree_far_canopy)
 }
 
-@(private = "file")
 upload_shadow_proxy :: proc(mesh: Procedural.Mesh, owner: ^Render.Mesh) -> Render.Mesh {
 	mesh := mesh
 	defer Procedural.Mesh_Destroy(&mesh)
 	return Render.Mesh_Upload_Instanced_Sharing(mesh, owner)
 }
 
-@(private = "file")
 upload_prop :: proc(mesh: Procedural.Mesh, capacity: int) -> Render.Mesh {
 	mesh := mesh
 	defer Procedural.Mesh_Destroy(&mesh)
 	return Render.Mesh_Upload_Instanced(mesh, capacity)
-}
-
-BRANCHES :: 6
-BRANCH_LENGTH_METERS :: 1.5
-
-// Where branch i leaves the trunk and where it ends: spread around the trunk by the golden angle, rising and tilting out ~50 degrees.
-@(private = "file")
-branch_ends :: proc(index: int) -> (base, tip: [3]f32) {
-	around := f32(index) * 2.3999632
-	height := 2.3 + 0.35 * f32(index)
-	tilt := math.to_radians(f32(50) - 4 * f32(index))
-	direction := [3]f32{math.sin(tilt) * math.cos(around), math.cos(tilt), math.sin(tilt) * math.sin(around)}
-	base = {0, height, 0}
-	return base, base + direction * (BRANCH_LENGTH_METERS - 0.12 * f32(index))
-}
-
-// A tapering trunk 4 m tall with six branches reaching out and up from it, standing on y = 0.
-@(private = "file")
-tree_trunk_mesh :: proc() -> (tree: Procedural.Mesh) {
-	trunk := Procedural.Cylinder_Create(0.22, 4.4, 10, 6)
-	Procedural.Mesh_Deform(&trunk, {Procedural.Taper{1, 0.4}, Procedural.Noise_Displace{0.05, 2.5, 2, 3}})
-	Procedural.Mesh_Append(&tree, trunk, la.matrix4_translate_f32({0, 2.2, 0}))
-	Procedural.Mesh_Destroy(&trunk)
-	for index in 0 ..< BRANCHES {
-		base, tip := branch_ends(index)
-		span := tip - base
-		length := la.length(span)
-		branch := Procedural.Cylinder_Create(0.075, length, 6, 2)
-		Procedural.Mesh_Deform(&branch, {Procedural.Taper{1, 0.35}, Procedural.Noise_Displace{0.02, 3, 2, u32(60 + index)}})
-		axis := span / length
-		reference: [3]f32 = {1, 0, 0} if abs(axis.x) < 0.9 else {0, 0, 1}
-		side := la.normalize(la.cross(axis, reference))
-		forward := la.cross(side, axis)
-		frame := matrix[4, 4]f32{
-			side.x, axis.x, forward.x, base.x + span.x / 2,
-			side.y, axis.y, forward.y, base.y + span.y / 2,
-			side.z, axis.z, forward.z, base.z + span.z / 2,
-			0, 0, 0, 1,
-		}
-		Procedural.Mesh_Append(&tree, branch, frame)
-		Procedural.Mesh_Destroy(&branch)
-	}
-	return tree
-}
-
-// Foliage clumps sit on the branch tips (plus one on top), so the crown follows the branching instead of being a ball.
-@(private = "file")
-tree_canopy_mesh :: proc() -> (canopy: Procedural.Mesh) {
-	for index in 0 ..< BRANCHES {
-		_, tip := branch_ends(index)
-		radius := 0.95 - 0.04 * f32(index)
-		blob := Procedural.Sphere_Create(radius, 14, 7)
-		Procedural.Mesh_Deform(&blob, {Procedural.Noise_Displace{radius * 0.32, 2.6 / radius, 4, u32(11 + index)}})
-		Procedural.Mesh_Append(&canopy, blob, la.matrix4_translate_f32(tip + {0, radius * 0.3, 0}) * la.matrix4_scale_f32({1.1, 0.85, 1.1}))
-		Procedural.Mesh_Destroy(&blob)
-	}
-	top := Procedural.Sphere_Create(1.0, 14, 7)
-	Procedural.Mesh_Deform(&top, {Procedural.Noise_Displace{0.3, 2.6, 4, 19}})
-	Procedural.Mesh_Append(&canopy, top, la.matrix4_translate_f32({0, 5.0, 0}) * la.matrix4_scale_f32({1, 0.9, 1}))
-	Procedural.Mesh_Destroy(&top)
-	return canopy
 }
 
 @(private = "file")
@@ -159,7 +79,6 @@ bush_mesh :: proc() -> (bush: Procedural.Mesh) {
 	return bush
 }
 
-@(private = "file")
 placed :: proc(mesh: Procedural.Mesh, offset, scale: [3]f32) -> (result: Procedural.Mesh) {
 	mesh := mesh
 	defer Procedural.Mesh_Destroy(&mesh)
@@ -185,17 +104,4 @@ grass_tuft_mesh :: proc() -> (tuft: Procedural.Mesh) {
 		Procedural.Mesh_Destroy(&blade)
 	}
 	return tuft
-}
-
-// The far crown: the same silhouette from three coarse lumpy lobes (a far tree covers a few dozen pixels).
-@(private = "file")
-tree_far_canopy_mesh :: proc() -> (canopy: Procedural.Mesh) {
-	lobes := [3][4]f32{{0, 5.0, 0, 1.6}, {0.9, 4.2, 0.4, 1.1}, {-0.8, 4.4, -0.5, 1.1}}
-	for lobe, index in lobes {
-		blob := Procedural.Sphere_Create(lobe[3], 8, 4)
-		Procedural.Mesh_Deform(&blob, {Procedural.Noise_Displace{lobe[3] * 0.25, 2.0 / lobe[3], 2, u32(70 + index)}})
-		Procedural.Mesh_Append(&canopy, blob, la.matrix4_translate_f32(lobe.xyz) * la.matrix4_scale_f32({1.1, 0.9, 1.1}))
-		Procedural.Mesh_Destroy(&blob)
-	}
-	return canopy
 }

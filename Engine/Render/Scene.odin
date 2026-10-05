@@ -53,6 +53,7 @@ Frame :: struct {
 	shadow_items:      []Draw_Item, // Shadow casters; when empty, items cast.
 	terrain_shading:   Terrain_Shading,
 	sun:               Light, // The one directional light.
+	wind_seconds:        f32, // Clock for wind sway of instanced foliage.
 	ground_level_meters: f32, // Where walls meet the ground, for weathering (splash and grime stay below ~1 m of it).
 	particles:         []Particle, // Smoke and fire billboards, drawn after lighting.
 	interiors:         []Interior_Volume, // Roofed rooms: sky light does not reach inside them.

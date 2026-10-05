@@ -47,10 +47,7 @@ Sandbox :: struct {
 	camera:         Fly_Camera,
 	hours:          f32,
 	clock_runs:     bool,
-	trunk_instances:  [dynamic]Render.Instance,
-	canopy_instances: [dynamic]Render.Instance,
-	far_trunk_instances:  [dynamic]Render.Instance,
-	far_canopy_instances: [dynamic]Render.Instance,
+	tree_instances:   [Tree_Species]Tree_Instances,
 	rock_instances:   [dynamic]Render.Instance,
 	bush_instances:   [dynamic]Render.Instance,
 }
@@ -92,10 +89,7 @@ Sandbox_Destroy :: proc(sandbox: ^Sandbox) {
 	delete(sandbox.build_queue)
 	delete(sandbox.to_load)
 	delete(sandbox.to_unload)
-	delete(sandbox.trunk_instances)
-	delete(sandbox.canopy_instances)
-	delete(sandbox.far_trunk_instances)
-	delete(sandbox.far_canopy_instances)
+	Tree_Instances_Destroy(&sandbox.tree_instances)
 	delete(sandbox.rock_instances)
 	delete(sandbox.bush_instances)
 	delete(sandbox.grass_instances)
@@ -150,6 +144,7 @@ Sandbox_Render :: proc(sandbox: ^Sandbox, window: Platform.Window) {
 		},
 		sun = daylight.sun,
 		ground_level_meters = sandbox.terrain.base_height_meters,
+		wind_seconds = sandbox.cloud_seconds,
 		particles = Particles_Collect(&sandbox.play.particles),
 		local_lights = lights[:],
 		interiors = Base.Layout_Interiors(sandbox.base.layout, sandbox.terrain.base_height_meters)[:],
@@ -172,6 +167,7 @@ Sandbox_Render :: proc(sandbox: ^Sandbox, window: Platform.Window) {
 camera_for_view :: proc(view: string) -> Fly_Camera {
 	switch view {
 	case "base": return Fly_Camera_Looking_At({-75, 42, 100}, {0, 10, -5})
+	case "trees": return Fly_Camera_Looking_At({112, 13, 40}, {135, 11.5, 60})
 	case "gate": return Fly_Camera_Looking_At({0, 14, 100}, {0, 12, 40})
 	case "yard": return Fly_Camera_Looking_At({-34, 16, 70}, {14, 11, 44})
 	case "airfield": return Fly_Camera_Looking_At({60, 26, 50}, {32, 11, -4})
@@ -236,11 +232,10 @@ gather_items :: proc(sandbox: ^Sandbox, camera: Render.Camera) -> (items, shadow
 		if Render.Frustum_Intersects_Aabb(frustum, chunk.lowest, chunk.highest) do append(&items, item)
 	}
 	collect_instances(sandbox, frustum, camera.position)
-	for prop_item in prop_items(sandbox) do append(&items, prop_item)
+	add_prop_items(sandbox, &items, &shadow_items)
 	night_amount := clamp((0.08 - Gameplay.Sun_Direction_To_Sun(sandbox.hours).y) / 0.2, 0, 1)
 	for base_item in Base.Base_Scene_Items(&sandbox.base, night_amount) do append(&items, base_item)
 	for shadow_item in Base.Base_Scene_Shadow_Items(&sandbox.base) do append(&shadow_items, shadow_item)
-	for proxy_item in shadow_proxy_items(sandbox) do append(&shadow_items, proxy_item)
 	return
 }
 
@@ -250,29 +245,23 @@ terrain_item :: proc(chunk: ^Chunk) -> Render.Draw_Item {
 }
 
 @(private = "file")
-prop_items :: proc(sandbox: ^Sandbox) -> [7]Render.Draw_Item {
+add_prop_items :: proc(sandbox: ^Sandbox, items, shadow_items: ^[dynamic]Render.Draw_Item) {
 	prop :: proc(mesh: ^Render.Mesh) -> Render.Draw_Item {
 		return Render.Draw_Item{mesh = mesh, model = la.MATRIX4F32_IDENTITY, uv_scale = {1, 1}, triplanar = true, illumination_model = .Cook_Torrance}
 	}
-	return {prop(&sandbox.props.tree_trunk), prop(&sandbox.props.tree_canopy), prop(&sandbox.props.rock), prop(&sandbox.props.bush), prop(&sandbox.props.grass), prop(&sandbox.props.tree_far_trunk), prop(&sandbox.props.tree_far_canopy)}
-}
-
-@(private = "file")
-shadow_proxy_items :: proc(sandbox: ^Sandbox) -> [4]Render.Draw_Item {
 	proxy :: proc(mesh: ^Render.Mesh) -> Render.Draw_Item {
 		return Render.Draw_Item{mesh = mesh, model = la.MATRIX4F32_IDENTITY}
 	}
-	return {proxy(&sandbox.props.tree_trunk_shadow), proxy(&sandbox.props.tree_canopy_shadow), proxy(&sandbox.props.rock_shadow), proxy(&sandbox.props.bush_shadow)}
+	Tree_Items(&sandbox.props.trees, items, shadow_items)
+	append(items, prop(&sandbox.props.rock), prop(&sandbox.props.bush), prop(&sandbox.props.grass))
+	append(shadow_items, proxy(&sandbox.props.rock_shadow), proxy(&sandbox.props.bush_shadow))
 }
 
 @(private = "file")
 // Props are instanced from every chunk that can matter this frame: chunks in view, plus chunks near enough to cast a shadow into view.
 // Chunks that are both behind the camera and beyond the shadow distance cost nothing.
 collect_instances :: proc(sandbox: ^Sandbox, frustum: Render.Frustum, camera_position: [3]f32) {
-	clear(&sandbox.trunk_instances)
-	clear(&sandbox.canopy_instances)
-	clear(&sandbox.far_trunk_instances)
-	clear(&sandbox.far_canopy_instances)
+	Tree_Instances_Clear(&sandbox.tree_instances)
 	clear(&sandbox.rock_instances)
 	clear(&sandbox.bush_instances)
 	clear(&sandbox.grass_instances)
@@ -280,10 +269,7 @@ collect_instances :: proc(sandbox: ^Sandbox, frustum: Render.Frustum, camera_pos
 		if chunk_matters(chunk, frustum, camera_position) do for point in chunk.scatter do if prop_is_needed(point, frustum, camera_position) do place_prop(sandbox, point, camera_position)
 		if Render.Frustum_Intersects_Aabb(frustum, chunk.lowest, chunk.highest) do for point in chunk.grass do place_grass(sandbox, point, camera_position)
 	}
-	Render.Mesh_Set_Instances(&sandbox.props.tree_trunk, sandbox.trunk_instances[:min(len(sandbox.trunk_instances), TREE_CAPACITY)])
-	Render.Mesh_Set_Instances(&sandbox.props.tree_canopy, sandbox.canopy_instances[:min(len(sandbox.canopy_instances), TREE_CAPACITY)])
-	Render.Mesh_Set_Instances(&sandbox.props.tree_far_trunk, sandbox.far_trunk_instances[:min(len(sandbox.far_trunk_instances), TREE_CAPACITY)])
-	Render.Mesh_Set_Instances(&sandbox.props.tree_far_canopy, sandbox.far_canopy_instances[:min(len(sandbox.far_canopy_instances), TREE_CAPACITY)])
+	Tree_Instances_Upload(&sandbox.props.trees, &sandbox.tree_instances)
 	Render.Mesh_Set_Instances(&sandbox.props.rock, sandbox.rock_instances[:min(len(sandbox.rock_instances), ROCK_CAPACITY)])
 	Render.Mesh_Set_Instances(&sandbox.props.bush, sandbox.bush_instances[:min(len(sandbox.bush_instances), BUSH_CAPACITY)])
 	Render.Mesh_Set_Instances(&sandbox.props.grass, sandbox.grass_instances[:min(len(sandbox.grass_instances), GRASS_CAPACITY)])
@@ -318,16 +304,12 @@ prop_is_needed :: proc(point: Procedural.Scatter_Point, frustum: Render.Frustum,
 place_prop :: proc(sandbox: ^Sandbox, point: Procedural.Scatter_Point, camera_position: [3]f32) {
 	model := la.matrix4_translate_f32(point.position) * la.matrix4_rotate_f32(point.yaw_radians, {0, 1, 0}) * la.matrix4_scale_f32({point.scale, point.scale, point.scale})
 	switch {
-	case point.variant < TREE_VARIANT_LIMIT && la.length(point.position - camera_position) > TREE_DETAIL_DISTANCE_METERS:
-		append(&sandbox.far_trunk_instances, Render.Instance{model = model, material_layer = f32(Materials.Surface_Material.Dirt)})
-		append(&sandbox.far_canopy_instances, Render.Instance{model = model, material_layer = f32(Materials.Surface_Material.Grass)})
 	case point.variant < TREE_VARIANT_LIMIT:
-		append(&sandbox.trunk_instances, Render.Instance{model = model, material_layer = f32(Materials.Surface_Material.Dirt)})
-		append(&sandbox.canopy_instances, Render.Instance{model = model, material_layer = f32(Materials.Surface_Material.Grass)})
+		Tree_Place(&sandbox.tree_instances, point, camera_position)
 	case point.variant < ROCK_VARIANT_LIMIT:
 		append(&sandbox.rock_instances, Render.Instance{model = model, material_layer = f32(Materials.Surface_Material.Rock)})
 	case:
-		append(&sandbox.bush_instances, Render.Instance{model = model, material_layer = f32(Materials.Surface_Material.Grass)})
+		append(&sandbox.bush_instances, Render.Instance{model = model, material_layer = f32(Materials.Surface_Material.Leaves)})
 	}
 }
 

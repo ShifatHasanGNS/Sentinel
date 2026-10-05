@@ -40,10 +40,14 @@ uniform vec2 u_CloudOffset; // Wind drift of the cloud layers, in meters on the 
 // Cumulus: the view ray meets a plane 1500 m up at xz = direction.xz * 1500 / direction.y. Density is domain-warped fbm there
 // (the warp rolls the edges into billows) and the shape layer drifts with the wind while the detail layer drifts a little
 // faster, so the clouds slowly change form as they move. A coverage threshold leaves clear gaps.
-float cloud_density(vec2 plane_position, int shape_octaves, int detail_octaves) {
+float cloud_density(vec2 plane_position, int shape_octaves, int detail_octaves, bool warped) {
 	vec2 shape_uv = (plane_position + u_CloudOffset) * 0.0006 / 4096.0;
-	vec2 warp = vec2(fbm(shape_uv * 2.0, 4096, 2, 305u), fbm(shape_uv * 2.0 + 0.5, 4096, 2, 307u));
-	float shape = fbm(shape_uv + warp * CLOUD_WARP_CELLS / 4096.0, 4096, shape_octaves, 301u) * 0.5 + 0.5; // The warp is in lattice cells; the noise takes tile units.
+	vec2 bent_uv = shape_uv;
+	if (warped) {
+		vec2 warp = vec2(fbm(shape_uv * 2.0, 4096, 2, 305u), fbm(shape_uv * 2.0 + 0.5, 4096, 2, 307u));
+		bent_uv += warp * CLOUD_WARP_CELLS / 4096.0; // The warp is in lattice cells; the noise takes tile units.
+	}
+	float shape = fbm(bent_uv, 4096, shape_octaves, 301u) * 0.5 + 0.5;
 	float detail = shape;
 	if (detail_octaves > 0) {
 		vec2 detail_uv = (plane_position + u_CloudOffset * 1.35) * 0.0032 / 4096.0;
@@ -56,7 +60,7 @@ float cloud_density(vec2 plane_position, int shape_octaves, int detail_octaves) 
 float cirrus_density(vec3 direction) {
 	vec2 plane_position = direction.xz * 7000.0 / direction.y + u_CloudOffset * 1.8;
 	vec2 stretched = vec2(plane_position.x * 0.00012, plane_position.y * 0.0007) / 4096.0;
-	float fibres = fbm(stretched, 4096, 4, 311u) * 0.5 + 0.5;
+	float fibres = fbm(stretched, 4096, 3, 311u) * 0.5 + 0.5;
 	return smoothstep(0.5, 0.82, fibres) * 0.45;
 }
 
@@ -69,13 +73,13 @@ vec3 add_clouds(vec3 sky, vec3 direction) {
 	float moon_light = u_MoonIntensity;
 	float fade = smoothstep(0.04, 0.3, direction.y);
 	vec2 plane_position = direction.xz * 1500.0 / direction.y;
-	float density = cloud_density(plane_position, 4, 3);
+	float density = cloud_density(plane_position, 4, 2, true);
 	float high = cirrus_density(direction);
 	float brightness = dot(sky, vec3(0.3, 0.59, 0.11));
 	vec3 ambient_light = vec3(brightness * 1.5) + u_MoonColor * moon_light * 0.35;
 	vec3 result = mix(sky, ambient_light * 1.1 + u_SunColor * 0.1 * sun_height, high * fade);
 	if (density < 0.01) return result;
-	float toward_sun_density = cloud_density(plane_position + normalize(u_ToSun.xz + vec2(1e-4)) * 220.0, 2, 0);
+	float toward_sun_density = cloud_density(plane_position + normalize(u_ToSun.xz + vec2(1e-4)) * 220.0, 2, 0, false);
 	float shade = clamp(1.0 - 0.7 * max(toward_sun_density - density * 0.4, 0.0), 0.3, 1.0);
 	float silver = pow(1.0 - density, 3.0) * max(dot(direction, u_ToSun), 0.0) * sun_height;
 	float moon_rim = pow(1.0 - density, 3.0) * pow(max(dot(direction, u_ToMoon), 0.0), 3.0);

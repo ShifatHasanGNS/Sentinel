@@ -8,10 +8,11 @@ Surface recipe_surface(vec2 uv) {
 	float aggregate = 1.0 - smoothstep(0.08, 0.2, worley(uv, period * 12, seed + 5u).x);
 	vec2 cells = worley(uv, period * 3, seed + 9u);
 	float cracks = 1.0 - smoothstep(0.0, 0.05, cells.y - cells.x);
+	float wet = smoothstep(0.62, 0.85, warped_fbm(uv, period, 3, 0.5, seed + 13u) * 0.5 + 0.5);
 	Surface surface;
 	surface.albedo = mix(mix(u_ColorA, u_ColorB, patches), u_ColorC, aggregate * 0.6) * (1.0 - 0.7 * cracks);
 	surface.height = patches * 0.3 + aggregate * 0.5 - cracks * 0.4 + 0.3;
-	surface.roughness = 0.92;
+	surface.roughness = mix(0.92, 0.45, wet);
 	surface.metallic = 0.0;
 	surface.ambient_occlusion = 1.0 - 0.5 * cracks;
 	return surface;
