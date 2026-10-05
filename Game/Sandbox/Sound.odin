@@ -1,6 +1,7 @@
 package Sandbox
 
 import "../../Engine/Audio"
+import World "../../Engine/World"
 import "../Gameplay"
 import "../Mission"
 import "../Weapons"
@@ -21,6 +22,8 @@ Sound_Bank :: struct {
 	step_distance: f32,
 	step_flip:     bool,
 	was_reloading: bool,
+	ladder_rung:   int,
+	ladder_phase:  World.Ladder_Phase,
 }
 
 sound_create :: proc(enabled: bool) -> (bank: Sound_Bank) {
@@ -114,6 +117,7 @@ sound_update :: proc(sandbox: ^Sandbox, delta_seconds: f32) {
 		}
 	}
 	footsteps(play, delta_seconds)
+	ladder_sounds(play)
 	reload_click(play)
 	vehicle_sounds(play)
 	alarm_loop(play)
@@ -199,4 +203,16 @@ alarm_loop :: proc(play: ^Play) {
 door_sound :: proc(play: ^Play, position: [3]f32) {
 	if play.sound.device == nil do return
 	play_at(play, &play.sound.creak, 0.6, position)
+}
+
+// A low metallic knock each time a foot reaches a new rung, a heavier one on taking hold and on stepping off.
+@(private = "file")
+ladder_sounds :: proc(play: ^Play) {
+	grip := play.battle.player.controller.grip
+	bank := &play.sound
+	if grip.phase == .Climbing && grip.rung != bank.ladder_rung && abs(grip.speed) > 0.1 do play_here(play, &bank.click, 0.28, 0.5 + 0.04 * f32(grip.rung % 3))
+	if grip.phase != bank.ladder_phase && (grip.phase == .Mounting || bank.ladder_phase == .Topping_Out || (bank.ladder_phase != .None && grip.phase == .None)) {
+		play_here(play, &bank.step_a, 0.45, 0.8)
+	}
+	bank.ladder_rung, bank.ladder_phase = grip.rung, grip.phase
 }

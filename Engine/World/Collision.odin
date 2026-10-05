@@ -8,11 +8,6 @@ JUMP_SPEED_METERS_PER_SECOND :: 4.6
 CONTROLLER_RADIUS_METERS :: 0.35
 CONTROLLER_HEIGHT_METERS :: 1.8
 CONTROLLER_CROUCH_HEIGHT_METERS :: 1.1
-CLIMB_SPEED_METERS_PER_SECOND :: 1.8
-LADDER_REACH_METERS :: 0.8 // How far from the ladder's face a body can be and still hold on.
-LADDER_TOP_RELEASE_METERS :: 0.5
-LADDER_PLANE_SLACK_METERS :: 0.2
-LADDER_PROMPT_METERS :: 2.2 // How far away the "climb" prompt shows.
 STEP_HEIGHT_METERS :: 0.35 // Ledges up to this tall are stepped onto; taller ones are walls.
 GROUND_SNAP_METERS :: 0.35 // On the ground, drops up to this far are walked down; larger ones are falls.
 SUBSTEP_SECONDS_MAX :: 1.0 / 60 // Longer steps are split, so fast motion cannot skip over a thin wall.
@@ -43,6 +38,7 @@ Controller :: struct {
 	velocity:  [3]f32,
 	on_ground: bool,
 	crouching: bool, // A crouching body is shorter, so it fits under low beams and ceilings.
+	grip:      Ladder_Grip, // Non-idle while the body is on a ladder (see Ladder.odin); then position is driven by the ladder.
 }
 
 Controller_Create :: proc(position: [3]f32) -> Controller {
@@ -57,10 +53,6 @@ Controller_Step :: proc(controller: ^Controller, world: Collision_World, ground:
 	step := delta_seconds / f32(substeps)
 	for _ in 0 ..< substeps {
 		move_horizontally(controller, world, wish * step)
-		if ladder, on_ladder := ladder_at(world, controller.position, controller.on_ground); on_ladder {
-			climb(controller, world, ground, ladder, wish, step)
-			continue
-		}
 		resolve_vertically(controller, world, ground, jump, step)
 	}
 }
@@ -128,7 +120,7 @@ circle_overlaps_solid :: proc(position: [3]f32, solid: Solid) -> bool {
 }
 
 // The highest thing the feet can stand on here: the terrain, or the top of a solid low enough to step onto.
-@(private = "file")
+@(private = "package")
 support_height :: proc(world: Collision_World, ground: Ground, position: [3]f32) -> f32 {
 	height := ground.height_at(ground.data, position.x, position.z)
 	for solid in world.boxes do height = raised_by(solid, position, height)
@@ -181,54 +173,4 @@ Controller_Set_Crouch :: proc(controller: ^Controller, world: Collision_World, c
 		return
 	}
 	if controller.crouching && !is_blocked(world, controller.position, CONTROLLER_HEIGHT_METERS) do controller.crouching = false
-}
-
-// The ladder the body is holding, if any: its feet within the ladder's height span and its circle within reach of the volume.
-@(private = "file")
-ladder_at :: proc(world: Collision_World, position: [3]f32, on_ground: bool) -> (ladder: Solid, found: bool) {
-	for candidate in world.ladders {
-		local := to_local(candidate, position)
-		bottom, top := -candidate.half_extents.y, candidate.half_extents.y
-		if local.y < bottom - 0.05 || local.y > top - 0.1 do continue
-		if on_ground && local.y > top - LADDER_TOP_RELEASE_METERS do continue // Standing on the roof at the top: walk, do not hold the ladder.
-		if local.z < -LADDER_PLANE_SLACK_METERS do continue // Past the ladder's own plane (stepped onto the platform): no longer on it.
-		if abs(local.x) > candidate.half_extents.x + LADDER_REACH_METERS || abs(local.z) > candidate.half_extents.z + LADDER_REACH_METERS do continue
-		return candidate, true
-	}
-	return {}, false
-}
-
-// On a ladder gravity is suspended: pushing toward the ladder climbs, pulling away climbs down, and at the bottom the feet rest on
-// whatever is below. Reaching the top hands over to normal walking (the platform there becomes the support).
-@(private = "file")
-climb :: proc(controller: ^Controller, world: Collision_World, ground: Ground, ladder: Solid, wish: [2]f32, step: f32) {
-	inward := rotate_about_y({0, 0, -1}, ladder.yaw_radians)
-	toward := wish.x * inward.x + wish.y * inward.z
-	vertical: f32 = 0
-	if toward > 0.1 do vertical = CLIMB_SPEED_METERS_PER_SECOND
-	else if toward < -0.1 do vertical = -CLIMB_SPEED_METERS_PER_SECOND
-	controller.velocity.y = vertical
-	controller.position.y += vertical * step
-	support := support_height(world, ground, controller.position)
-	if controller.position.y <= support {
-		controller.position.y, controller.velocity.y = support, 0
-		controller.on_ground = true
-	} else {
-		controller.on_ground = false
-	}
-}
-
-// The ladder within `reach` of the body (its feet inside the ladder's height span), and the horizontal unit direction from the body
-// into the ladder's wall (what "forward" should mean while climbing, whichever way the player happens to face).
-Ladder_Near :: proc(world: Collision_World, position: [3]f32, reach: f32, on_ground: bool) -> (into_wall: [2]f32, found: bool) {
-	for ladder in world.ladders {
-		local := to_local(ladder, position)
-		if local.y < -ladder.half_extents.y - 0.05 || local.y > ladder.half_extents.y - 0.1 do continue
-		if on_ground && local.y > ladder.half_extents.y - LADDER_TOP_RELEASE_METERS do continue
-		if local.z < -LADDER_PLANE_SLACK_METERS do continue
-		if abs(local.x) > ladder.half_extents.x + reach || abs(local.z) > ladder.half_extents.z + reach do continue
-		inward := rotate_about_y({0, 0, -1}, ladder.yaw_radians)
-		return {inward.x, inward.z}, true
-	}
-	return {}, false
 }

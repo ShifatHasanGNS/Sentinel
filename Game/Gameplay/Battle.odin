@@ -244,13 +244,15 @@ update_player :: proc(battle: ^Battle, input: Player_Input, delta_seconds: f32) 
 	Player_Look(player, input.look)
 	if kind, chosen := input.select.?; chosen do player.current = kind
 	World.Controller_Set_Crouch(&player.controller, battle.collision, input.crouch)
-	wish := Player_Wish_Velocity(player^, input)
-	if into_wall, on_ladder := World.Ladder_Near(battle.collision, player.controller.position, World.LADDER_REACH_METERS, player.controller.on_ground); on_ladder {
-		wish = into_wall * (input.move.y * WALK_SPEED) // On a ladder forward is up and back is down, however the player is facing.
+	forward := Player_Forward(player^)
+	holding := World.Controller_Ladder_Step(&player.controller, battle.collision, battle.ground, World.Ladder_Input{climb = input.move.y, use = input.use, jump = input.jump, facing = {forward.x, forward.z}}, delta_seconds)
+	if !holding {
+		World.Controller_Step(&player.controller, battle.collision, battle.ground, Player_Wish_Velocity(player^, input), input.jump && player.controller.grip.cooldown <= 0, delta_seconds)
 	}
-	World.Controller_Step(&player.controller, battle.collision, battle.ground, wish, input.jump, delta_seconds)
+	player.on_ladder = player.controller.grip.phase != .None
 	stats := Weapons.Weapon_Stats_For(player.current)
-	if Weapons.Weapon_Update(&player.weapons[player.current], stats, input.fire, input.reload, delta_seconds) do fire_player_weapon(battle, stats)
+	hands_free := !player.on_ladder // Both hands are on the rungs while climbing: no shooting or reloading.
+	if Weapons.Weapon_Update(&player.weapons[player.current], stats, input.fire && hands_free, input.reload && hands_free, delta_seconds) do fire_player_weapon(battle, stats)
 }
 
 @(private = "file")

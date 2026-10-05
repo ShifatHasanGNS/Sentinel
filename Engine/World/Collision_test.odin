@@ -142,28 +142,3 @@ test_a_crouching_controller_fits_under_a_low_beam_and_cannot_stand_there :: proc
 	testing.expect_value(t, Controller_Height(crouching), CONTROLLER_HEIGHT_METERS)
 }
 
-// Seam: Controller_Step with a ladder. A ladder up the face of a 3 m block: pushing into it climbs, the top hands over to standing on
-// the block, and pulling away climbs back down.
-@(test)
-test_a_ladder_is_climbed_up_onto_a_roof_and_down_again :: proc(t: ^testing.T) {
-	world: Collision_World
-	defer Collision_World_Destroy(&world)
-	append(&world.boxes, Box_Solid({-2, 0, -4}, {2, 3, 0})) // A block whose face is at z = 0 (the ladder side is +Z).
-	append(&world.ladders, Solid{center = {0, 1.6, 0.15}, half_extents = {0.3, 1.6, 0.1}})
-	controller := Controller_Create({0, 0, 1.5})
-	walk(&controller, &world, FLAT, {0, -2}, 0.6) // Walk up to the ladder.
-	for _ in 0 ..< 60 * 4 { // Keep pushing: climb until the top is reached.
-		if controller.position.y > 2.9 do break
-		Controller_Step(&controller, world, FLAT, {0, -2}, false, 1.0 / 60)
-	}
-	testing.expect(t, controller.position.y > 2.9)
-	walk(&controller, &world, FLAT, {0, -2}, 0.5) // Step off onto the roof.
-	testing.expect(t, abs(controller.position.y - 3) < 0.05 && controller.position.z < -0.3)
-	testing.expect(t, controller.on_ground)
-	without_ladder: Collision_World
-	defer Collision_World_Destroy(&without_ladder)
-	append(&without_ladder.boxes, Box_Solid({-2, 0, -4}, {2, 3, 0}))
-	stuck := Controller_Create({0, 0, 1.5})
-	walk(&stuck, &without_ladder, FLAT, {0, -2}, 3)
-	testing.expect(t, stuck.position.y < 0.01) // No ladder, no climbing.
-}

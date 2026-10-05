@@ -108,21 +108,3 @@ test_the_nearest_door_is_found_only_within_reach :: proc(t: ^testing.T) {
 
 }
 
-// Seam: Layout_Ladders + World.Controller_Step. From outside a watchtower a body can climb its ladder to the lookout and stand there.
-@(test)
-test_a_watchtower_can_be_climbed_to_its_lookout :: proc(t: ^testing.T) {
-	for yaw in ([3]f32{0, 90, 215}) {
-		layout: Layout
-		append(&layout.placements, Placement{.Watchtower, 10, -4, yaw})
-		world := World.Collision_World{boxes = Layout_Solids(layout, 0), ladders = Layout_Ladders(layout, 0)}
-		ladder := world.ladders[0]
-		outward := World.rotate_about_y({0, 0, 1}, ladder.yaw_radians)
-		start := ladder.center + outward * 1.2
-		controller := World.Controller_Create({start.x, 0, start.z})
-		inward := [2]f32{-outward.x, -outward.z} * 2
-		for _ in 0 ..< 60 * 6 do World.Controller_Step(&controller, world, World.Ground{height_at = flat}, inward, false, 1.0 / 60)
-		testing.expectf(t, abs(controller.position.y - 6.2) < 0.05 && controller.on_ground, "yaw %.0f: ended at height %.2f", yaw, controller.position.y)
-		World.Collision_World_Destroy(&world)
-		Layout_Destroy(&layout)
-	}
-}

@@ -24,6 +24,7 @@ TREE_TRUNK_HALF_WIDTH_METERS :: 0.2
 TREE_HEIGHT_METERS :: 4.0
 ROCK_HALF_WIDTH_METERS :: 0.8
 ROCK_HEIGHT_METERS :: 1.0
+LADDER_BOB_METERS :: 0.02
 HEAD_BOB_METERS :: 0.035
 BOB_STEPS_PER_METER :: 1.5
 SWAY_METERS_PER_RADIAN :: 0.35
@@ -96,6 +97,7 @@ Play :: struct {
 	escape_was_down: bool,
 	next_variant:  Mission.Variant, // Which mission the next playthrough is (R repeats this one, N switches).
 	autoplay:      bool,
+	ladder_demo:   bool, // Overlay `ladder`: the player stands at the first watchtower ladder and holds forward.
 	autoplay_seconds: f32,
 	autoplay_reported: bool,
 	boardable:     Maybe(int), // The vehicle in reach on foot, for the prompt.
@@ -173,6 +175,17 @@ play_create :: proc(sandbox: ^Sandbox, demo: bool, fly: bool, drive: string, ove
 		}
 	}
 	if overlay == "pause" do play.paused = true
+	if overlay == "ladder" && len(play.battle.collision.ladders) > 0 {
+		ladder := play.battle.collision.ladders[0]
+		outward := World.rotate_about_y({0, 0, 1}, ladder.yaw_radians)
+		start := ladder.center + outward * 2.4
+		play.battle.player.controller.position = {start.x, sandbox.terrain.base_height_meters, start.z}
+		play.battle.player.yaw_radians = math.atan2(outward.x, outward.z)
+		play.battle.player.pitch_radians = 0.25
+		play.ladder_demo = true
+		play.mission.state.status = .Active
+		sync_camera_to_player(sandbox)
+	}
 	if overlay == "scope" {
 		play.battle.player.current = .Sniper_Rifle
 		play.aim = 1
@@ -271,6 +284,8 @@ play_update :: proc(sandbox: ^Sandbox, input: ^Platform.Input, delta_seconds: f3
 		} else {
 			player_input := demo_input(play.battle, delta_seconds) if play.demo else collect_input(input)
 			player_input.look *= binocular_look_scale(play)
+			player_input.use = interact_pressed
+			if play.ladder_demo do player_input.move = {0, 1}
 			if play.binocular_raise > 0.5 do player_input.fire = false
 			Gameplay.Battle_Update(&play.battle, player_input, delta_seconds)
 			sync_camera_to_player(sandbox)
@@ -313,6 +328,7 @@ battle_update_unattended :: proc(battle: ^Gameplay.Battle, delta_seconds: f32) {
 sync_camera_to_player :: proc(sandbox: ^Sandbox) {
 	player := sandbox.play.battle.player
 	bob := math.sin(sandbox.play.bob_phase) * HEAD_BOB_METERS * sandbox.play.bob_strength
+	if grip := player.controller.grip; grip.phase == .Climbing && abs(grip.speed) > 0.1 do bob += math.sin(grip.height / World.LADDER_RUNG_METERS * 2 * math.PI) * LADDER_BOB_METERS // One small dip per rung.
 	sandbox.camera = Fly_Camera{position = Gameplay.Player_Eye(player) + {0, bob, 0}, yaw_radians = player.yaw_radians, pitch_radians = player.pitch_radians}
 }
 
@@ -402,7 +418,7 @@ play_items :: proc(sandbox: ^Sandbox, items, shadow_items: ^[dynamic]Render.Draw
 		append(&lights, flashlight)
 	}
 	scoped := play.aim > 0.75 && play.battle.player.current == .Sniper_Rifle // Through the scope the rifle itself is out of view.
-	if body_shown && !scoped do add_held_weapon(play, items)
+	if body_shown && !scoped && !play.battle.player.on_ladder do add_held_weapon(play, items)
 	return lights
 }
 
@@ -520,9 +536,16 @@ play_draw_hud :: proc(sandbox: ^Sandbox, width, height: i32) {
 	if play.mode == .Fly do Render.Hud_Text(hud, w - 16 - Render.Hud_Text_Width("FLY MODE - TAB TO PLAY", scale), 16, "FLY MODE - TAB TO PLAY", scale, {1, 0.9, 0.3, 0.9})
 	if _, can_board := play.boardable.?; play.mode == .Play && play.driving == nil && can_board && !Gameplay.Health_Is_Dead(player.health) do Render.Hud_Text(hud, (w - Render.Hud_Text_Width("E  ENTER VEHICLE", scale)) / 2, h * 0.62, "E  ENTER VEHICLE", scale, {1, 1, 1, 0.9})
 	else if play.mode == .Play && play.door_in_reach && !Gameplay.Health_Is_Dead(player.health) do Render.Hud_Text(hud, (w - Render.Hud_Text_Width("E  OPEN / CLOSE", scale)) / 2, h * 0.62, "E  OPEN / CLOSE", scale, {1, 1, 1, 0.9})
-	if _, near_ladder := World.Ladder_Near(play.battle.collision, player.controller.position, World.LADDER_PROMPT_METERS, player.controller.on_ground); play.mode == .Play && play.driving == nil && near_ladder && !Gameplay.Health_Is_Dead(player.health) {
-		prompt := "W  CLIMB UP     S  DOWN"
-		Render.Hud_Text(hud, (w - Render.Hud_Text_Width(prompt, scale)) / 2, h * 0.68, prompt, scale, {1, 1, 1, 0.9})
+	if play.mode == .Play && play.driving == nil && !Gameplay.Health_Is_Dead(player.health) {
+		forward := Gameplay.Player_Forward(player)
+		prompt := ""
+		switch World.Ladder_Prompt_For(play.battle.collision, player.controller, {forward.x, forward.z}) {
+		case .Climb_Up: prompt = "W / E  CLIMB LADDER"
+		case .Climb_Down: prompt = "E  CLIMB DOWN"
+		case .None:
+			if player.on_ladder do prompt = "W UP   S DOWN   SPACE JUMP OFF"
+		}
+		if prompt != "" do Render.Hud_Text(hud, (w - Render.Hud_Text_Width(prompt, scale)) / 2, h * 0.68, prompt, scale, {1, 1, 1, 0.9})
 	}
 	if Gameplay.Health_Is_Dead(player.health) do draw_death_screen(hud, w, h, scale)
 	cameras_draw_hud(play, w, scale)
@@ -604,6 +627,8 @@ interact_on_foot :: proc(play: ^Play, pressed: bool) {
 	index, found := Base.Doors_Nearest(play.doors[:], play.battle.collision, play.battle.ground, Gameplay.Player_Eye(play.battle.player))
 	play.door_in_reach = found
 	play.boardable = nearest_boardable(play)
+	forward := Gameplay.Player_Forward(play.battle.player)
+	if World.Ladder_Prompt_For(play.battle.collision, play.battle.player.controller, {forward.x, forward.z}) != .None do return // E belongs to the ladder.
 	if !pressed || play.mission.hostage_in_reach || play.mission.terminal_in_reach do return
 	if _, boardable := play.boardable.?; boardable do board_vehicle(play)
 	else if found {

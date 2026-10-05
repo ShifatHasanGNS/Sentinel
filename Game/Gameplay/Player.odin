@@ -31,6 +31,7 @@ Player :: struct {
 	hit_marker:   f32, // Seconds left of the hit confirmation.
 	pickup_flash: f32, // Seconds left of the "picked up" notice.
 	kills:        int,
+	on_ladder:    bool, // Holding a ladder this frame (see World.Controller_Ladder_Step).
 	shots_fired:  u32,
 }
 
@@ -42,6 +43,7 @@ Player_Input :: struct {
 	reload:  bool,
 	sprint:  bool,
 	crouch:  bool, // Held: stay low (slower, quieter, harder to see).
+	use:     bool, // The use key went down this frame (grabs a ladder from its top).
 	respawn: bool,
 	select:  Maybe(Weapons.Weapon_Kind),
 }
