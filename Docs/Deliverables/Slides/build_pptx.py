@@ -129,30 +129,34 @@ textbox(s,6.6,6.45,6.0,0.8,[[('Instructors: Md Tajmilur Rahman, Md. Mubtashim Ab
 
 # ---------------- 2 outline
 s=new_slide('Outline')
-items=['Problem, objectives and architecture','Procedural shapes and textures','The rendering pipeline','World, physics and gameplay','Results and verification','Challenge, limits and future work','Video tour of the project']
+items=['Problem, objectives and architecture','Procedural shapes and textures','Transformations: creating and combining objects','Illumination models and light sources','The rendering pipeline: shadows, ambient, tone map','Results, verification and a bug fixed','Video tour of the project']
 y=1.45
 for i,t in enumerate(items):
     rect(s,0.7,y+0.02,0.5,0.5,fill=GREEN,shape=MSO_SHAPE.OVAL)
     textbox(s,0.7,y+0.02,0.5,0.5,[str(i+1)],size=18,bold=True,color=WHITE,align=PP_ALIGN.CENTER,anchor=MSO_ANCHOR.MIDDLE,check=False)
-    textbox(s,1.45,y+0.02,5.9,0.5,[t],size=22,anchor=MSO_ANCHOR.MIDDLE,check=False)
+    textbox(s,1.45,y+0.02,6.3,0.5,[t],size=21,anchor=MSO_ANCHOR.MIDDLE,check=False)
     y+=0.78
-p,w,h=picture(s,IMG+'showroom.jpg',7.75,1.7,w=5.0)
-textbox(s,7.75,1.7+h+0.1,5.0,0.4,['Every material is a code-generated recipe.'],size=14,color=GREY,italic=True,align=PP_ALIGN.CENTER)
+p,w,h=picture(s,IMG+'models.jpg',8.0,1.9,w=4.8)
+textbox(s,8.0,1.9+h+0.1,4.8,0.4,['Six illumination models, one sphere each'],size=14,color=GREY,italic=True,align=PP_ALIGN.CENTER)
+p,w2,h2=picture(s,IMG+'tank.jpg',8.0,1.9+h+0.65,w=2.35)
+p,w3,h3=picture(s,IMG+'truck.jpg',10.45,1.9+h+0.65,w=2.35)
+textbox(s,8.0,1.9+h+0.65+h2+0.05,4.8,0.4,['Objects are transformed primitives'],size=14,color=GREY,italic=True,align=PP_ALIGN.CENTER)
 
-# ---------------- 3 problem + architecture
+# ---------------- 3 problem + architecture + game
 s=new_slide('1. Problem, objectives and architecture')
-textbox(s,0.6,1.2,6.4,0.9,['Can a complete, playable 3D game be made by code alone on a student laptop?'],size=21,bold=True,color=INK)
-card(s,0.6,2.2,6.4,1.65,'Two hard limits',['No model, image or precomputed data file','macOS OpenGL 4.1: no compute shaders'],size=18)
-textbox(s,0.6,4.0,6.4,0.4,['Objectives'],size=19,bold=True,color=GREEN)
-textbox(s,0.6,4.4,6.4,2.6,['Layered engine with downward-only dependencies','All meshes, textures and sounds from code and seeds','Modern renderer: PBR, shadows, sky, post-processing','Playable game: vehicles, ladders, doors, mission','Verified by tests and a 16.7 ms frame budget'],size=17,bullets=True,space=5)
+textbox(s,0.6,1.15,6.5,0.9,['Can a complete, playable 3D game be made by code alone on a student laptop?'],size=20,bold=True,color=INK)
+card(s,0.6,2.1,6.5,1.4,'Two hard limits',['No model, image or precomputed data file','macOS OpenGL 4.1: no compute shaders'],size=17)
+card(s,0.6,3.65,6.5,2.0,'Objectives',['Layered engine, downward dependencies','All content from code and seeds','Modern renderer and a playable game','Verified by tests and a 16.7 ms budget'],size=16)
+rect(s,0.6,5.8,12.2,0.95,fill=WHITE,line=LINE); rect(s,0.6,5.8,0.09,0.95,fill=AMBER,shape=MSO_SHAPE.RECTANGLE)
+textbox(s,0.85,5.85,11.8,1.05,[[('The game: ',{'bold':True,'color':GREEN}),('jeep, truck, carrier, tank and a helicopter you can drive; ladders and doors; stealth enemies; a five-objective mission (hack, destroy, rescue, extract); all sounds synthesised.',{})]],size=16)
 layers=['Game: mission, AI, vehicles, sound','Render: deferred, lights, sky, post','World: collision, terrain','Procedural: noise, textures','GPU: shaders, buffers','Platform: window, input']
-y=1.35
+y=1.2
 for i,t in enumerate(layers):
-    r=rect(s,7.5,y,4.7,0.72,fill=RGBColor(0xE4-i*14,0xF6-i*9,0xF3-i*8),line=GREEN)
-    textbox(s,7.5,y,4.7,0.72,[t],size=17,align=PP_ALIGN.CENTER,anchor=MSO_ANCHOR.MIDDLE,check=False)
-    y+=0.86
-line_arrow(s,12.55,1.4,12.55,6.35)
-textbox(s,7.5,6.55,5.6,0.4,['A lower layer never knows a higher one.'],size=15,color=GREY,italic=True,align=PP_ALIGN.CENTER)
+    rect(s,7.7,y,4.6,0.62,fill=RGBColor(0xE4-i*14,0xF6-i*9,0xF3-i*8),line=GREEN)
+    textbox(s,7.7,y,4.6,0.62,[t],size=15,align=PP_ALIGN.CENTER,anchor=MSO_ANCHOR.MIDDLE,check=False)
+    y+=0.7
+line_arrow(s,12.6,1.25,12.6,5.2)
+textbox(s,7.5,5.38,5.2,0.35,['A lower layer never knows a higher one.'],size=13,color=GREY,italic=True,align=PP_ALIGN.CENTER,check=False)
 
 # ---------------- 4 procedural
 s=new_slide('2. Procedural shapes and textures')
@@ -164,81 +168,105 @@ textbox(s,0.75,y0+2.4,5.4,0.35,['Vertex push by a noise deformer'],size=14,bold=
 picture(s,EQ+'push.png',0.85,y0+2.85,w=5.3,border=False)
 textbox(s,6.8,y0,6.0,3.4,['18 recipes → 22 materials, baked once at 1024²','Scharr filter turns height into bumps; crevices darken','Objects are tables of primitives plus noise deformers','Soldiers: skeletons with two-bone IK legs'],size=20,bullets=True,space=10)
 
-# ---------------- 5 rendering
-s=new_slide('3. The rendering pipeline')
+# ---------------- 5 transformations
+s=new_slide('3. Transformations: creating and combining objects')
+chain=['Primitive\nmesh','Deformers\n(own space)','M_part\nscale, turn, move','Merge by\nmaterial','M_world\ninstances','V then P\nto screen']
+x=0.6; wb=1.85; gp=0.2
+for i,t in enumerate(chain):
+    rect(s,x,1.15,wb,0.8,fill=WHITE,line=GREEN)
+    textbox(s,x,1.15,wb,0.8,t.split('\n'),size=13,align=PP_ALIGN.CENTER,anchor=MSO_ANCHOR.MIDDLE,space=0,check=False)
+    if i<len(chain)-1: line_arrow(s,x+wb,1.55,x+wb+gp,1.55,width=1.5)
+    x+=wb+gp
+rect(s,0.6,2.2,6.3,2.15,fill=WHITE,line=LINE)
+textbox(s,0.75,2.24,6.0,0.35,['One part: scale, then turn, then move'],size=14,bold=True,color=GREEN,check=False)
+picture(s,EQ+'mpart.png',0.8,2.65,w=5.8,border=False)
+textbox(s,0.75,3.15,6.0,1.2,['Matrices act right to left, so the brick is stretched, turned about its own centre, and carried last.','Example: (1,0,0) → S(2,1,1) → R_y 90° → T(5,0,0) = (5, 0, −2)'],size=14,space=3)
+rect(s,0.6,4.5,6.3,2.45,fill=WHITE,line=LINE)
+textbox(s,0.75,4.54,6.0,0.35,['Normals use the inverse transpose'],size=14,bold=True,color=GREEN,check=False)
+picture(s,EQ+'nmat.png',0.9,4.95,h=0.85,border=False)
+textbox(s,3.1,4.95,3.7,1.1,['Keeps normals perpendicular after a stretch'],size=14,space=2)
+textbox(s,0.75,5.95,6.0,0.95,['S = diag(2,1,1), n = (1,1,0)/√2: correct (0.447, 0.894, 0), naive (0.894, 0.447, 0) is wrong; det < 0 flips winding'],size=13,color=GREY)
+p,w1,h1=picture(s,IMG+'tank.jpg',7.2,2.2,w=2.7)
+p,w2,h2=picture(s,IMG+'truck.jpg',10.1,2.2,w=2.7)
+textbox(s,7.2,2.2+h1+0.04,5.6,0.35,['Tank (hull, turret, gun) and truck: transformed primitives'],size=13,color=GREY,italic=True,align=PP_ALIGN.CENTER)
+rect(s,7.2,3.75,5.6,3.2,fill=WHITE,line=LINE)
+textbox(s,7.35,3.79,5.3,0.35,['Hierarchy: products down the chain'],size=14,bold=True,color=GREEN,check=False)
+picture(s,EQ+'mgun.png',7.4,4.2,w=5.2,border=False)
+textbox(s,7.35,4.7,5.3,0.9,['The turret and gun inherit the hull matrix: turning the hull carries them along.'],size=14,space=2)
+textbox(s,7.35,5.55,5.3,0.35,['World to screen'],size=14,bold=True,color=GREEN,check=False)
+picture(s,EQ+'clip.png',7.4,5.95,w=4.4,border=False)
+textbox(s,7.35,6.45,5.3,0.45,['view V (look-at), projection P divides by depth'],size=13,color=GREY)
+
+# ---------------- 6 illumination
+s=new_slide('4. Illumination models and light sources')
+picture(s,EQ+'sum.png',0.6,1.12,w=8.3,border=False)
+textbox(s,9.05,1.1,3.8,0.55,['f = illumination model, att = falloff, sh = shadow'],size=12,color=GREY,italic=True)
+rect(s,0.6,1.8,6.3,5.15,fill=WHITE,line=LINE)
+rows=[('Lambert','lambert',0.5,1.0),('Phong','phong',0.5,3.6),('Blinn–Phong','blinn',0.5,3.6),('Oren–Nayar','oren',0.5,4.1),('Cook–Torrance','ct2',0.5,3.2),('Subsurface','sss',0.5,2.6)]
+y=1.9
+for name,img,hh,ww in rows:
+    textbox(s,0.75,y+0.04,1.85,0.5,[name],size=14,bold=True,color=GREEN,anchor=MSO_ANCHOR.MIDDLE,check=False)
+    im=Image.open(EQ+img+'.png'); w_=hh*im.size[0]/im.size[1]; w_=min(w_,4.2); picture(s,EQ+img+'.png',2.7,y+0.02,w=w_,border=False)
+    y+=0.8
+p,w,h=picture(s,IMG+'models.jpg',7.2,1.8,w=5.6)
+textbox(s,7.2,1.8+h+0.03,5.6,0.35,['Lambert · Phong · Blinn–Phong · Oren–Nayar · Cook–Torrance · Subsurface'],size=11,color=GREY,italic=True,align=PP_ALIGN.CENTER,check=False)
+y2=1.8+h+0.45
+rect(s,7.2,y2,5.6,6.95-y2,fill=WHITE,line=LINE)
+textbox(s,7.35,y2+0.04,5.3,0.35,['Light sources'],size=14,bold=True,color=GREEN,check=False)
+textbox(s,7.35,y2+0.42,5.3,1.55,['Directional: sun, moon (no falloff)','Point: lamps, flashes','Spot: floodlights; cone factor','Area: 4×4 point samples'],size=14,bullets=True,space=2)
+picture(s,EQ+'att.png',7.4,6.95-1.05,w=3.0,border=False)
+picture(s,EQ+'spot.png',10.5,6.95-1.0,w=2.2,border=False)
+
+# ---------------- 7 rendering pipeline
+s=new_slide('5. The rendering pipeline: shadows, ambient, tone map')
 stages=['Sky\ntable','Shadows\n3 cascades','Geometry\nG-buffer','SSAO','Lighting,\nreflect, fog','Smoke,\nfire','Bloom, ACES,\nFXAA']
 x=0.6; wbox=1.55; gap=0.2
 for i,t in enumerate(stages):
-    r=rect(s,x,1.2,wbox,0.8,fill=WHITE,line=GREEN)
+    rect(s,x,1.2,wbox,0.8,fill=WHITE,line=GREEN)
     textbox(s,x,1.2,wbox,0.8,t.split('\n'),size=13,align=PP_ALIGN.CENTER,anchor=MSO_ANCHOR.MIDDLE,space=0,check=False)
     if i<len(stages)-1: line_arrow(s,x+wbox,1.6,x+wbox+gap,1.6,width=1.5)
     x+=wbox+gap
-textbox(s,0.6,2.2,6.9,0.9,[[('Deferred shading: ',{'bold':True}),('store each pixel\'s colour, normal, shininess and depth first, then light it once; many lights stay cheap.',{})]],size=17)
-rect(s,0.6,3.2,6.9,3.7,fill=WHITE,line=LINE)
-textbox(s,0.75,3.25,6.5,0.35,['Cook–Torrance reflection'],size=14,bold=True,color=GREEN,check=False)
-picture(s,EQ+'ct.png',0.8,3.65,w=6.5,border=False)
-picture(s,EQ+'fresnel.png',0.9,4.65,w=3.2,border=False)
-textbox(s,0.75,5.15,6.5,0.35,['Fog and tone map'],size=14,bold=True,color=GREEN,check=False)
+textbox(s,0.6,2.2,6.9,0.95,[[('Deferred shading: ',{'bold':True}),('store colour, normal, shininess and depth first, then light each pixel once.',{})]],size=16)
+rect(s,0.6,3.2,6.9,3.75,fill=WHITE,line=LINE)
+textbox(s,0.75,3.25,6.5,0.35,['Cascaded shadow maps (λ = 0.75, N = 3, n = 0.1, r = 100 m)'],size=14,bold=True,color=GREEN,check=False)
+picture(s,EQ+'csm.png',0.9,3.7,w=5.6,border=False)
+textbox(s,0.75,4.5,6.5,0.7,['Cuts at 9.1, 24.2, 100 m; normal-offset lookup, 8 rotated PCF taps'],size=14,space=2)
+textbox(s,0.75,5.1,6.5,0.35,['Fog and tone map'],size=14,bold=True,color=GREEN,check=False)
 picture(s,EQ+'fog.png',0.9,5.55,w=3.1,border=False)
 picture(s,EQ+'aces.png',4.3,5.45,w=3.0,border=False)
+textbox(s,0.75,6.35,6.6,0.55,['Ambient = sky diffuse + split-sum specular, times SSAO'],size=13,color=GREY)
 p,w,h=picture(s,IMG+'dusk.jpg',7.85,2.25,w=5.0)
 textbox(s,7.85,2.25+h+0.08,5.0,0.4,['Dusk: sun, sky, haze, shadows'],size=14,color=GREY,italic=True,align=PP_ALIGN.CENTER)
 textbox(s,7.85,2.25+h+0.6,5.0,1.2,['Sun, moon, lamps, cascaded shadows, SSAO, screen-space reflections, bloom and FXAA'],size=15,color=INK)
 
-# ---------------- 6 world
-s=new_slide('4. World, physics and gameplay')
-textbox(s,0.6,1.2,6.6,4.1,[[('Sky: ',{'bold':True}),('sun height from astronomy, scattering sky, wind-driven clouds',{})],
- [('Terrain: ',{'bold':True}),('warped ridged noise, streamed in 64 m chunks',{})],
- [('Trees: ',{'bold':True}),('4 species, swaying in the wind',{})],
- [('Vehicles: ',{'bold':True}),('jeep, truck, carrier, tank, helicopter',{})],
- [('Ladders: ',{'bold':True}),('4-state grip machine, hands on rungs',{})],
- [('Mission: ',{'bold':True}),('hack, destroy, rescue, extract; stealth AI; synthesised sound',{})]],size=19,bullets=True,space=7)
-rect(s,0.6,5.35,6.6,1.55,fill=WHITE,line=LINE)
-picture(s,EQ+'cloud.png',0.85,5.55,w=2.9,border=False)
-picture(s,EQ+'bicycle.png',4.9,5.55,h=0.75,border=False)
-textbox(s,0.75,6.4,3.2,0.4,['cloud plane and wind'],size=12,color=GREY,italic=True,check=False)
-textbox(s,4.4,6.4,2.7,0.4,['bicycle steering'],size=12,color=GREY,italic=True,check=False)
-p,w,h=picture(s,IMG+'gate_day.jpg',7.6,1.2,w=5.2)
-p,w2,h2=picture(s,IMG+'ladder.jpg',7.6,1.2+h+0.15,w=2.52)
-p,w3,h3=picture(s,IMG+'trees.jpg',10.28,1.2+h+0.15,w=2.52)
-textbox(s,7.6,1.2+h+0.15+h2+0.05,5.2,0.4,['Day sky, ladder climb, and tree species'],size=13,color=GREY,italic=True,align=PP_ALIGN.CENTER)
-
-# ---------------- 7 results (native chart + table)
-s=new_slide('5. Results and verification')
+# ---------------- 8 results + challenge
+s=new_slide('6. Results, verification and a bug fixed')
 cd=CategoryChartData(); cd.categories=['Sky table','Post','SSAO','Shadows','Lighting','Geometry']
 cd.add_series('GPU ms',(0.02,1.21,1.20,1.58,2.79,4.11))
-gf=s.shapes.add_chart(XL_CHART_TYPE.BAR_CLUSTERED,Inches(0.6),Inches(1.15),Inches(6.4),Inches(3.2),cd); ch=gf.chart
+gf=s.shapes.add_chart(XL_CHART_TYPE.BAR_CLUSTERED,Inches(0.6),Inches(1.15),Inches(6.2),Inches(2.75),cd); ch=gf.chart
 ch.has_legend=False; ch.has_title=True; ch.chart_title.text_frame.text='GPU time per pass (ms)'
-ch.chart_title.text_frame.paragraphs[0].runs[0].font.size=Pt(14); ch.chart_title.text_frame.paragraphs[0].runs[0].font.bold=True
-pl=ch.plots[0]; pl.gap_width=45; pl.has_data_labels=True; pl.data_labels.font.size=Pt(12); pl.data_labels.number_format='0.00'; pl.data_labels.number_format_is_linked=False
+ch.chart_title.text_frame.paragraphs[0].runs[0].font.size=Pt(13); ch.chart_title.text_frame.paragraphs[0].runs[0].font.bold=True
+pl=ch.plots[0]; pl.gap_width=45; pl.has_data_labels=True; pl.data_labels.font.size=Pt(11); pl.data_labels.number_format='0.00'; pl.data_labels.number_format_is_linked=False
 pl.series[0].format.fill.solid(); pl.series[0].format.fill.fore_color.rgb=GREEN
-ch.category_axis.tick_labels.font.size=Pt(13); ch.value_axis.tick_labels.font.size=Pt(11); ch.value_axis.has_major_gridlines=False
-textbox(s,0.6,4.4,6.4,0.45,[[('10.9 ms',{'bold':True,'color':GREEN}),(' of the 16.7 ms budget at 1080p',{})]],size=20)
-rows=[('Verification','Count'),('Unit tests (13 packages)','281'),('TextureCheck (exact tiling)','8,318'),('RenderCheck','318,567'),('GpuCheck','30'),('Playthroughs, 5/5 objectives','2')]
-tbl=s.shapes.add_table(len(rows),2,Inches(0.6),Inches(4.95),Inches(6.4),Inches(1.95)).table
-tbl.columns[0].width=Inches(4.7); tbl.columns[1].width=Inches(1.7)
-for r,(a,b) in enumerate(rows):
-    for c,t in enumerate((a,b)):
+ch.category_axis.tick_labels.font.size=Pt(12); ch.value_axis.tick_labels.font.size=Pt(10); ch.value_axis.has_major_gridlines=False
+textbox(s,0.6,3.95,6.2,0.45,[[('10.9 ms',{'bold':True,'color':GREEN}),(' of the 16.7 ms budget at 1080p',{})]],size=19)
+rows=[('Verification','Count'),('Unit tests (13 packages)','281'),('TextureCheck (exact tiling)','8,318'),('RenderCheck (lighting probes)','318,567'),('GpuCheck','30'),('Playthroughs, 5/5 objectives','2')]
+tbl=s.shapes.add_table(len(rows),2,Inches(0.6),Inches(4.5),Inches(6.2),Inches(2.4)).table
+tbl.columns[0].width=Inches(4.6); tbl.columns[1].width=Inches(1.6)
+for r,(a_,b_) in enumerate(rows):
+    for c,t in enumerate((a_,b_)):
         cell=tbl.cell(r,c); cell.text=t; para=cell.text_frame.paragraphs[0]; para.runs[0].font.size=Pt(14); para.runs[0].font.name=FONT
         para.alignment=PP_ALIGN.RIGHT if c==1 else PP_ALIGN.LEFT
-        cell.margin_top=cell.margin_bottom=Inches(0.02)
+        cell.margin_top=cell.margin_bottom=Inches(0.03)
         cell.fill.solid(); cell.fill.fore_color.rgb=GREEN if r==0 else (MINT if r%2==0 else WHITE)
         para.runs[0].font.color.rgb=WHITE if r==0 else INK; para.runs[0].font.bold=(r==0)
-    tbl.rows[r].height=Inches(0.325)
-p,w,h=picture(s,IMG+'hq.jpg',7.9,1.2,w=4.7)
-p,w2,h2=picture(s,IMG+'map.jpg',7.9,1.2+h+0.15,w=4.7)
-textbox(s,7.9,1.2+h+0.15+h2+0.05,4.7,0.35,['Headquarters, and the tactical map with objectives'],size=13,color=GREY,italic=True,align=PP_ALIGN.CENTER)
-
-# ---------------- 8 challenge
-s=new_slide('6. Challenge solved, limits and future work')
-textbox(s,0.6,1.15,12.1,1.0,[[('Bug: a bright vertical line at night. ',{'bold':True,'color':GREEN}),('The fog colour sampled the whole sky, so one horizon star painted a streak on every surface in its column. Fix: fog uses the smooth atmosphere only.',{})]],size=18)
-p,w,h=picture(s,IMG+'gate_night_bug.jpg',0.6,2.3,w=3.5)
-textbox(s,0.6,2.3+h+0.03,3.5,0.35,['Before (streak left of centre)'],size=13,color=GREY,italic=True,align=PP_ALIGN.CENTER)
-p,w,h=picture(s,IMG+'gate_night.jpg',0.6,2.3+h+0.5,w=3.5)
-textbox(s,0.6,2.3+2*h+0.53,3.5,0.35,['After'],size=13,color=GREY,italic=True,align=PP_ALIGN.CENTER)
-card(s,4.85,2.3,7.9,1.3,'Limitations',['Blocky primitive models; no true global illumination; lumpy foliage; tuned by scripts and screenshots'],size=16)
-card(s,4.85,3.75,7.9,1.3,'Future work',['Leaf cards, screen-space GI, point-light shadows, multiplayer, a compute-shader port'],size=16)
-card(s,4.85,5.2,7.9,1.3,'Take-away',['Most "art" is a few simple ideas, applied consistently and tested'],size=16)
+    tbl.rows[r].height=Inches(0.4)
+textbox(s,7.1,1.15,5.7,1.05,[[('Bug: a vertical line at night. ',{'bold':True,'color':GREEN}),('Fog sampled the whole sky, so one horizon star streaked a column. Fix: fog uses the smooth atmosphere only.',{})]],size=15)
+p,w,h=picture(s,IMG+'gate_night_bug.jpg',7.1,2.3,w=2.78)
+p,w,h=picture(s,IMG+'gate_night.jpg',10.02,2.3,w=2.78)
+textbox(s,7.1,2.3+h+0.02,2.78,0.3,['Before'],size=12,color=GREY,italic=True,align=PP_ALIGN.CENTER,check=False)
+textbox(s,10.02,2.3+h+0.02,2.78,0.3,['After'],size=12,color=GREY,italic=True,align=PP_ALIGN.CENTER,check=False)
+card(s,7.1,4.5,5.7,2.4,'Limits and future work',['Blocky primitive models; no true global illumination; lumpy foliage','Leaf cards, screen-space GI, point-light shadows, multiplayer, compute port','Take-away: most "art" is a few simple ideas, applied consistently and tested'],size=14)
 
 # ---------------- 9 video placeholder (intentionally empty)
 s=new_slide('7. Video tour of the project')
