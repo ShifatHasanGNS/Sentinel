@@ -188,7 +188,7 @@
 
 Most video games ship with gigabytes of files made by artists: 3D models, photographs for surfaces, recorded sounds. \textit{Sentinel} takes the opposite route. It is a complete game engine and an open-world military shooter in which \emph{nothing} is loaded from a model, image or sound file. Every tree, building, soldier, vehicle, surface, cloud and sound effect is created while the program starts, from short mathematical recipes and a random seed. Only the small text files holding the shader programs are read from disk.
 
-The engine is written in the Odin language on OpenGL~4.1, the newest version macOS offers (it has no compute shaders), and is organised in six layers that may only depend on the layers beneath them. A deferred renderer records what every pixel is made of and then lights it with a sun and moon, spot and point lamps, cascaded shadow maps, ambient occlusion, screen-space reflections, an atmospheric sky with wind-driven clouds, fog, bloom, tone mapping, colour grading and anti-aliasing. Surfaces come from 18 texture recipes built on periodic gradient noise, domain warping and cellular noise; normal maps are derived from height fields with a Scharr filter. Objects and characters are tables of primitives with noise deformers.
+The engine is written in the Odin language on OpenGL~4.1, the newest version macOS offers (it has no compute shaders), and is organised in six layers that may only depend on the layers beneath them. A deferred renderer records what every pixel is made of and then lights it with a sun and moon, spot and point lamps, cascaded shadow maps, ambient occlusion, screen-space reflections, an atmospheric sky with wind-driven clouds, fog, bloom, tone mapping, colour grading and anti-aliasing. Surfaces come from 18 texture recipes built on periodic gradient noise, domain warping and cellular noise; normal maps are derived from height fields with a Scharr filter. Objects and characters are tables of primitives, each placed by a chain of $4\times4$ transformation matrices (scale, rotate, move, hierarchy, view, projection), and lit by six selectable illumination models (Lambert, Phong, Blinn--Phong, Oren--Nayar, Cook--Torrance, subsurface) under directional, point, spot and area lights.
 
 On top of the engine sit collision, a ladder state machine, four ground vehicles and a helicopter, enemy soldiers with stealth rules, synthesised audio, and a five-objective rescue mission in the spirit of \textit{Project I.G.I.} The work was measured and verified, not only drawn: at 1080p the GPU needs 10.9~ms per frame, and 281 unit tests, 30 GL checks, 8\,318 texture checks (including exact tiling of every material), 318\,567 renderer checks and two scripted full playthroughs pass. The report explains every technique in plain language, with its governing equations, diagrams and screenshots, and documents a debugging case in which a star in the fog colour painted a bright vertical line across the night scene.
 
@@ -340,12 +340,58 @@ Figure~\ref{fig:layers}: a lower layer never knows about a higher one. \code{Sou
 	\caption{The six layers (dependencies point downward) and the main loop.}\label{fig:layers}
 \end{figure}
 
-\subsection{Procedural Geometry and Characters}
-Every object is a \emph{table} of parts, each a primitive (box, sphere, cylinder, cone, capsule, torus, wedge), a transform, optional deformers and a material. A noise deformer moves each vertex along its normal $\hat n$ by a smooth random amount of at most $A$, so a perfect sphere becomes a lumpy rock:
+\subsection{Transformations: Creating and Combining Objects}
+Every object is a \emph{table} of parts. A part is a primitive (box, sphere, cylinder, cone, capsule, torus, wedge), optional deformers, a transform and a material. A point is written in \emph{homogeneous coordinates} $\mathbf p=(x,y,z,1)^{\!\top}$ so that moving, turning and scaling are all multiplications by $4\times4$ matrices and can be chained into one matrix:
+\begin{equation}T(\mathbf t)=\begin{pmatrix}I&\mathbf t\\ \mathbf 0^{\top}&1\end{pmatrix},\quad S(\mathbf s)=\operatorname{diag}(s_x,s_y,s_z,1),\quad R_y(\theta)=\begin{pmatrix}\cos\theta&0&\sin\theta&0\\0&1&0&0\\-\sin\theta&0&\cos\theta&0\\0&0&0&1\end{pmatrix}.\end{equation}
+$R_x$ and $R_z$ are the same pattern turned about their own axes. The transform of one part, as built by the engine, is
+\begin{equation}M_{\text{part}}=T(\mathbf t)\;R_z(\gamma)\,R_y(\beta)\,R_x(\alpha)\;S(\mathbf s),\qquad \mathbf p_{\text{object}}=M_{\text{part}}\,\mathbf p_{\text{part}}.\end{equation}
+Matrices act on the point from the right, so the order of events is \emph{right to left}: the part is first scaled (stretched), then turned about $x$, then $y$, then $z$, and finally moved. Reversing the order gives a different shape, because rotations and scaling do not commute.
+
+\begin{plain}
+Think of a LEGO model: each brick is made at the origin, squeezed or stretched, turned, and only then carried to its place. Because the \emph{last} step is the move, the turn happens around the brick's own centre, not around the world's centre.
+\end{plain}
+
+\begin{ex}A box vertex $(1,0,0)$ with $\mathbf s=(2,1,1)$, $\beta=90^{\circ}$ and $\mathbf t=(5,0,0)$: scaling gives $(2,0,0)$; $R_y(90^{\circ})$ maps $(x,z)\to(x\cos\beta+z\sin\beta,\,-x\sin\beta+z\cos\beta)$ giving $(0,0,-2)$; the move gives $(5,0,-2)$. (Checked by script.)\end{ex}
+
+\textbf{Normals need a different matrix.} A surface normal must stay perpendicular to the surface. If the surface is stretched, applying $M$ to the normal would tilt it. The engine therefore transforms normals with the \emph{inverse transpose} of the upper $3\times3$ block $L$ of $M$:
+\begin{equation}\hat n'=\frac{(L^{-1})^{\top}\hat n}{\lVert(L^{-1})^{\top}\hat n\rVert}.\end{equation}
+For $S=\operatorname{diag}(2,1,1)$ and $\hat n=(1,1,0)/\sqrt2$: the correct normal is $(0.5,1,0)/1.118=(0.447,0.894,0)$, whereas naively applying $S$ gives $(0.894,0.447,0)$, which is no longer perpendicular to the stretched tangent $(2,-1,0)$ (dot product $1.34\neq0$; for the correct normal it is $0$). If $\det L<0$ the object is mirrored; the engine then reverses every triangle's winding and the tangent's handedness so faces still point outward.
+
+\textbf{Combining parts.} All parts of an object that share a material are appended into \emph{one} mesh (each vertex multiplied by its part matrix), so a whole building costs one draw call per material, not one per brick. The finished object is placed in the world by one more matrix, $M_{\text{world}}=T(x,\text{ground},z)\,R_y(\text{yaw})$, and \emph{instancing} draws the same mesh at many placements, each with its own $M_{\text{world}}$ (one call for thousands of trees).
+
+\textbf{Hierarchies.} Moving parts hang below their parent, so their matrices are \emph{products down the chain}. A tank's gun is
+\begin{equation}M_{\text{gun}}=\underbrace{T(\mathbf p)R_y(\psi)R_x(-\phi)R_z(\rho)}_{\text{hull}}\;\underbrace{T(\mathbf c_t)R_y(\theta_t)}_{\text{turret}}\;\underbrace{T(\mathbf c_g)R_x(-\theta_g)}_{\text{gun}},\end{equation}
+with hull position $\mathbf p$, yaw $\psi$, pitch $\phi$, roll $\rho$, turret pivot $\mathbf c_t$ and yaw $\theta_t$, and gun pivot $\mathbf c_g$ and elevation $\theta_g$. Turning the hull therefore carries the turret and gun with it, while the turret turns alone about its own pivot. A soldier's limb is built the same way from the posed joint positions: its matrix has $\mathbf t=$ the upper joint and its local $y$ axis along (lower joint $-$ upper joint), so each bone follows its joints.
+
+\begin{figure}[H]
+	\centering
+	\begin{subfigure}{0.4\linewidth}\includegraphics[width=\linewidth]{images/tank.jpg}\caption{Tank: hull, turret and gun}\end{subfigure}\hfill
+	\begin{subfigure}{0.4\linewidth}\includegraphics[width=\linewidth]{images/truck.jpg}\caption{Truck: body, cab and wheels}\end{subfigure}
+	\caption{Objects built from transformed primitives; the turret and gun inherit the hull's matrix.}\label{fig:hier}
+\end{figure}
+
+\textbf{Deformers} are one-line mappings applied in the part's own space before $M_{\text{part}}$: \emph{taper} scales $x,z$ by a factor that varies linearly with height, \emph{twist} rotates by $\theta(y)=\Theta\,y/h$, \emph{bend} wraps the axis onto a circle of curvature $1/R$, and \emph{noise displacement} pushes each vertex along its normal by at most $A$,
 \begin{equation}\mathbf p'=\mathbf p+A\,\nu(f\mathbf p)\,\hat n,\qquad \lVert\mathbf p'-\mathbf p\rVert\le A.\end{equation}
-Soldiers are capsule skeletons; legs use two-bone IK: for upper and lower bone lengths $a,b$ and hip-to-target distance $c$, the law of cosines gives the hip angle $\alpha$ between the target direction and the upper bone
+Soldiers' legs reach their targets by two-bone inverse kinematics: for bone lengths $a,b$ and hip-to-target distance $c$, the law of cosines gives the hip angle $\alpha$ between the target direction and the thigh,
 \begin{equation}\cos\alpha=\frac{a^{2}+c^{2}-b^{2}}{2ac}.\end{equation}
 
+\textbf{From the world to the screen.} Drawing a vertex multiplies it by the chain model, view and projection. The camera's \emph{view} matrix is a look-at transform (move the eye to the origin, turn the target onto $-z$), and the \emph{perspective} matrix with $f=1/\tan(\mathrm{fov}/2)$ divides by depth:
+\begin{equation}\mathbf p_{\text{clip}}=P\,V\,M_{\text{world}}\,M_{\text{part}}\,\mathbf p,\qquad P=\begin{pmatrix}f/a&0&0&0\\0&f&0&0\\0&0&\tfrac{n+r}{n-r}&\tfrac{2nr}{n-r}\\0&0&-1&0\end{pmatrix},\quad \mathbf p_{\text{screen}}=\tfrac{(x,y)}{w}.\end{equation}
+Here $a$ is the aspect ratio, $n,r$ the near and far planes, and $w$ the clip-space fourth coordinate (equal to the distance in front of the camera), so far objects shrink. Binocular zoom by a factor $k$ narrows the view: $\tan(\mathrm{fov}'/2)=\tan(\mathrm{fov}/2)/k$ (a $72^{\circ}$ view at $4\times$ becomes $20.6^{\circ}$).
+
+\begin{figure}[H]
+	\centering
+	\begin{tikzpicture}[node distance=0.28cm,scale=0.92,transform shape]
+		\node[box] (a) {Primitive\\mesh};
+		\node[box,right=of a] (b) {Deformers\\(own space)};
+		\node[box,right=of b] (c) {$M_{\text{part}}$\\scale, turn, move};
+		\node[box,right=of c] (d) {Merge by\\material};
+		\node[box,right=of d] (e) {$M_{\text{world}}$\\instances};
+		\node[box,right=of e] (f) {$V$ then $P$\\to screen};
+		\foreach \x/\y in {a/b,b/c,c/d,d/e,e/f}\draw[arr](\x)--(\y);
+	\end{tikzpicture}
+	\caption{How an object is created and combined: the chain of transformations from a primitive to a pixel.}\label{fig:transform_chain}
+\end{figure}
 
 \subsection{Procedural Textures}
 Each material is a \emph{recipe}: a small shader that answers ``what is the colour, bumpiness, shininess and crevice-darkness at this point?''. Each recipe is baked at start-up into a 1024$\times$1024 picture (22 materials from 18 recipes: concrete, rock, sand, dirt, asphalt, metals, paints, wood, bark, leaves, needles, grass, canvas, camo, rubber, skin, glass) and keeps it on the GPU.
@@ -368,11 +414,8 @@ Triplanar mapping (weights $w_i=|n_i|^4/\sum_j|n_j|^4$) avoids stretching.
 
 
 \subsection{The Rendering Pipeline}
-\emph{Deferred shading} photographs a ``data poster'' of the scene first (each pixel's colour, direction and shininess) and lights it once, which makes many lights cheap. The poster is the \emph{G-buffer}: albedo, octahedral-packed normal with roughness and metalness, emission with occlusion, and depth (from which position is rebuilt). Fig.~\ref{fig:pipeline} lists the passes. Direct light uses the Cook--Torrance model~[3]: a diffuse part plus a mirror-like specular part,
-\begin{equation}f=\frac{(1-F_l)(1-F_v)\,\mathbf c_d}{\pi}+D\,V\,F,\quad D=\frac{\alpha^{2}}{\pi\big((\mathbf n\!\cdot\!\mathbf h)^{2}(\alpha^{2}-1)+1\big)^{2}},\quad F=F_0+(1-F_0)(1-\mathbf v\!\cdot\!\mathbf h)^{5},\end{equation}
-where $\mathbf c_d$ is the diffuse colour, $D$ counts tiny mirror facets facing the viewer (GGX), $V=G/(4\,\mathbf n\!\cdot\!\mathbf l\;\mathbf n\!\cdot\!\mathbf v)$ is the Smith visibility (facets shading each other), $F$ is glancing-angle reflection (Schlick, $F_0=0.04$ for non-metals), $F_l,F_v$ are $F$ at the light and view angles, and $\alpha$ is roughness squared. Distant things fade into haze, $C=T\,C_{\text{surf}}+(1-T)\,C_{\text{haze}}$, $T=e^{-kd}$. Finally the HDR image is compressed to screen range by the ACES curve~[9], graded, dithered~[10] and smoothed (FXAA~[11]):
+\emph{Deferred shading} photographs a ``data poster'' of the scene first (each pixel's colour, direction and shininess) and lights it once, which makes many lights cheap. The poster is the \emph{G-buffer}: albedo, octahedral-packed normal with roughness and metalness, emission with occlusion, and depth (from which position is rebuilt). Fig.~\ref{fig:pipeline} lists the passes. Distant things fade into haze, $C=T\,C_{\text{surf}}+(1-T)\,C_{\text{haze}}$, $T=e^{-kd}$. Finally the HDR image is compressed to screen range by the ACES curve~[9], graded, dithered~[10] and smoothed (FXAA~[11]):
 \begin{equation}C_{\text{out}}=\operatorname{clamp}\!\Big(\frac{x(2.51x+0.03)}{x(2.43x+0.59)+0.14}\Big),\quad x=\text{exposure}\times\text{radiance}.\end{equation}
-
 
 \begin{figure}[H]
 	\centering
@@ -389,6 +432,100 @@ where $\mathbf c_d$ is the diffuse colour, $D$ counts tiny mirror facets facing 
 	\caption{The passes of one frame, left to right.}\label{fig:pipeline}
 \end{figure}
 
+\subsection{Illumination Models and Light Sources}
+The lighting pass visits every pixel of the data poster and adds up the contribution of each light, then the sky's ambient light and the surface's own emission:
+\begin{equation}L_o=\sum_{j}\;f(\mathbf l_j,\mathbf v)\;L_j\,\mathrm{att}_j\,\mathrm{sh}_j\,\max(0,\mathbf n\!\cdot\!\mathbf l_j)\;+\;\underbrace{\text{ambient}\cdot\mathrm{AO}}_{\text{sky}}\;+\;\mathbf e.\end{equation}
+Here $f$ is the \emph{illumination model} (the BRDF, the share of light from direction $\mathbf l$ that leaves toward the eye $\mathbf v$), $L_j$ the light's colour times intensity, $\mathrm{att}_j$ its distance falloff, $\mathrm{sh}_j\in[0,1]$ its shadow, $\mathbf n\!\cdot\!\mathbf l$ Lambert's cosine (light spreads over a larger area when it arrives at a slant), and $\mathbf e$ the emission of lamps and windows. Figure~\ref{fig:vectors} shows the four vectors every model uses; $\mathbf h=(\mathbf l+\mathbf v)/\lVert\mathbf l+\mathbf v\rVert$ is the half vector.
+
+\begin{figure}[H]
+	\centering
+	\begin{subfigure}{0.4\linewidth}\centering
+	\begin{tikzpicture}[scale=0.85]
+		\draw[thick] (-2,0)--(2,0);
+		\draw[arr] (0,0)--(0,1.8) node[above,font=\scriptsize]{$\mathbf n$};
+		\draw[arr,orange!80!black] (0,0)--(-1.3,1.3) node[above left,font=\scriptsize]{$\mathbf l$};
+		\draw[arr,blue!60!black] (0,0)--(1.4,1.2) node[above right,font=\scriptsize]{$\mathbf v$};
+		\draw[arr,green!50!black] (0,0)--(0.1,1.6);
+		\draw[dashed] (0,0)--(0.05,1.2) node[right,font=\tiny,xshift=2pt,yshift=14pt]{$\mathbf h$};
+		\draw[->,gray] (0,0.5) arc (90:135:0.5) node[midway,above,font=\tiny]{$\theta_i$};
+	\end{tikzpicture}
+	\caption{Vectors of a model}
+	\end{subfigure}\hfill
+	\begin{subfigure}{0.56\linewidth}\centering
+	\begin{tikzpicture}[scale=0.62]
+		\foreach \x/\t in {0/Directional,3.6/Point,7.2/Spot,10.8/Area}{\node[font=\tiny] at (\x+0.9,-0.9) {\t};}
+		\foreach \y in {0.2,0.8,1.4} \draw[arr,orange!80!black] (-0.2,\y+0.9)--(1.4,\y-0.1);
+		\fill[orange!80!black] (4.5,0.9) circle (3pt); \foreach \a in {0,45,...,315} \draw[arr,orange!80!black] (4.5,0.9)--++(\a:0.75);
+		\fill[orange!80!black] (8.1,1.6) circle (3pt); \draw[thick,orange!80!black] (8.1,1.6)--(7.1,-0.2)--(9.1,-0.2)--cycle; \draw[arr,orange!80!black] (8.1,1.6)--(8.1,0.1);
+		\draw[thick,orange!80!black] (11.2,1.5)--(12.4,1.5); \foreach \x in {11.4,11.8,12.2} \draw[arr,orange!80!black] (\x,1.5)--(\x,0.3);
+	\end{tikzpicture}
+	\caption{The four light types}
+	\end{subfigure}
+	\caption{The geometry of lighting: surface normal, light, view and half vectors; sun, lamp, spotlight and rectangular panel.}\label{fig:vectors}
+\end{figure}
+
+\textbf{The six illumination models} are chosen per pixel from the G-buffer (Fig.~\ref{fig:models}). With $\mathbf c_d$ the diffuse colour (metals have none) and $F_0$ the base reflectance:
+\begin{align}
+\text{Lambert:}\quad & f=\frac{\mathbf c_d}{\pi}\\
+\text{Phong:}\quad & f=\frac{\mathbf c_d(1-F_0)}{\pi}+F_0\frac{m+2}{2\pi}\,(\mathbf r\!\cdot\!\mathbf v)^{m},\quad \mathbf r=2(\mathbf n\!\cdot\!\mathbf l)\mathbf n-\mathbf l\\
+\text{Blinn--Phong:}\quad & f=\frac{\mathbf c_d(1-F_0)}{\pi}+F_0\frac{m+8}{8\pi}\,(\mathbf n\!\cdot\!\mathbf h)^{m}\\
+\text{Oren--Nayar:}\quad & f=\frac{\mathbf c_d}{\pi}\big(A+B\max(0,\cos\Delta\varphi)\sin\alpha\tan\beta\big)\\
+\text{Cook--Torrance:}\quad & f=\frac{(1-F_l)(1-F_v)\,\mathbf c_d}{\pi}+D\,V\,F\\
+\text{Subsurface:}\quad & \text{Lambert with the cosine replaced by } \tfrac{\mathbf n\cdot\mathbf l+w}{1+w},\ w=0.5
+\end{align}
+The shininess exponent comes from roughness $\rho$: $m=\max\!\big(2/(\rho^{2}+10^{-4})-2,\,1\big)$ (roughness $0.5\Rightarrow m=6$). Phong's mirror direction $\mathbf r$ is cheap but needs a reflection per light; Blinn--Phong replaces it by $\mathbf h$, which is cheaper and behaves better at glancing angles, and the factors $(m+2)/2\pi$ and $(m+8)/8\pi$ normalise the highlight so it does not gain energy as it sharpens. \emph{Oren--Nayar} treats a rough surface as many tiny Lambertian facets that scatter light back toward the source, so cloth and concrete look flat and do not darken at the edge like Lambert: with $\sigma=\rho$, $A=1-\frac{0.5\sigma^2}{\sigma^2+0.33}$, $B=\frac{0.45\sigma^2}{\sigma^2+0.09}$, $\alpha=\max(\theta_i,\theta_r)$, $\beta=\min(\theta_i,\theta_r)$ and $\Delta\varphi$ the azimuth between light and view around the normal. \emph{Subsurface} lets light wrap a little past the shadow line (the cosine ramps from 1 down to 0 as $\mathbf n\!\cdot\!\mathbf l$ goes from 1 to $-w$), imitating light scattering inside skin. \emph{Cook--Torrance} is the physically based default: $D$ is the GGX facet distribution, $V$ the Smith visibility and $F$ Schlick's Fresnel,
+\begin{equation}D=\frac{\alpha^{2}}{\pi\big((\mathbf n\!\cdot\!\mathbf h)^{2}(\alpha^{2}-1)+1\big)^{2}},\quad F=F_0+(1-F_0)(1-\mathbf v\!\cdot\!\mathbf h)^{5},\quad \alpha=\rho^{2}.\end{equation}
+In the game, cloth and canvas use Oren--Nayar, skin uses Subsurface, and everything else uses Cook--Torrance (Table~\ref{tab:models}).
+
+\begin{table}[H]
+	\caption{The six illumination models compared}\label{tab:models}
+	\small\setstretch{1.05}
+	\begin{tabularx}{\linewidth}{lXl}
+		\toprule \textbf{Model} & \textbf{Idea and best use} & \textbf{Cost}\\ \midrule
+		Lambert & Matte diffuse only; the baseline and the particle smoke & Lowest\\
+		Phong & Diffuse plus a mirror-direction highlight; plastic, teaching reference & Low\\
+		Blinn--Phong & Highlight from the half vector; stable at glancing angles & Low\\
+		Oren--Nayar & Rough matte facets; cloth, canvas, soldiers' uniforms & Medium\\
+		Cook--Torrance & Microfacets with Fresnel; metal, paint, concrete, glass (default) & Higher\\
+		Subsurface & Wrapped cosine; skin and soft materials & Low\\
+		\bottomrule
+	\end{tabularx}
+\end{table}
+
+\begin{figure}[H]
+	\centering
+	\includegraphics[width=\linewidth]{images/models.jpg}
+	\caption{The same painted-metal sphere under the six illumination models (left to right: Lambert, Phong, Blinn--Phong, Oren--Nayar, Cook--Torrance, Subsurface), lit by the same sun and sky. Lambert has no highlight; Phong and Blinn--Phong add a hot spot; Oren--Nayar flattens the falloff; Cook--Torrance adds Fresnel and a microfacet highlight.}\label{fig:models}
+\end{figure}
+
+\textbf{Light sources} (Fig.~\ref{fig:vectors}b) differ only in how $L_j\,\mathrm{att}_j$ is found. A \emph{directional} light (sun, moon) has no falloff and parallel rays. A \emph{point} light (lamp, muzzle flash, explosion) uses the inverse-square law multiplied by a smooth window so it reaches exactly zero at its range $R$ and can be drawn as a bounded sphere:
+\begin{equation}\mathrm{att}(d)=\frac{\operatorname{clamp}\!\big(1-(d/R)^{4},0,1\big)^{2}}{d^{2}+1}.\end{equation}
+A \emph{spot} light (floodlight, flashlight) multiplies this by a cone factor that is 1 inside the inner angle and 0 outside the outer angle, $c=\operatorname{clamp}\!\big(\tfrac{\cos\theta-\cos\theta_o}{\cos\theta_i-\cos\theta_o},0,1\big)^{2}$. An \emph{area} light (ceiling panel) is a rectangle sampled as a $4\times4$ grid of point emitters, each with intensity$/16$ and weighted by its emission cosine, which gives soft highlights and soft shading. For $R=14$\,m: $\mathrm{att}(1)=0.50$, $\mathrm{att}(5)=0.037$, $\mathrm{att}(10)=0.0054$ and $\mathrm{att}(14)=0$ (checked by script, Fig.~\ref{fig:curves}).
+
+\begin{figure}[H]
+	\centering
+	\begin{subfigure}{0.48\linewidth}\centering
+	\begin{tikzpicture}\begin{axis}[width=\linewidth,height=3.6cm,xlabel={distance $d$ (m)},ylabel={att},xlabel style={font=\scriptsize},ylabel style={font=\scriptsize},tick label style={font=\tiny},ymax=0.55,xmin=0,xmax=15,domain=0:14,samples=60]
+		\addplot[blue!60!black,thick]{(max(0,1-(x/14)^4))^2/(x^2+1)};
+		\addplot[dashed,gray]{1/(x^2+1)};
+	\end{axis}\end{tikzpicture}
+	\caption{Windowed (solid) vs.\ plain inverse-square (dashed)}
+	\end{subfigure}\hfill
+	\begin{subfigure}{0.48\linewidth}\centering
+	\begin{tikzpicture}\begin{axis}[width=\linewidth,height=3.6cm,xlabel={angle from normal (deg)},ylabel={$F$},xlabel style={font=\scriptsize},ylabel style={font=\scriptsize},tick label style={font=\tiny},xmin=0,xmax=90,ymin=0,ymax=1,domain=0:90,samples=60]
+		\addplot[orange!80!black,thick]{0.04+0.96*(1-cos(x))^5};
+	\end{axis}\end{tikzpicture}
+	\caption{Schlick Fresnel, $F_0=0.04$}
+	\end{subfigure}
+	\caption{Two curves behind the lighting: distance falloff and glancing-angle reflection.}\label{fig:curves}
+\end{figure}
+
+\textbf{Shadows.} The sun's shadow uses three \emph{cascaded shadow maps}: the camera's view range is cut at
+\begin{equation}z_i=\lambda\,n\Big(\frac{r}{n}\Big)^{i/N}+(1-\lambda)\Big(n+(r-n)\frac{i}{N}\Big),\quad i=1,\dots,N,\end{equation}
+a blend of logarithmic cuts (sharp shadows nearby) and even cuts, with $\lambda=0.75$, $N=3$, $n=0.1$\,m, $r=100$\,m, giving $9.1$, $24.2$ and $100$\,m. A pixel is looked up in the cascade containing its depth, moved a little along its normal (removes self-shadow acne), and compared against the stored depth with eight rotated percentage-closer taps, so the edge is soft. Spot lights have their own shadow maps, short ``contact'' rays darken crevices, and \emph{screen-space ambient occlusion} (SSAO) darkens corners where the sky is hidden.
+
+\textbf{Ambient light} is the sky seen from the surface. Diffuse ambient is the sky's cosine-weighted colour; specular ambient uses Karis's split-sum fit, $\text{prefiltered sky}\times(F_0\,A+B)$, where $(A,B)$ depends only on roughness and $\mathbf n\!\cdot\!\mathbf v$; rough surfaces see a blurred sky. Both are multiplied by the occlusion term AO and fade inside rooms (the room volumes mask the sky), so interiors are lit only by their lamps and the light entering by doors.
+
 \subsection{Sky, Time of Day and Clouds}
 The sun's height follows astronomy, $\sin(\text{elev})=\sin\varphi\sin\delta+\cos\varphi\cos\delta\cos h$ (latitude $\varphi$, declination $\delta$, hour angle $h$). The sky colour comes from Rayleigh and Mie scattering~[6]; the moon and a star field take over at night. Clouds live on two planes, cumulus at $H=1500$\,m and cirrus at 7\,km. A view ray with direction $\mathbf d$ meets the plane at
 \begin{equation}\mathbf P_{xz}=\frac{H}{d_y}\,(d_x,d_z)+\mathbf w\,t,\end{equation}
@@ -396,7 +533,7 @@ where $\mathbf w$ is the wind velocity: shifting the noise by $\mathbf wt$ makes
 
 \begin{figure}[H]
 	\centering
-	\begin{tikzpicture}[scale=0.8]
+	\begin{tikzpicture}[scale=0.62]
 		\draw[thick] (0,0) -- (7,0) node[right,font=\scriptsize]{ground};
 		\draw[blue!60,thick] (0,1.8) -- (7,1.8) node[right,font=\scriptsize]{cumulus, 1.5 km};
 		\draw[blue!40,thick] (0,2.8) -- (7,2.8) node[right,font=\scriptsize]{cirrus, 7 km};
@@ -415,6 +552,8 @@ where $\mathbf w$ is the wind velocity: shifting the noise by $\mathbf wt$ makes
 \textbf{Collision} uses rotatable boxes and a capsule player. Cars follow the bicycle model, $\dot\psi=v\tan\delta/L$, and engine power fades toward top speed, $\dot v=a_0(1-0.6|v|/v_{\max})$. \textbf{Ladders} are a four-state machine (none, mounting, climbing, topping out) in which the controller owns the body, so it cannot stick. A staged machine drives five mission goals; sounds are synthesised.
 
 
+
+\textbf{How transformations and lighting were verified.} Unit tests check that appending a mesh places geometry exactly by its matrix, that normals stay perpendicular under non-uniform scale, that a mirror keeps winding outward, that rotation keeps vertices on the same sphere, and that every primitive's volume and bounds match its formula. The lighting is probed on the GPU by a fixture shader that includes the \emph{real} GLSL: each illumination model is checked for reciprocity ($f(\mathbf l,\mathbf v)=f(\mathbf v,\mathbf l)$) and with a ``white furnace'' energy test (a model must never reflect more light than it receives), light falloff and light shapes are checked against their formulas, and the sun shadows are checked for acne and for shadows detached from their casters.
 
 \section{Conclusion}
 Small data-driven techniques give a deterministic world.
