@@ -182,11 +182,13 @@
 \addcontentsline{toc}{frontmatter}{Abstract}
 \fmheading{Abstract}
 
-Most video games ship with gigabytes of files made by artists: models, photographs, recorded sounds. \textit{Sentinel} takes the opposite route. It is a complete game engine and an open-world military shooter in which \emph{nothing} is loaded from a model, image or sound file. Every tree, building, soldier, vehicle, surface, cloud and sound is created at start-up from short mathematical recipes and a random seed.
+Most video games ship with gigabytes of files made by artists: 3D models, photographs for surfaces, recorded sounds. \textit{Sentinel} takes the opposite route. It is a complete game engine and an open-world military shooter in which \emph{nothing} is loaded from a model, image or sound file. Every tree, building, soldier, vehicle, surface, cloud and sound effect is created while the program starts, from short mathematical recipes and a random seed. Only the small text files holding the shader programs are read from disk.
 
-The engine is written in Odin on OpenGL~4.1, the newest version macOS offers (it has no compute shaders), in six layers that may only depend on the layers beneath. A deferred renderer records what each pixel is made of and then lights it with sun, moon and lamps, cascaded shadows, ambient occlusion, reflections, an atmospheric sky with drifting clouds, fog, bloom, tone mapping and anti-aliasing. Surfaces come from 18 recipes built on periodic gradient, warped and cellular noise. The game adds collision, ladders, four vehicles and a helicopter, stealth enemies, synthesised audio and a five-objective mission.
+The engine is written in the Odin language on OpenGL~4.1, the newest version macOS offers (it has no compute shaders), and is organised in six layers that may only depend on the layers beneath them. A deferred renderer records what every pixel is made of and then lights it with a sun and moon, spot and point lamps, cascaded shadow maps, ambient occlusion, screen-space reflections, an atmospheric sky with wind-driven clouds, fog, bloom, tone mapping, colour grading and anti-aliasing. Surfaces come from 18 texture recipes built on periodic gradient noise, domain warping and cellular noise; normal maps are derived from height fields with a Scharr filter. Objects and characters are tables of primitives with noise deformers.
 
-At 1080p the GPU needs 10.9~ms per frame; 281 unit tests, 30 GL checks, 8\,318 texture checks (exact tiling of every material), 318\,567 renderer checks and two scripted playthroughs pass. Each technique is explained in plain language with its governing equations.
+On top of the engine sit collision, a ladder state machine, four ground vehicles and a helicopter, enemy soldiers with stealth rules, synthesised audio, and a five-objective rescue mission in the spirit of \textit{Project I.G.I.} The work was measured and verified, not only drawn: at 1080p the GPU needs 10.9~ms per frame, and 281 unit tests, 30 GL checks, 8\,318 texture checks (including exact tiling of every material), 318\,567 renderer checks and two scripted full playthroughs pass. The report explains every technique in plain language, with its governing equations, diagrams and screenshots, and documents a debugging case in which a star in the fog colour painted a bright vertical line across the night scene.
+
+\textbf{Keywords:} procedural generation, game engine, OpenGL, deferred rendering, physically based shading, noise, texture synthesis, real-time graphics.
 
 % ============================================================
 %  CONTENTS, LISTS
@@ -213,33 +215,46 @@ At 1080p the GPU needs 10.9~ms per frame; 281 unit tests, 30 GL checks, 8\,318 t
 \chapter{Introduction}
 
 \section{Introduction}
-Imagine a film studio that buys no props: a recipe book tells assistants how to build every tree, wall and cloud, and a different ``seed'' number gives a different but believable forest. \textit{Sentinel} is that studio for a game: a \emph{game engine} (the machinery that draws, simulates and sounds a world) plus a first-person military mission. \emph{Procedural} means shapes, colours and sounds are calculated, not stored; the \textbf{GPU} (a processor with thousands of tiny cores) runs small \textbf{shader} programs that paint each pixel.
+Imagine a film studio that buys no props: a recipe book tells assistants how to build every tree and cloud, and a different ``seed'' gives a different but believable forest. \textit{Sentinel} is that studio for a game: a \emph{game engine} (the machinery that draws, simulates and sounds a world) plus a first-person military mission. \emph{Procedural} means shapes, colours and sounds are calculated by code, not stored in files. (A \textbf{GPU} is a second processor with thousands of tiny cores; a \textbf{shader} is the small program each core runs per pixel.)
 
 
 \section{Background and Problem Statement}
-Graphics courses teach lighting, textures and noise separately; products need them working \emph{together} at 60 frames per second, usually with art loaded from files. The problem: \emph{can a complete, good-looking, playable 3D game be produced by code alone on a student laptop?} Two limits: no model, image or precomputed file is allowed, and macOS stops at OpenGL~4.1, without compute shaders.
+Graphics courses teach lighting, textures and noise one at a time; a product needs them working \emph{together} 60 times a second, usually with art loaded from files. The problem: \emph{can a complete, good-looking, playable 3D game be produced by code alone on a student laptop?} Limits: no pre-saved model, image or precomputed file, and OpenGL~4.1 without compute shaders.
 
 \section{Objectives}
 \begin{enumerate}[leftmargin=0.5in,label=\arabic*.,itemsep=0pt,topsep=0pt]
 	\item Build a layered engine with downward-only dependencies.
 	\item Generate all meshes, textures and sounds from code and seeds.
-	\item Implement a modern renderer (PBR shading, shadows, sky, post-processing).
+	\item Implement a modern renderer (PBR, shadows, sky).
 	\item Build a playable game with vehicles, ladders, doors and a mission.
 	\item Verify it with tests and a 16.7\,ms frame budget.
 \end{enumerate}
 
 \section{Scope}
-Tools: Odin, OpenGL~4.1 core with GLSL shaders (47 files), GLFW (window, input), miniaudio (sound output), Git (138 commits) and \LaTeX/TikZ. Networking and hand-made art are out of scope.
+The scope is the whole engine and one game (Table~\ref{tab:tools}); networking, multiplayer and hand-made art are out of scope.
+
+\begin{table}[H]
+	\caption{Tools and technologies used}\label{tab:tools}
+	\small\setstretch{1.05}
+	\begin{tabularx}{\linewidth}{lX}
+		\toprule \textbf{Tool} & \textbf{Role (plain words)}\\ \midrule
+		Odin language & The project language: fast like C, readable like a script.\\
+		OpenGL 4.1 core & The standard way to talk to the graphics card on macOS.\\
+		GLFW, miniaudio & Window and input; sound output.\\
+		\bottomrule
+	\end{tabularx}
+\end{table}
+
 
 \section{Unfamiliarity of the Problem and its Solution}
-The design follows published theory, not an existing code base. Engines usually import art; \textit{.kkrieger} shows procedural shooters are possible but is not readable teaching code. Here ``no files'' is enforced on every feature and each file holds one feature.
+The design follows published theory, not an existing code base: commercial engines import art, and demo-scene shooters are not readable. Here ``no files'' is enforced everywhere.
 
 \section{Project Planning and Work Distribution}
-One student did all the work (design, code, tests, report). Figure~\ref{fig:gantt} is rebuilt from the 138 commits.
+One student did all the work; Fig.~\ref{fig:gantt} is rebuilt from the 138 commits.
 
-\begin{figure}[!tb]
+\begin{figure}[H]
 	\centering
-	\resizebox{0.62\linewidth}{!}{%
+	\resizebox{0.5\linewidth}{!}{%
 	\begin{ganttchart}[hgrid,vgrid={*{1}{black!10}},x unit=0.8cm,y unit chart=0.42cm,y unit title=0.45cm,title height=1,bar height=0.6,
 		bar/.append style={fill=blue!45,rounded corners=2pt},bar label font=\scriptsize,title label font=\scriptsize,
 		bar label node/.append style={text width=4.6cm,align=right,font=\tiny}]{1}{10}
@@ -253,14 +268,14 @@ One student did all the work (design, code, tests, report). Figure~\ref{fig:gant
 		\ganttbar{Ladders, trees, night fixes}{6}{7}\\
 		\ganttbar{Testing and this report}{6}{10}
 	\end{ganttchart}}
-	\caption{Work plan by day.}\label{fig:gantt}
+	\caption{Work plan by day (the single author performed every task).}\label{fig:gantt}
 \end{figure}
 
 \section{Applications of the Work}
-A teaching tool for procedural graphics and a base for small source-only games.
+A teaching tool and a base for small games.
 
 \section{Organization of the Project}
-Chapters II--IV: related work, design, results; V--VI: social and engineering issues; VII: conclusions.
+Chapters II to IV give related work, design and results; V and VI discuss social and engineering issues; VII concludes.
 
 % ============================================================
 %  CHAPTER II
@@ -271,20 +286,27 @@ Chapters II--IV: related work, design, results; V--VI: social and engineering is
 Sentinel combines noise, physically based shading, real-time pipelines and procedural games.
 
 \section{Related Works}
-Perlin noise~[1], Worley cellular noise~[2] and domain warping~[13] give natural patterns. Cook--Torrance with GGX~[3--5] and Oren--Nayar~[8] model reflection. Deferred shading~[14], cascaded shadows~[7], Hillaire's sky~[6], ACES~[9], dithering~[10] and FXAA~[11] complete the pipeline. \textit{.kkrieger} (2004) generated a whole shooter at run time; \textit{Project I.G.I.} (2000) inspired the mission.
+\textbf{Noise.} Perlin's noise~[1] blends random gradients on a grid; summing scales gives natural detail. Worley's cellular noise~[2] gives pebbles and leaves; domain warping~[13] bends patterns to hide the grid. Sentinel uses all three, made \emph{periodic} so textures tile.
+
+\textbf{Shading.} Cook--Torrance with GGX~[3--5] is the standard reflection model; Oren--Nayar~[8] suits rough cloth.
+
+
+\textbf{Pipeline and games.} Deferred shading~[14], cascaded shadows~[7], Hillaire's sky~[6], ACES~[9] and FXAA~[11] form the pipeline; \textit{.kkrieger} (2004) generated a shooter at run time and \textit{Project I.G.I.} (2000) inspired the mission.
 
 \section{Discussion}
-Table~\ref{tab:compare}: tutorials teach one technique, commercial engines assume imported art, demo shooters are not readable.
+Table~\ref{tab:compare} shows the gap.
 
-\begin{table}[!tb]
-	\caption{Comparison with related approaches (typical)}\label{tab:compare}
+\begin{table}[H]
+	\caption{Comparison with related approaches (typical characteristics)}\label{tab:compare}
 	\small\setstretch{1.05}
 	\begin{tabularx}{\linewidth}{lXXXX}
 		\toprule \textbf{Feature} & \textbf{Tutorials} & \textbf{Commercial} & \textbf{.kkrieger} & \textbf{Sentinel}\\ \midrule
 		No imported art & Mixed & No & Yes & Yes\\
-		Complete game & No & Yes & Yes & Yes\\
+		Complete game loop & No & Yes & Yes & Yes\\
 		Day/night, clouds, shadows & Rare & Yes & No & Yes\\
-		Written to be read & Yes & No & No & Yes\\ \bottomrule
+		Works without compute shaders & Varies & Rarely & Yes & Yes\\
+		Written to be read & Yes & No & No & Yes\\
+		\bottomrule
 	\end{tabularx}
 \end{table}
 
@@ -294,63 +316,62 @@ Table~\ref{tab:compare}: tutorials teach one technique, commercial engines assum
 \chapter{Methodology}
 
 \section{Introduction}
-One frame is an assembly line: the game decides what exists, the engine builds shapes and surfaces, the renderer paints them, 60 times a second.
+One frame is an assembly line: the game decides what exists, the engine builds it, the renderer paints it.
 
 \section{Detailed Methodology}
 \subsection{Overall Framework}
-Figure~\ref{fig:layers}: a lower layer never knows about a higher one. \code{Main.odin} is a table of contents (initialise, loop, shut down); procedures stay near 40 lines and every GL call is checked.
+Figure~\ref{fig:layers}: a lower layer never knows about a higher one. \code{Source/Main.odin} is only a table of contents: initialise, then repeat \emph{input, update, render}, then shut down. Procedures stay near 40 lines and every GL call is checked.
 
 \begin{figure}[H]
 	\centering
 	\begin{tikzpicture}
-		\foreach \i/\t in {0/{Game: mission, enemy AI, weapons, vehicles, HUD, sound},1/{Engine/Render: deferred renderer, lights, shadows, sky, post},2/{Engine/World: collision, controller, terrain streaming},3/{Engine/Procedural: noise, primitives, deformers, textures},4/{Engine/GPU: shaders, buffers, textures, framebuffers},5/{Engine/Platform: window, input, clock}}
-			\node[lay,fill=blue!\the\numexpr 8+\i*3\relax] (L\i) at (0,-\i*0.5) {\t};
-		\draw[arr] (3.9,-0.05) -- node[right,font=\scriptsize,align=left]{depends\\on} (3.9,-2.5);
+		\foreach \i/\t in {0/{Game: mission, enemy AI, weapons, vehicles, HUD, sound},1/{Engine/Render: deferred renderer, lights, shadows, sky, post-processing},2/{Engine/World: collision, character controller, terrain streaming},3/{Engine/Procedural: noise, primitives, deformers, texture recipes},4/{Engine/GPU: shaders, buffers, textures, framebuffers},5/{Engine/Platform: window, input, clock}}
+			\node[lay,fill=blue!\the\numexpr 8+\i*3\relax] (L\i) at (0,-\i*0.6) {\t};
+		\draw[arr] (3.9,-0.05) -- node[right,font=\scriptsize,align=left]{depends\\on} (3.9,-2.95);
 		\node[box,right=1.5cm of L1,yshift=0.2cm] (init) {init};
 		\node[box,right=0.3cm of init] (loop) {input $\rightarrow$ update $\rightarrow$ render};
 		\node[box,right=0.3cm of loop] (down) {end};
 		\draw[arr] (init) -- (loop); \draw[arr] (loop) -- (down);
 	\end{tikzpicture}
-	\caption{Six layers and the main loop.}\label{fig:layers}
+	\caption{The six layers (dependencies point downward) and the main loop.}\label{fig:layers}
 \end{figure}
 
 \subsection{Procedural Geometry and Characters}
-An object is a \emph{table} of parts: primitive, transform, deformers, material. A noise deformer moves each vertex along its normal $\hat n$ by at most the amplitude $A$, so a sphere becomes a rock:
+Every object is a \emph{table} of parts, each a primitive (box, sphere, cylinder, cone, capsule, torus, wedge), a transform, optional deformers and a material. A noise deformer moves each vertex along its normal $\hat n$ by a smooth random amount of at most $A$, so a perfect sphere becomes a lumpy rock:
 \begin{equation}\mathbf p'=\mathbf p+A\,\nu(f\mathbf p)\,\hat n,\qquad \lVert\mathbf p'-\mathbf p\rVert\le A.\end{equation}
-Soldiers are capsule skeletons; legs reach targets by two-bone IK, $\cos\theta=(a^2+b^2-c^2)/2ab$.
+Soldiers are capsule skeletons; legs use two-bone IK: for bone lengths $a,b$ and root-to-target distance $c$, the law of cosines gives the knee angle
+\begin{equation}\cos\theta_{\text{knee}}=\frac{a^{2}+b^{2}-c^{2}}{2ab}.\end{equation}
+
 
 \subsection{Procedural Textures}
-A \emph{recipe} is a small shader answering ``what colour, bumpiness and shininess is here?'', baked once at start-up into a 1024$^2$ picture (22 materials).
+Each material is a \emph{recipe}: a small shader that answers ``what is the colour, bumpiness, shininess and crevice-darkness at this point?''. Each recipe is baked at start-up into a 1024$\times$1024 picture (22 materials from 18 recipes: concrete, rock, sand, dirt, asphalt, metals, paints, wood, bark, leaves, needles, grass, canvas, camo, rubber, skin, glass) and keeps it on the GPU.
 
-\begin{plain}
-\emph{Gradient noise} is a rubber sheet pinned at grid points with random slopes: smooth, never exactly repeating. \emph{Fractal} noise adds finer sheets on top, like hills, boulders and pebbles.
-\end{plain}
 
-Fractal noise sums octaves, each at double frequency and half strength; because grid gradients are chosen from the cell index modulo the period $P$, the picture tiles without a seam, $F(\mathbf x+P\mathbf e)=F(\mathbf x)$ (checked exactly by tests):
+\emph{Gradient noise} (a rubber sheet pinned at random slopes) blends the four corner gradients of a grid cell with the smooth curve $s(t)=6t^5-15t^4+10t^3$, scaled by $\sqrt2$ so values lie in $[-1,1]$. Fractal noise sums octaves, each at double frequency and half strength:
 \begin{equation}F(\mathbf x)=\frac{\sum_{i=0}^{n-1}2^{-i}\,\nu(2^{i}\mathbf x)}{\sum_{i=0}^{n-1}2^{-i}}.\end{equation}
-Warping $F(\mathbf x+s[F_1,F_2])$ gives stone, ridged noise $(1-|\nu|)^2$ cracks and bark, cellular noise leaves (Fig.~\ref{fig:noise}).
+Choosing gradients from the cell index \emph{modulo the period} $P$ gives $F(\mathbf x+P\mathbf e)=F(\mathbf x)$: the picture tiles with no seam (tested exactly). \emph{Domain warping} $F(\mathbf x+s\,[F_1(\mathbf x),F_2(\mathbf x)])$ swirls the pattern (stone, wood, soil); \emph{ridged} noise $\sum a_i(1-|\nu_i|)^2$ makes cracks and bark; \emph{cellular} noise gives leaves and pebbles (Fig.~\ref{fig:noise}).
 
 \begin{figure}[H]
 	\centering
-	\includegraphics[width=0.62\linewidth]{images/noise_stages.png}
-	\caption{Gradient, fractal, warped, ridged and cellular noise (illustration of the shader equations).}\label{fig:noise}
+	\includegraphics[width=0.9\linewidth]{images/noise_stages.png}
+	\caption{Noise ingredients (illustration of the shader equations): gradient, fractal, warped, ridged, cellular.}\label{fig:noise}
 \end{figure}
 
-A height map becomes a \emph{normal map} that fakes bumps. Slopes use the Scharr filter, the most direction-fair $3\times3$ kernel, and crevices (below their neighbours' average) are darkened:
-\begin{equation}h_x\approx\frac{3(h_{NE}+h_{SE}-h_{NW}-h_{SW})+10(h_E-h_W)}{32\,\Delta},\quad \hat n\propto(-k h_x,-k h_y,1).\end{equation}
-Triplanar mapping (project along three axes, blend by $|n_i|^k$) stops deformed shapes stretching textures.
+\textbf{Bumps without geometry.} A recipe's height map becomes a \emph{normal map} that fools the lighting into seeing bumps. The slope uses the Scharr $3\times3$ filter, the most direction-fair small filter, and crevices (height below the neighbours' average) darken the albedo and ambient occlusion:
+\begin{equation}h_x\approx\frac{3(h_{NE}+h_{SE}-h_{NW}-h_{SW})+10(h_E-h_W)}{32\,\Delta},\qquad \hat n=\frac{(-k\,h_x,\,-k\,h_y,\,1)}{\lVert\cdot\rVert}.\end{equation}
+Triplanar mapping (three axis projections blended by $|n_i|^k$) avoids stretching.
+
 
 \subsection{The Rendering Pipeline}
-\begin{plain}
-\emph{Deferred shading} photographs a ``data poster'' of the scene first (each pixel's colour, direction and shininess), then lights the poster once, which makes many lights cheap.
-\end{plain}
-Figure~\ref{fig:pipeline} shows the passes. Direct light uses Cook--Torrance~[3]: $D$ is how many tiny mirror facets face the viewer (GGX), $G$ how much they shade each other, $F$ the glancing-angle reflection (Schlick), $\alpha$ the roughness squared:
-\begin{equation}f_s=\frac{D\,F\,G}{4(\mathbf n\!\cdot\!\mathbf l)(\mathbf n\!\cdot\!\mathbf v)},\quad D=\frac{\alpha^{2}}{\pi\big((\mathbf n\!\cdot\!\mathbf h)^{2}(\alpha^{2}-1)+1\big)^{2}},\quad F=F_0+(1-F_0)(1-\mathbf v\!\cdot\!\mathbf h)^{5}.\end{equation}
-Distant surfaces fade into haze, $C=TC_{\text{surf}}+(1-T)C_{\text{haze}}$ with $T=e^{-kd}$, and the HDR image is compressed by the ACES curve~[9], graded, dithered and smoothed (FXAA).
+\emph{Deferred shading} photographs a ``data poster'' of the scene first (each pixel's colour, direction and shininess) and lights it once, which makes many lights cheap. The poster is the \emph{G-buffer}: albedo, octahedral-packed normal with roughness and metalness, emission with occlusion, and depth (from which position is rebuilt). Fig.~\ref{fig:pipeline} lists the passes. Direct light uses the Cook--Torrance model~[3]: a diffuse part plus a mirror-like specular part,
+\begin{equation}f_s=\frac{D\,F\,G}{4(\mathbf n\!\cdot\!\mathbf l)(\mathbf n\!\cdot\!\mathbf v)},\quad D=\frac{\alpha^{2}}{\pi\big((\mathbf n\!\cdot\!\mathbf h)^{2}(\alpha^{2}-1)+1\big)^{2}},\quad F=F_0+(1-F_0)(1-\mathbf v\!\cdot\!\mathbf h)^{5},\end{equation}
+where $D$ counts tiny mirror facets facing the viewer (GGX), $G$ their mutual shading, $F$ glancing-angle reflection (Schlick) and $\alpha$ the roughness squared. Distant things fade into haze, $C=T\,C_{\text{surf}}+(1-T)\,C_{\text{haze}}$, $T=e^{-kd}$. Finally the HDR image is compressed to screen range by the ACES curve~[9], graded, dithered~[10] and smoothed (FXAA~[11]):
+\begin{equation}C_{\text{out}}=\operatorname{clamp}\!\Big(\frac{x(2.51x+0.03)}{x(2.43x+0.59)+0.14}\Big),\quad x=\text{exposure}\times\text{radiance}.\end{equation}
+
 
 \begin{figure}[H]
 	\centering
-	\begin{tikzpicture}[node distance=0.22cm and 0.28cm]
+	\begin{tikzpicture}[node distance=0.22cm and 0.3cm]
 		\node[box] (s) {Sky\\table};
 		\node[box,right=of s] (sh) {Shadows\\3 cascades};
 		\node[box,right=of sh] (g) {Geometry\\G-buffer};
@@ -360,17 +381,38 @@ Distant surfaces fade into haze, $C=TC_{\text{surf}}+(1-T)C_{\text{haze}}$ with 
 		\node[box,right=of pa] (po) {Bloom, ACES,\\grade, FXAA};
 		\foreach \x/\y in {s/sh,sh/g,g/ao,ao/li,li/pa,pa/po}\draw[arr](\x)--(\y);
 	\end{tikzpicture}
-	\caption{The passes of one frame.}\label{fig:pipeline}
+	\caption{The passes of one frame, left to right.}\label{fig:pipeline}
 \end{figure}
 
-\subsection{Sky, Terrain, Physics and Gameplay}
-The sun's height follows astronomy, $\sin(\text{elev})=\sin\varphi\sin\delta+\cos\varphi\cos\delta\cos h$; the sky colour comes from Rayleigh and Mie scattering~[6], with a hashed star field at night. Clouds sit on planes at height $H$ (1500\,m cumulus, 7\,km cirrus); a view ray with direction $\mathbf d$ meets the plane at $\mathbf P_{xz}=\tfrac{H}{d_y}(d_x,d_z)+\mathbf w\,t$, so shifting the noise by wind $\mathbf w t$ makes clouds drift.
+\subsection{Sky, Time of Day and Clouds}
+The sun's height follows astronomy, $\sin(\text{elev})=\sin\varphi\sin\delta+\cos\varphi\cos\delta\cos h$ (latitude $\varphi$, declination $\delta$, hour angle $h$). The sky colour comes from Rayleigh and Mie scattering~[6]; the moon and a star field take over at night. Clouds live on two planes, cumulus at $H=1500$\,m and cirrus at 7\,km. A view ray with direction $\mathbf d$ meets the plane at
+\begin{equation}\mathbf P_{xz}=\frac{H}{d_y}\,(d_x,d_z)+\mathbf w\,t,\end{equation}
+where $\mathbf w$ is the wind velocity: shifting the noise by $\mathbf wt$ makes the clouds drift (Fig.~\ref{fig:clouds}).
 
-\textbf{Terrain} is warped, ridged fractal noise flattened into a plateau for the base and streamed in 64\,m chunks. \textbf{Trees} (oak, pine, birch, cypress) are tables of limbs and leaf lumps; each instance gets its own size, lean and tint and bends in the wind as a cantilever, $\Delta\propto(y/9)^2$. \textbf{Collision} uses rotatable boxes and a capsule player. Cars follow the bicycle model $\dot\psi=v\tan\delta/L$ with power fading toward top speed, $\dot v=a_0(1-0.6|v|/v_{\max})$. \textbf{Ladders} are a four-state machine (none, mounting, climbing, topping out; 1.1\,m/s up, 1.5\,m/s down) in which the controller owns the body, so it cannot get stuck. A staged objective machine drives five mission goals; all sounds are synthesised.
+\begin{figure}[H]
+	\centering
+	\begin{tikzpicture}[scale=0.8]
+		\draw[thick] (0,0) -- (7,0) node[right,font=\scriptsize]{ground};
+		\draw[blue!60,thick] (0,1.8) -- (7,1.8) node[right,font=\scriptsize]{cumulus, 1.5 km};
+		\draw[blue!40,thick] (0,2.8) -- (7,2.8) node[right,font=\scriptsize]{cirrus, 7 km};
+		\fill (2.2,0) circle (2pt) node[below,font=\scriptsize]{viewer};
+		\draw[arr] (2.2,0) -- (4.0,1.8) node[midway,right,font=\scriptsize]{$\mathbf d$};
+		\draw[arr] (2.2,0) -- (4.9,2.8);
+		\draw[arr,orange!80!black] (4.0,1.95) -- (5.1,1.95) node[above,font=\scriptsize]{wind $\mathbf w$};
+	\end{tikzpicture}
+	\caption{A view ray meets each cloud plane; the noise slides with the wind.}\label{fig:clouds}
+\end{figure}
+
+
+\subsection{Terrain, Trees, Physics and Gameplay}
+\textbf{Terrain} is warped, ridged fractal noise flattened into a plateau for the base and streamed in 64\,m chunks; grass, dirt, rock and sand blend by slope and height. \textbf{Trees} (oak, pine, birch, cypress) are tables of limbs and leaf lumps; each instance gets its own size, lean and tint, and the vertex shader bends it as a cantilever, $\Delta_{xz}\propto(0.04+0.1g)(y/9)^2$, where $g=\tfrac12+\tfrac12\sin(1.3t+0.05x+0.03z)$ is a travelling gust.
+
+\textbf{Collision} uses rotatable boxes and a capsule player. Cars follow the bicycle model, $\dot\psi=v\tan\delta/L$ and engine power fades toward top speed, $\dot v=a_0(1-0.6|v|/v_{\max})$,. \textbf{Ladders} are a four-state machine (none, mounting, climbing, topping out) in which the controller owns the body, so it cannot stick. A staged machine drives five mission goals; sounds are synthesised.
+
 
 
 \section{Conclusion}
-Small data-driven techniques give a deterministic world from seeds.
+Small data-driven techniques give a deterministic world.
 
 % ============================================================
 %  CHAPTER IV
@@ -381,32 +423,56 @@ Small data-driven techniques give a deterministic world from seeds.
 This chapter states how the work was measured and shows what it produces.
 
 \section{Experimental Setup}
-An Apple-silicon Mac (macOS, OpenGL~4.1 core), release build (\code{-o:speed}): 164 Odin files (about 19\,200 lines) and 47 GLSL files (about 2\,000 lines). Benchmark: a scripted 1\,km flight, 1080p, 300 frames.
+An Apple-silicon Mac (macOS, OpenGL~4.1 core), release build (\code{-o:speed}): 164 Odin files (about 19\,200 lines) and 47 GLSL files (about 2\,000 lines). Benchmark: a scripted 1\,km flight at 1080p, 300 frames (Table~\ref{tab:setup}).
+
+\begin{table}[H]
+	\caption{Experimental setup}\label{tab:setup}
+	\small\setstretch{1.05}
+	\begin{tabularx}{\linewidth}{lX}
+		\toprule \textbf{Item} & \textbf{Value}\\ \midrule
+		Machine & Apple-silicon Mac, macOS, OpenGL 4.1 core profile\\
+		Build & Odin dev-2026-09, \code{-o:speed}\\
+		Code size & 164 Odin files (about 19\,200 lines), 47 GLSL files (about 2\,000 lines)\\
+		Resolution & 1920$\times$1080 benchmark; 2560$\times$1440 screenshots\\
+		\bottomrule
+	\end{tabularx}
+\end{table}
 
 \section{Evaluation Metrics}
-Frame time $t=1000/\text{fps}$ ms (budget 16.7\,ms), GPU time per pass, test pass/fail, and tiling error $\max|f(\mathbf u+\mathbf k)-f(\mathbf u)|$, which must be zero.
+Frame time $t=1000/\text{fps}$ ms (budget 16.7\,ms) and GPU time per pass; test pass or fail; and tiling error $\max|f(\mathbf u+\mathbf k)-f(\mathbf u)|$, which must be zero.
 
 \section{Dataset}
-None. All content comes from fixed seeds, so every run is reproducible.
+No dataset is used. All content comes from fixed seeds, so every run is reproducible and no image, model or recording is stored.
 
 \section{Implementation and Results}
 \subsection{Quantitative results}
-The display locks the average frame to 16.75\,ms (60\,Hz); the GPU work needs 10.91\,ms (Fig.~\ref{fig:gpu}), leaving headroom. Verification: 281 unit tests (noise, meshes, IK, collision, ladders, vehicles, mission), 30 GL checks, 8\,318 texture checks (exact tiling of every material), 318\,567 renderer checks (lighting, shadows, atmosphere), and two scripted playthroughs that both finish 5 of 5 objectives.
+The display locks the average frame to 16.75\,ms (60\,Hz); the GPU work needs only 10.91\,ms (Table~\ref{tab:gpu}, Fig.~\ref{fig:gpu}). Verification: 281 unit tests (noise, meshes, IK, collision, ladders, vehicles, mission, audio), 30 GL checks, 8\,318 texture checks (exact tiling of every material), 318\,567 renderer checks (lighting, shadows, atmosphere, instancing) and two scripted playthroughs that both finish 5 of 5 objectives.
+
+
+\begin{table}[H]
+	\caption{GPU time per pass, 1080p benchmark}\label{tab:gpu}
+	\small\setstretch{1.05}
+	\begin{tabularx}{\linewidth}{Xrr}
+		\toprule \textbf{Pass} & \textbf{Time (ms)} & \textbf{Share}\\ \midrule
+		Geometry (G-buffer) & 4.11 & 38\%\\ Lighting (sun, ambient, reflections, fog) & 2.79 & 26\%\\ Shadows (3 cascades) & 1.58 & 14\%\\ Post-processing & 1.21 & 11\%\\ Ambient occlusion & 1.20 & 11\%\\ Sky table & 0.02 & 0\%\\ \midrule
+		\textbf{GPU total} & \textbf{10.91} & 100\%\\ \bottomrule
+	\end{tabularx}
+\end{table}
 
 \begin{figure}[H]
 	\centering
 	\begin{tikzpicture}
-		\begin{axis}[xbar,width=0.85\linewidth,height=2.9cm,symbolic y coords={Sky table,Post,SSAO,Shadows,Lighting,Geometry},ytick=data,xmin=0,xmax=5,scaled x ticks=false,
+		\begin{axis}[xbar,width=0.85\linewidth,height=3.4cm,symbolic y coords={Sky table,Post,SSAO,Shadows,Lighting,Geometry},ytick=data,xmin=0,xmax=5,scaled x ticks=false,
 			nodes near coords,nodes near coords align={horizontal},every node near coord/.append style={font=\scriptsize},tick label style={font=\scriptsize},xlabel={ms per frame},xlabel style={font=\scriptsize},bar width=6pt,enlarge y limits=0.12]
 			\addplot[fill=blue!45] coordinates {(0.05,Sky table)(1.21,Post)(1.20,SSAO)(1.58,Shadows)(2.79,Lighting)(4.11,Geometry)};
 		\end{axis}
 	\end{tikzpicture}
-	\caption{GPU time per pass (total 10.91\,ms of 16.7\,ms).}\label{fig:gpu}
+	\caption{GPU time per pass (total 10.91\,ms of the 16.7\,ms budget).}\label{fig:gpu}
 \end{figure}
 
 
 \subsection{Qualitative results}
-Figure~\ref{fig:shots1} shows the running game: the base, a firefight with alarm, the automatic material showroom, IK-posed soldiers, tree species, drifting clouds and hands on a ladder. Panels (h) and (i) document a bug: the fog colour sampled the whole sky, so a horizon star painted a vertical line on every surface in its column (left of centre); the fog now uses the smooth atmosphere only.
+Figure~\ref{fig:shots1} shows the running game: the base, a firefight with alarm, the automatic material showroom, IK-posed soldiers, tree species, drifting clouds and hands on a ladder. Panels (h) and (i) of Fig.~\ref{fig:shots1} document a bug: the fog colour sampled the whole sky, so a horizon star painted a vertical line on every surface in its column (left of centre); the fog now uses the smooth atmosphere only.
 
 \begin{figure}[H]
 	\centering
@@ -422,11 +488,13 @@ Figure~\ref{fig:shots1} shows the running game: the base, a firefight with alarm
 	\caption{The engine and game in action; (h) and (i) show the streak bug and its fix.}\label{fig:shots1}
 \end{figure}
 
+
 \subsection{Analysis of the results}
-Geometry costs most, so instancing and per-chunk culling matter. The streak was found by bisecting: removing draw items, lights and effects until it vanished.
+Geometry costs most (38\%), so instancing and per-chunk culling matter; the GPU uses two thirds of the budget. The streak was found by bisecting: removing draw items, lights and effects until it vanished.
 
 \section{Objective Achieved}
-(1) Six layers with downward-only dependencies. (2) No model, image or sound file: 22 materials, 4 tree species, 5 vehicles, synthesised audio. (3) Deferred PBR with shadows, SSAO, reflections, sky, clouds, bloom, ACES, FXAA. (4) Two playable missions with ladders, vehicles and stealth. (5) 281 tests, 327\,000 GL checks, 2 playthroughs, 10.9\,ms GPU time.
+(1) Six layers, downward-only. (2) No model, image or sound file. (3) Deferred PBR with shadows, SSAO, reflections, sky, bloom, ACES, FXAA. (4) Two playable missions. (5) 281 tests, 327\,000 GL checks, 10.9\,ms GPU time.
+
 
 \section{Conclusion}
 A procedural engine meets a 60 fps budget and passes exact checks.
@@ -437,22 +505,22 @@ A procedural engine meets a 60 fps budget and passes exact checks.
 \chapter{Societal, Health, Environment, Safety, Ethical, Legal and Cultural Issues}
 
 \section{Intellectual Property Considerations}
-All content is original; libraries are open source. The mission is inspired by, not copied from, \textit{Project I.G.I.}
+All code, shapes, textures and sounds in Sentinel are original: because every asset is generated from formulas and seeds, there are no third-party models, images or recordings to license. The libraries used (Odin, GLFW, miniaudio) are open source under permissive licences, and the papers and notes listed in the references are cited wherever their ideas are used. The mission is inspired by, but not copied from, \textit{Project I.G.I.}: no names, maps or art are reused.
 
 \section{Ethical Considerations}
-Fiction for adults; no personal data.
+The game is a work of fiction about an invented compound. Its figures are abstract, low-detail shapes, and it contains no real places, groups or people. It is intended for adult players. No personal data is collected, no network connection is made, and saved progress is a small local text file that the player can read or delete.
 
 \section{Safety Considerations}
-Short flashes, limited sound.
+Muzzle flashes, explosions and the alarm can bother light-sensitive players, and loud sound can hurt hearing. For this reason brightness changes are smoothed by an eye-adaptation curve, flashes are short, and all sounds are mixed and limited before reaching the speakers. Players are advised to take regular breaks, and the pause menu is always available with one key. The game also never forces fast reaction: enemies give an audible warning before an alarm, and crouching makes the player quieter and harder to see.
 
 \section{Legal Considerations}
-Licences respected; violence stylised; sources cited.
+Open-source licence terms are respected, and no proprietary code, trademark, logo or map is included. Violence is stylised, and the project makes no claim to real military accuracy. The report credits all cited work, and the course rules on originality are followed: the code was written for this course, and the earlier course version is kept as a clearly marked git tag.
 
 \section{Impact on Societal, Health and Cultural Issues}
-Lowers the barrier to learning graphics; rescue and stealth goals temper shooting.
+An open, readable engine lowers the barrier to learning graphics: a student can read one short file per feature, change a number and see its effect at once. This supports the course aim of understanding rendering by building it, and the table-driven content lets non-programmers adjust shapes and materials. Shooter games can encourage long play sessions, so the design favours stealth, crouching and rescue over constant shooting; the player is rewarded for avoiding detection and for freeing the hostage. No cultural or religious symbols are used, and the briefing text is neutral and fictional. The tactical map and compass help players who find navigation hard.
 
 \section{Impact on the Environment and Sustainability}
-No art downloads; display sync saves GPU work.
+Because no art files are downloaded, the whole project is a few megabytes of source code, which reduces storage and transfer energy; a conventional game of similar scope would ship hundreds of megabytes of models and textures. Display synchronisation caps the frame rate at the monitor's refresh rate and avoids needless GPU work, and the GPU finishes each frame in about two thirds of its time budget, so the laptop is not driven at full load.
 
 % ============================================================
 %  CHAPTER VI
@@ -460,10 +528,40 @@ No art downloads; display sync saves GPU work.
 \chapter{Addressing Complex Engineering Problems and Activities}
 
 \section{Complex Engineering Problems}
-\textbf{Depth of knowledge:} radiometry, noise, filters, GPU pipelines, state machines. \textbf{Conflicts:} realism versus a 16.7\,ms frame; no files versus rich surfaces; no compute shaders. \textbf{Analysis:} bisecting the star streak, proving tiling. \textbf{Interdependence:} renderer, world, game and audio share data and timing.
+Table~\ref{tab:problems} maps the project to the usual attributes of a complex engineering problem. The requirements pull against each other: realism needs many passes, the budget allows 16.7\,ms, ``no files'' removes easy detail, and the platform removes compute shaders.
+
+\begin{table}[H]
+	\caption{Complex engineering problem attributes}\label{tab:problems}
+	\small\setstretch{1.05}
+	\begin{tabularx}{\linewidth}{lX}
+		\toprule \textbf{Attribute} & \textbf{In this project}\\ \midrule
+		Depth of knowledge & Radiometry, noise theory, numerical filters, GPU pipelines, collision, state machines, sound synthesis.\\
+		Conflicting requirements & Realism versus a 16.7\,ms frame; no files versus rich surfaces; OpenGL 4.1 without compute shaders.\\
+		Depth of analysis & Bisecting the fog star streak; proving that textures tile exactly; tuning physics curves.\\
+		Interdependence & Renderer, world, game and audio share data layouts and timing.\\
+		Novelty & A complete game from code and seeds only, written to be read.\\
+		\bottomrule
+	\end{tabularx}
+\end{table}
 
 \section{Complex Engineering Activities}
-The project used modern tools, integrated many components and verified quality by measurement.
+The project used modern resources (compiler, GPU timers, test runners, version control) and many interacting components: a fog change affected the sky, clouds, stars and night lights. Quality was verified by measurement rather than by eye alone (Fig.~\ref{fig:loop}), with unit tests, GL checks and scripted playthroughs run before each commit.
+
+
+
+\begin{figure}[H]
+	\centering
+	\begin{tikzpicture}[node distance=0.35cm,scale=0.85,transform shape]
+		\node[box] (a) {Write a\\small feature};
+		\node[box,right=of a] (b) {Unit test or\\GL check};
+		\node[box,right=of b] (c) {Screenshot\\review};
+		\node[box,right=of c] (d) {Benchmark\\16.7\,ms};
+		\node[box,right=of d] (e) {Commit and\\document};
+		\foreach \x/\y in {a/b,b/c,c/d,d/e}\draw[arr](\x)--(\y);
+		\draw[arr] (c.south) .. controls +(0,-0.7) and +(0,-0.7) .. node[below,font=\tiny]{fix} (a.south);
+	\end{tikzpicture}
+	\caption{The verification loop used for every feature.}\label{fig:loop}
+\end{figure}
 
 % ============================================================
 %  CHAPTER VII
@@ -471,24 +569,25 @@ The project used modern tools, integrated many components and verified quality b
 \chapter{Conclusions}
 
 \section{Summary}
-Sentinel shows that a complete 3D game, from surfaces and shapes to weather and sound, can be generated entirely by code under an OpenGL~4.1 limit: a six-layer engine, a deferred physically based renderer, noise-based recipes, table-driven objects and a mission game, in about 21\,000 lines within a 60 fps budget.
+Sentinel shows that a complete 3D game, from surfaces and shapes to weather and sound, can be generated entirely by code under an OpenGL~4.1 limit: a six-layer engine, a deferred physically based renderer, noise-based recipes, table-driven content, a mission game and a large test suite fit in about 21\,000 lines and run within a 60 fps budget (10.9\,ms of GPU time). Most of what looks like ``art'' is a few simple ideas applied consistently and tested.
 
 \section{Limitations}
-Models are blocky; there is no true global illumination; foliage is lumpy volumes, not leaves; the beacon is a solid column; tuning used scripts and screenshots, not a large playtest.
+Models are blocky (primitives plus noise), and characters are simple. There is no true global illumination or ray tracing; indirect light and reflections are screen-space approximations. Foliage is lumpy volume, the beacon is a solid column, soldiers cannot pick up weapons, and tuning used scripts and screenshots.
 
 \section{Recommendations and Future Works}
-Leaf cards with cut-out transparency, screen-space global illumination, point-light shadows, multiplayer and a user study; a modern graphics API with compute shaders.
+The engine can be extended with leaf cards with cut-out transparency for more realistic trees, screen-space global illumination, point-light shadows, anisotropic highlights for brushed metal, networked multiplayer and a larger user study of difficulty and comfort. A port to a modern graphics API with compute shaders would allow noise, terrain and even animation to be generated on the GPU, and would allow true ray-traced reflections.
+
 
 % ============================================================
 %  REFERENCES
 % ============================================================
+\clearpage
 \phantomsection
 \addcontentsline{toc}{frontmatter}{References}
-\vspace{6pt}
 \begin{center}{\fontsize{14}{21}\bfseries\selectfont REFERENCES}\end{center}
-\vspace{2pt}
-\begin{spacing}{0.95}\scriptsize
-\begin{enumerate}[leftmargin=0pt,itemindent=0pt,labelsep=0.5em,labelwidth=1.5em,itemsep=0pt,parsep=0pt,label={[\arabic*]},align=left]
+\vspace{4pt}
+\begin{spacing}{1.25}\small
+\begin{enumerate}[leftmargin=0pt,itemindent=0pt,labelsep=0.5em,labelwidth=1.8em,itemsep=4pt,parsep=0pt,label={[\arabic*]},align=left]
 	\item K.~Perlin, ``Improving noise,'' \textit{ACM Trans. Graph. (SIGGRAPH)}, vol.~21, no.~3, pp.~681--682, 2002.
 	\item S.~Worley, ``A cellular texture basis function,'' in \textit{Proc. SIGGRAPH}, 1996, pp.~291--294.
 	\item R.~L. Cook and K.~E. Torrance, ``A reflectance model for computer graphics,'' \textit{ACM Trans. Graph.}, vol.~1, no.~1, pp.~7--24, 1982.
