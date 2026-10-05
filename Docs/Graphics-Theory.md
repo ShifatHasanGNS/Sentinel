@@ -86,3 +86,10 @@ The cascade lookup averages 12 depth comparisons over a disk of 1.6 texels (plus
 
 ## Smoke and fire particles
 Each particle is a camera-facing quad. Its shape is a soft disc whose edge is eroded by gradient noise (four octaves in a window that drifts with the particle's age and seed): density = clamp((edge - erosion * (1 - noise)) / (1 - erosion)), erosion rising from 0.45 to 0.85 with age, so a puff grows ragged, thins and dissolves instead of fading uniformly. Smoke is lit as if the quad were a sphere: a normal from the position on the disc (z toward the camera), a wrapped Lambert term from the sun, sky ambient on the shadow side, and the middle darkened by thickness. Smoke is drawn with alpha blending, sorted back to front by distance (blending is not commutative). Fire is drawn after it, additively (order does not matter) in HDR: temperature falls with age and toward the rim, mapped through a black-body-like ramp (white, yellow, orange, deep red) with values above 1 that the bloom pass spreads into a glow. Both pass the scene's depth through the shader: a fragment behind a surface is discarded and one within 0.6 m in front of it is faded (a soft particle), so no puff slices a hard line through the ground.
+
+## Noise and texture bake upgrades
+
+- Domain warping (`warped_fbm`): fbm sampled at a point displaced by two fbm fields, which breaks the lattice look and gives flowing stone, soil and plaster structure. Still periodic, so tiles stay seamless.
+- Ridged (`1 - |n|`, squared) and billow (`|n|`) fbm give creases and rounded lumps.
+- The normal bake uses a Scharr 3x3 gradient (weights 3, 10, 3) instead of central differences. It is more rotation invariant, so diagonal slopes are not weakened.
+- Cavity occlusion: height below its neighbourhood mean (negative Laplacian) darkens albedo and ambient occlusion.

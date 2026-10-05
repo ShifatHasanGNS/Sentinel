@@ -182,3 +182,4 @@
 | Smoke, dust, muzzle fire and fireball emitters and ageing | `Game/Sandbox/Particles.odin` : `Particles_Spawn_From_Effects`, `Particles_Collect` |
 | Ladder grip state machine: mount, eased climb at 1.1 m/s, step-over at the top, step off the bottom, jump off, grab from the top with E, hold-off against re-grab | `Engine/World/Ladder.odin` : `Controller_Ladder_Step`, `Ladder_Prompt_For` |
 | Ladder feel in play: rung bob, rung knocks, no shooting while climbing, prompts | `Game/Sandbox/Play.odin`; `Game/Sandbox/Sound.odin` : `ladder_sounds` |
+| Warped, ridged and billow noise; Scharr normal bake with cavity AO | Shaders/Include/Noise.glsl: warped_fbm, ridged_fbm, billow_fbm; Shaders/Include/BakeMain.glsl: main |

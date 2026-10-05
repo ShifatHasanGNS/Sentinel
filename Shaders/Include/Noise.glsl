@@ -83,3 +83,39 @@ vec2 worley(vec2 uv, int period, uint seed) {
 	}
 	return nearest;
 }
+
+// Domain-warped fbm (Quilez): sample fbm at a point displaced by two lower-octave fbm fields. Warping bends the lattice
+// alignment away and produces the swirled, flowing structure of real stone, wood and soil. Periodic, since every term is.
+float warped_fbm(vec2 uv, int period, int octaves, float warp_strength, uint seed) {
+	vec2 offset = vec2(fbm(uv, period, 3, seed + 101u), fbm(uv + vec2(0.37, 0.71), period, 3, seed + 211u));
+	return fbm(uv + warp_strength * offset, period, octaves, seed);
+}
+
+// Ridged fbm: 1 - |n| folds each octave into sharp creases (cracks, strata, veins). Result in [0, 1].
+float ridged_fbm(vec2 uv, int period, int octaves, uint seed) {
+	float sum = 0.0;
+	float amplitude = 1.0;
+	float amplitude_total = 0.0;
+	for (int octave = 0; octave < octaves; octave++) {
+		float ridge = 1.0 - abs(gradient_noise(uv * float(period), period, seed + uint(octave) * 131u));
+		sum += amplitude * ridge * ridge;
+		amplitude_total += amplitude;
+		amplitude *= 0.5;
+		period *= 2;
+	}
+	return sum / amplitude_total;
+}
+
+// Billow fbm: |n| gives rounded lumps with creased valleys (pebbles, soft soil clods). Result in [0, 1].
+float billow_fbm(vec2 uv, int period, int octaves, uint seed) {
+	float sum = 0.0;
+	float amplitude = 1.0;
+	float amplitude_total = 0.0;
+	for (int octave = 0; octave < octaves; octave++) {
+		sum += amplitude * abs(gradient_noise(uv * float(period), period, seed + uint(octave) * 131u));
+		amplitude_total += amplitude;
+		amplitude *= 0.5;
+		period *= 2;
+	}
+	return sum / amplitude_total;
+}

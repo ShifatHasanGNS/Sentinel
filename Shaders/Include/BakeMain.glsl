@@ -21,19 +21,26 @@ void main() {
 	o_Orm = vec4(0.0);
 }
 #else
-// Central differences of the height field give dh/du and dh/dv per unit uv. Dividing by cells per tile makes the slope
-// per cell, so bump strength means the same for any tile scale: the normal is (-dh/dx, -dh/dy, 1) normalised.
+// Scharr 3x3 gradient of the height field: weights (3, 10, 3) are the most rotation-invariant small kernel, so slopes at 45
+// degrees are not weaker than axis-aligned ones as with central differences. Dividing by 32 normalises the kernel, by the
+// texel step gives dh/du, and by cells per tile gives slope per cell, so bump strength is independent of tile scale.
+// Cavity occlusion: where the height is below its neighbourhood mean (negative Laplacian) light is trapped, so darken it.
 void main() {
 	float texel = 1.0 / u_TextureSize;
 	Surface surface = recipe_surface(v_uv);
-	float height_right = recipe_surface(v_uv + vec2(texel, 0.0)).height;
-	float height_left = recipe_surface(v_uv - vec2(texel, 0.0)).height;
-	float height_up = recipe_surface(v_uv + vec2(0.0, texel)).height;
-	float height_down = recipe_surface(v_uv - vec2(0.0, texel)).height;
-	vec2 slope_per_cell = vec2(height_right - height_left, height_up - height_down) / (2.0 * texel) / u_CellsPerTile;
+	float samples[9];
+	for (int index = 0; index < 9; index++) {
+		vec2 offset = vec2(float(index % 3 - 1), float(index / 3 - 1)) * texel;
+		samples[index] = index == 4 ? surface.height : recipe_surface(v_uv + offset).height;
+	}
+	float gradient_x = (3.0 * (samples[2] + samples[8] - samples[0] - samples[6]) + 10.0 * (samples[5] - samples[3])) / 32.0;
+	float gradient_y = (3.0 * (samples[6] + samples[8] - samples[0] - samples[2]) + 10.0 * (samples[7] - samples[1])) / 32.0;
+	vec2 slope_per_cell = vec2(gradient_x, gradient_y) / texel / u_CellsPerTile;
+	float neighbour_mean = (samples[1] + samples[3] + samples[5] + samples[7]) * 0.25;
+	float cavity = clamp((neighbour_mean - surface.height) * u_TextureSize * 0.02, 0.0, 0.5);
 	vec3 normal = normalize(vec3(-slope_per_cell * u_BumpStrength, 1.0));
-	o_Albedo = vec4(surface.albedo, 1.0);
+	o_Albedo = vec4(surface.albedo * (1.0 - 0.5 * cavity), 1.0);
 	o_Normal = vec4(normal * 0.5 + 0.5, surface.height);
-	o_Orm = vec4(surface.roughness, surface.metallic, surface.ambient_occlusion, 1.0);
+	o_Orm = vec4(surface.roughness, surface.metallic, surface.ambient_occlusion * (1.0 - cavity), 1.0);
 }
 #endif
