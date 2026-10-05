@@ -99,3 +99,10 @@ Each particle is a camera-facing quad. Its shape is a soft disc whose edge is er
 The haze colour for fog uses the horizontal direction of the view ray, so every pixel on a screen column shares one sample. It therefore uses only the smooth atmosphere (`sky_atmosphere`): stars, sun and moon discs belong to the sky pass alone, or one star at the horizon would streak a whole column.
 
 Clouds sit on two planes (cumulus at 1500 m, cirrus at 7 km). Density is fbm warped in lattice units, scrolled by a wind offset; the detail layer drifts faster than the shape layer so the form slowly changes.
+
+## Grading, dithering and terrain character
+
+- After ACES, the display-space grade adds a little saturation, cool shadows and warm highlights (split toning) and a gentle S curve. A triangular-PDF dither of one 8-bit step (interleaved gradient noise, Jimenez 2014) removes banding in smooth night skies and fog.
+- Terrain material boundaries are shifted by slow world-space noise, so rock, sand and the dirt around the base fray into the grass instead of following clean thresholds.
+- CPU terrain heights are fbm at a domain-warped point, blended with a ridged term whose |n| is rounded (sqrt(n^2 + e)) so slopes stay continuous and mesh normals match measured slopes.
+- Trees: per-instance tint (warm/light to cool/dark) and wind sway live in the instance data; the vertex shader bends a tree by the square of its height (a cantilever) plus leaf flutter.

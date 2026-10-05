@@ -16,11 +16,29 @@ Terrain :: struct {
 	plateau_blend_meters:  f32,
 }
 
+// Hills with some geology to them: fbm sampled at a domain-warped point (so ridges bend like drainage lines instead of marching
+// along the lattice), blended with a ridged component (1 - 2|n| folds valleys into creases). The weights sum to one and both
+// terms lie in [-1, 1], so the result still does.
+Terrain_Noise :: proc(terrain: Terrain, x, z: f32) -> f32 {
+	frequency := terrain.frequency_per_meter
+	warp_x := Noise_Fbm_3({x * frequency * 0.5 + 31, 0, z * frequency * 0.5}, terrain.seed + 1, 2)
+	warp_z := Noise_Fbm_3({x * frequency * 0.5, 0, z * frequency * 0.5 + 57}, terrain.seed + 2, 2)
+	point := [3]f32{x * frequency + TERRAIN_WARP_CELLS * warp_x, 0, z * frequency + TERRAIN_WARP_CELLS * warp_z}
+	rolling := Noise_Fbm_3(point, terrain.seed, terrain.octaves)
+	crease := Noise_Fbm_3(point * 0.7 + {11, 0, 5}, terrain.seed + 3, 2)
+	ridged := 1 - 2 * (math.sqrt(crease * crease + RIDGE_SOFTNESS) - math.sqrt(f32(RIDGE_SOFTNESS))) / (math.sqrt(1 + f32(RIDGE_SOFTNESS)) - math.sqrt(f32(RIDGE_SOFTNESS))) // |n| rounded at zero so slopes stay continuous.
+	return (1 - TERRAIN_RIDGE_WEIGHT) * rolling + TERRAIN_RIDGE_WEIGHT * ridged
+}
+
+TERRAIN_WARP_CELLS :: f32(0.5)
+TERRAIN_RIDGE_WEIGHT :: f32(0.22)
+RIDGE_SOFTNESS :: 0.08
+
 Terrain_Height :: proc(terrain: Terrain, x, z: f32) -> f32 {
 	distance_from_plateau := linalg.length([2]f32{x, z} - terrain.plateau_center)
 	// smoothstep is C1, so the plateau meets the hills without a visible crease.
 	hills_weight := math.smoothstep(terrain.plateau_radius_meters, terrain.plateau_radius_meters + terrain.plateau_blend_meters, distance_from_plateau)
-	noise := Noise_Fbm_3({x * terrain.frequency_per_meter, 0, z * terrain.frequency_per_meter}, terrain.seed, terrain.octaves)
+	noise := Terrain_Noise(terrain, x, z)
 	return terrain.base_height_meters + terrain.amplitude_meters * noise * hills_weight
 }
 

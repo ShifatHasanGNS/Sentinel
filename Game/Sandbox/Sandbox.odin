@@ -23,6 +23,7 @@ SSAO_RADIUS_METERS :: 0.8
 SHADOW_DISTANCE_METERS :: 100.0
 HOURS_PER_REAL_SECOND :: 0.02 // A full day passes in twenty minutes.
 FIELD_OF_VIEW_DEGREES :: 65.0
+WINDOW_GLOW_SCALE :: 0.45 // Lit panes at night: bright enough to read as lit, not so bright the exposure blows them out.
 CLOUD_WIND_METERS_PER_SECOND :: [2]f32{14, 5}
 SCRIPTED_FLIGHT_RADIUS_METERS :: 380.0
 SCRIPTED_FLIGHT_SPEED :: 30.0
@@ -234,7 +235,7 @@ gather_items :: proc(sandbox: ^Sandbox, camera: Render.Camera) -> (items, shadow
 	collect_instances(sandbox, frustum, camera.position)
 	add_prop_items(sandbox, &items, &shadow_items)
 	night_amount := clamp((0.08 - Gameplay.Sun_Direction_To_Sun(sandbox.hours).y) / 0.2, 0, 1)
-	for base_item in Base.Base_Scene_Items(&sandbox.base, night_amount) do append(&items, base_item)
+	for base_item in Base.Base_Scene_Items(&sandbox.base, night_amount * WINDOW_GLOW_SCALE) do append(&items, base_item)
 	for shadow_item in Base.Base_Scene_Shadow_Items(&sandbox.base) do append(&shadow_items, shadow_item)
 	return
 }

@@ -191,3 +191,6 @@
 | Bark, birch bark, leaf and needle materials; worley_feature for per-cell leaves and needles | Shaders/Recipes/Bark.glsl, BirchBark.glsl, Leaves.glsl, Needles.glsl; Shaders/Include/Noise.glsl: worley_feature |
 | Turf from blade-tip domes, strands, dry patches and flower specks | Shaders/Recipes/Grass.glsl |
 | Vehicle paint with fine panel lines, fade, scratches and grime | Shaders/Recipes/PaintedMetal.glsl |
+| Display grading and dithering | Shaders/PostTonemap.glsl: grade, interleaved_gradient_noise |
+| Wandering terrain layer boundaries | Shaders/Include/TerrainBlend.glsl: terrain_weights |
+| Warped and ridged terrain heights | Engine/Procedural/Terrain.odin: Terrain_Noise |

@@ -7,9 +7,10 @@ Surface recipe_surface(vec2 uv) {
 	float planks = float(period * 2);
 	float plank_id = mod(floor(uv.x * planks), planks); // Wrapped, so the tint repeats with the tile.
 	float tint = hash_to_unit(hash_u32(uint(plank_id) ^ seed));
-	float rings = 0.5 + 0.5 * sin(6.2831853 * (uv.x * planks * 3.0 + 3.0 * fbm(uv, period, 3, seed + 3u)));
+	float rings = 0.5 + 0.5 * sin(6.2831853 * (uv.x * planks * 2.0 + 1.2 * warped_fbm(uv, period, 3, 0.3, seed + 3u)));
 	float fibre = fbm(uv, period * 24, 3, seed + 9u) * 0.5 + 0.5;
-	float grain = mix(rings, fibre, 0.55) * 0.6 + 0.2; // Low-contrast rings under fine fibres, not stripes.
+	float streak = fbm(vec2(uv.x * 8.0, uv.y), period * 4, 3, seed + 15u) * 0.5 + 0.5; // Long fibres along the plank.
+	float grain = mix(mix(rings, fibre, 0.6), streak, 0.4) * 0.45 + 0.3; // Low-contrast rings under fine fibres, not stripes.
 	float edge = min(fract(uv.x * planks), 1.0 - fract(uv.x * planks));
 	float seam = 1.0 - smoothstep(0.0, 0.03, edge);
 	Surface surface;

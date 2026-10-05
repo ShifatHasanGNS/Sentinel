@@ -1,8 +1,8 @@
 #version 410 core
 #include "Gbuffer.glsl"
 #include "Triplanar.glsl"
-#include "TerrainBlend.glsl"
 #include "Noise.glsl"
+#include "TerrainBlend.glsl"
 #include "Weathering.glsl"
 #stage vertex
 layout(location = 0) in vec3 a_Position;
