@@ -134,12 +134,12 @@ Layered engine; all content from code; modern renderer; a playable game (vehicle
 \begin{columns}[T]
 \column{0.52\textwidth}
 \begin{block}{One part: scale, turn, then move}
-\eqimg{0.95}{mpart}
-\footnotesize Right to left: stretched, turned about its own centre, moved last. $(1,0,0)\to S(2,1,1)\to R_y90^\circ\to T(5,0,0)=(5,0,-2)$
+\eqimg{0.88}{mpart}
+\scriptsize Right to left: stretched, turned, moved last.\par\centering $(1,0,0)\xrightarrow{S(2,1,1)}(2,0,0)\xrightarrow{R_y(90^\circ)}(0,0,-2)\xrightarrow{T(5,0,0)}(5,0,-2)$
 \end{block}
 \begin{block}{Normals use the inverse transpose}
-\eqimg{0.95}{nmat}
-\footnotesize $S=\mathrm{diag}(2,1,1)$: correct $(0.447,0.894,0)$, naive $(0.894,0.447,0)$
+\eqimg{0.8}{nmat}
+\scriptsize $S=\mathrm{diag}(2,1,1)$, $\hat n=\tfrac{1}{\sqrt2}(1,1,0)$: correct $(0.447,0.894,0)$, naive $(0.894,0.447,0)$
 \end{block}
 \column{0.45\textwidth}
 \begin{block}{Rotation about $y$}
@@ -192,7 +192,7 @@ Layered engine; all content from code; modern renderer; a playable game (vehicle
 \textbf{Deferred shading:} store colour, normal, shininess and depth first; light each pixel once.
 \begin{block}{Cascaded shadow maps}
 \eqimg{0.92}{csm}
-\footnotesize $\lambda=0.75$, $N=3$: cuts at 9.1, 24.2, 100\,m; normal-offset lookup, 8 rotated PCF taps.
+\footnotesize\centering $\lambda=0.75,\ N=3,\ n=0.1,\ r=100$\par cuts $z_{1,2,3}=9.1,\ 24.2,\ 100$\,m; normal-offset lookup, 8 rotated PCF taps.
 \end{block}
 \begin{block}{Fog and tone map}
 \eqimg{0.62}{fog}\eqimg{0.88}{aces}

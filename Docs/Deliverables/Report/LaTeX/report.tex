@@ -365,19 +365,25 @@ with hull position $\mathbf p$, yaw $\psi$, pitch $\phi$, roll $\rho$, turret pi
 
 \begin{figure}[H]
 	\centering
-	\begin{subfigure}{0.4\linewidth}\includegraphics[width=\linewidth]{images/tank.jpg}\caption{Tank: hull, turret and gun}\end{subfigure}\hfill
-	\begin{subfigure}{0.4\linewidth}\includegraphics[width=\linewidth]{images/truck.jpg}\caption{Truck: body, cab and wheels}\end{subfigure}
+	\begin{subfigure}{0.3\linewidth}\includegraphics[width=\linewidth]{images/tank.jpg}\caption{Tank: hull, turret and gun}\end{subfigure}\hfill
+	\begin{subfigure}{0.3\linewidth}\includegraphics[width=\linewidth]{images/truck.jpg}\caption{Truck: body, cab and wheels}\end{subfigure}
 	\caption{Objects built from transformed primitives; the turret and gun inherit the hull's matrix.}\label{fig:hier}
 \end{figure}
 
-\textbf{Deformers} are one-line mappings applied in the part's own space before $M_{\text{part}}$: \emph{taper} scales $x,z$ by a factor that varies linearly with height, \emph{twist} rotates by $\theta(y)=\Theta\,y/h$, \emph{bend} wraps the axis onto a circle of curvature $1/R$, and \emph{noise displacement} pushes each vertex along its normal by at most $A$,
+\textbf{Deformers} are one-line mappings applied in the part's own space before $M_{\text{part}}$: \emph{taper} scales $x,z$ by a factor that varies linearly with height, \emph{twist} rotates by an angle growing with height, \emph{bend} wraps the axis onto a circle, and \emph{noise displacement} pushes each vertex along its normal by at most $A$. In formulas, with height $y$ in $[0,h]$:
+\begin{equation}\text{taper: }(x,z)\!\mapsto\!\big(1+(k_t-1)\tfrac{y}{h}\big)(x,z),\qquad \text{twist: }\theta(y)=\Theta\,\frac{y}{h},\qquad \text{bend: }\kappa=\frac{1}{R},\end{equation}
+and the noise displacement is
 \begin{equation}\mathbf p'=\mathbf p+A\,\nu(f\mathbf p)\,\hat n,\qquad \lVert\mathbf p'-\mathbf p\rVert\le A.\end{equation}
 Soldiers' legs reach their targets by two-bone inverse kinematics: for bone lengths $a,b$ and hip-to-target distance $c$, the law of cosines gives the hip angle $\alpha$ between the target direction and the thigh,
 \begin{equation}\cos\alpha=\frac{a^{2}+c^{2}-b^{2}}{2ac}.\end{equation}
 
-\textbf{From the world to the screen.} Drawing a vertex multiplies it by the chain model, view and projection. The camera's \emph{view} matrix is a look-at transform (move the eye to the origin, turn the target onto $-z$), and the \emph{perspective} matrix with $f=1/\tan(\mathrm{fov}/2)$ divides by depth:
+\textbf{From the world to the screen.} Drawing a vertex multiplies it by the chain model, view and projection. The camera's \emph{view} matrix is a look-at transform (move the eye to the origin, turn the target onto $-z$), and the \emph{perspective} matrix, built from the focal factor
+\begin{equation}f=\frac{1}{\tan(\mathrm{fov}/2)},\end{equation}
+divides by depth:
 \begin{equation}\mathbf p_{\text{clip}}=P\,V\,M_{\text{world}}\,M_{\text{part}}\,\mathbf p,\qquad P=\begin{pmatrix}f/a&0&0&0\\0&f&0&0\\0&0&\tfrac{n+r}{n-r}&\tfrac{2nr}{n-r}\\0&0&-1&0\end{pmatrix},\quad \mathbf p_{\text{screen}}=\tfrac{(x,y)}{w}.\end{equation}
-Here $a$ is the aspect ratio, $n,r$ the near and far planes, and $w$ the clip-space fourth coordinate (equal to the distance in front of the camera), so far objects shrink. Binocular zoom by a factor $k$ narrows the view: $\tan(\mathrm{fov}'/2)=\tan(\mathrm{fov}/2)/k$ (a $72^{\circ}$ view at $4\times$ becomes $20.6^{\circ}$).
+Here $a$ is the aspect ratio, $n,r$ the near and far planes, and $w$ the clip-space fourth coordinate (equal to the distance in front of the camera), so far objects shrink. Binocular zoom by a factor $k$ narrows the view,
+\begin{equation}\tan\frac{\mathrm{fov}'}{2}=\frac{1}{k}\tan\frac{\mathrm{fov}}{2},\end{equation}
+so a $72^{\circ}$ view at $4\times$ becomes $20.6^{\circ}$.
 
 \begin{figure}[H]
 	\centering
@@ -397,24 +403,33 @@ Here $a$ is the aspect ratio, $n,r$ the near and far planes, and $w$ the clip-sp
 Each material is a \emph{recipe}: a small shader that answers ``what is the colour, bumpiness, shininess and crevice-darkness at this point?''. Each recipe is baked at start-up into a 1024$\times$1024 picture (22 materials from 18 recipes: concrete, rock, sand, dirt, asphalt, metals, paints, wood, bark, leaves, needles, grass, canvas, camo, rubber, skin, glass) and keeps it on the GPU.
 
 
-\emph{Gradient noise} (a rubber sheet pinned at random slopes) blends the four corner gradients of a grid cell with the smooth curve $s(t)=6t^5-15t^4+10t^3$, scaled by $\sqrt2$ so values lie in $[-1,1]$. Fractal noise sums octaves, each at double frequency and half strength:
+\emph{Gradient noise} (a rubber sheet pinned at random slopes) blends the four corner gradients of a grid cell with the smooth fade curve
+\begin{equation}s(t)=6t^{5}-15t^{4}+10t^{3},\qquad s(0)=0,\; s(1)=1,\; s^{\prime}(0)=s^{\prime}(1)=s^{\prime\prime}(0)=s^{\prime\prime}(1)=0,\end{equation}
+scaled by $\sqrt2$ so values lie in $[-1,1]$. Fractal noise sums octaves, each at double frequency and half strength:
 \begin{equation}F(\mathbf x)=\frac{\displaystyle\sum\limits_{i=0}^{n-1}2^{-i}\,\nu\!\left(2^{i}\mathbf x\right)}{\displaystyle\sum\limits_{i=0}^{n-1}2^{-i}},\qquad F\in[-1,1].\end{equation}
-Choosing gradients from the cell index \emph{modulo the period} $P$ gives $F(\mathbf x+P\mathbf e)=F(\mathbf x)$: the picture tiles with no seam (tested exactly). \emph{Domain warping} $F(\mathbf x+s\,[F_1(\mathbf x),F_2(\mathbf x)])$ swirls the pattern (stone, wood, soil); \emph{ridged} noise $\sum a_i(1-|\nu_i|)^2$ makes cracks and bark; \emph{cellular} noise gives leaves and pebbles (Fig.~\ref{fig:noise}).
+Choosing gradients from the cell index \emph{modulo the period} $P$ makes the picture tile with no seam (tested exactly):
+\begin{equation}F(\mathbf x+P\mathbf e)=F(\mathbf x)\quad\text{for every whole-number shift }\mathbf e.\end{equation}
+The materials come from three variants (Fig.~\ref{fig:noise}): \emph{domain warping} swirls the pattern (stone, wood, soil), \emph{ridged} noise makes cracks and bark, and \emph{cellular} noise gives leaves and pebbles,
+\begin{equation}F_{\text{warp}}(\mathbf x)=F\big(\mathbf x+s\,[F_1(\mathbf x),F_2(\mathbf x)]\big),\qquad F_{\text{ridge}}(\mathbf x)=\frac{\displaystyle\sum\limits_{i=0}^{n-1}2^{-i}\left(1-|\nu_i|\right)^{2}}{\displaystyle\sum\limits_{i=0}^{n-1}2^{-i}}.\end{equation}
 
 \begin{figure}[H]
 	\centering
-	\includegraphics[width=0.9\linewidth]{images/noise_stages.png}
+	\includegraphics[width=0.6\linewidth]{images/noise_stages.png}
 	\caption{Noise ingredients (illustration of the shader equations): gradient, fractal, warped, ridged, cellular.}\label{fig:noise}
 \end{figure}
 
 \textbf{Bumps without geometry.} A recipe's height map becomes a \emph{normal map} that fools the lighting into seeing bumps. The slope uses the Scharr $3\times3$ filter, the most direction-fair small filter, and crevices (height below the neighbours' average) darken the albedo and ambient occlusion:
 \begin{equation}h_x\approx\frac{3(h_{NE}+h_{SE}-h_{NW}-h_{SW})+10(h_E-h_W)}{32\,\Delta\,N},\qquad \hat n=\frac{(-k\,h_x,\,-k\,h_y,\,1)}{\lVert\cdot\rVert},\end{equation}
 where $\Delta$ is one texel and $N$ the cells per tile, so bump strength $k$ is scale-independent.
-Triplanar mapping (weights $w_i=|n_i|^4\Big/\sum\limits_{j\in\{x,y,z\}}|n_j|^4$) avoids stretching.
+Triplanar mapping projects the picture along three axes and blends them by
+\begin{equation}w_i=\frac{|n_i|^{4}}{\displaystyle\sum\limits_{j\in\{x,y,z\}}|n_j|^{4}},\qquad i\in\{x,y,z\},\end{equation}
+so deformed shapes are never stretched.
 
 
 \subsection{The Rendering Pipeline}
-\emph{Deferred shading} photographs a ``data poster'' of the scene first (each pixel's colour, direction and shininess) and lights it once, which makes many lights cheap. The poster is the \emph{G-buffer}: albedo, octahedral-packed normal with roughness and metalness, emission with occlusion, and depth (from which position is rebuilt). Fig.~\ref{fig:pipeline} lists the passes. Distant things fade into haze, $C=T\,C_{\text{surf}}+(1-T)\,C_{\text{haze}}$, $T=e^{-kd}$. Finally the HDR image is compressed to screen range by the ACES curve~[9], graded, dithered~[10] and smoothed (FXAA~[11]):
+\emph{Deferred shading} photographs a ``data poster'' of the scene first (each pixel's colour, direction and shininess) and lights it once, which makes many lights cheap. The poster is the \emph{G-buffer}: albedo, octahedral-packed normal with roughness and metalness, emission with occlusion, and depth (from which position is rebuilt). Fig.~\ref{fig:pipeline} lists the passes. Distant things fade into haze:
+\begin{equation}C=T\,C_{\text{surface}}+(1-T)\,C_{\text{haze}},\qquad T=e^{-k\,d}.\end{equation}
+Finally the HDR image is compressed to screen range by the ACES curve~[9], graded, dithered~[10] and smoothed (FXAA~[11]):
 \begin{equation}C_{\text{out}}=\operatorname{clamp}\!\Big(\frac{x(2.51x+0.03)}{x(2.43x+0.59)+0.14}\Big),\quad x=\text{exposure}\times\text{radiance}.\end{equation}
 
 \begin{figure}[H]
@@ -473,7 +488,9 @@ f_{\text{Oren--Nayar}}&=\frac{\mathbf c_d}{\pi}\Big(A+B\,\max\!\left(0,\cos\Delt
 f_{\text{Cook--Torrance}}&=\frac{(1-F_l)(1-F_v)\,\mathbf c_d}{\pi}+D\,V\,F\\[4pt]
 \langle\mathbf n\!\cdot\!\mathbf l\rangle_{\text{Subsurface}}&=\operatorname{clamp}\!\left(\frac{\mathbf n\!\cdot\!\mathbf l+w}{1+w},\,0,\,1\right),\qquad w=0.5
 \end{align}
-The shininess exponent comes from roughness $\rho$: $m=\max\!\big(2/(\rho^{2}+10^{-4})-2,\,1\big)$ (roughness $0.5\Rightarrow m=6$). Phong's mirror direction $\mathbf r$ is cheap but needs a reflection per light; Blinn--Phong replaces it by $\mathbf h$, which is cheaper and behaves better at glancing angles, and the factors $(m+2)/2\pi$ and $(m+8)/8\pi$ normalise the highlight so it does not gain energy as it sharpens. \emph{Oren--Nayar} treats a rough surface as many tiny Lambertian facets that scatter light back toward the source, so cloth and concrete look flat and do not darken at the edge like Lambert: with $\sigma=\rho$, $A=1-\frac{0.5\sigma^2}{\sigma^2+0.33}$, $B=\frac{0.45\sigma^2}{\sigma^2+0.09}$, $\alpha=\max(\theta_i,\theta_r)$, $\beta=\min(\theta_i,\theta_r)$ and $\Delta\varphi$ the azimuth between light and view around the normal. \emph{Subsurface} lets light wrap a little past the shadow line (the cosine ramps from 1 down to 0 as $\mathbf n\!\cdot\!\mathbf l$ goes from 1 to $-w$), imitating light scattering inside skin. \emph{Cook--Torrance} is the physically based default: $D$ is the GGX facet distribution, $V$ the Smith visibility and $F$ Schlick's Fresnel,
+The shininess exponent comes from roughness $\rho$,
+\begin{equation}m=\max\!\left(\frac{2}{\rho^{2}+10^{-4}}-2,\;1\right),\end{equation}
+so roughness $0.5$ gives $m=6$. Phong's mirror direction $\mathbf r$ is cheap but needs a reflection per light; Blinn--Phong replaces it by $\mathbf h$, which is cheaper and behaves better at glancing angles, and the factors $(m+2)/2\pi$ and $(m+8)/8\pi$ normalise the highlight so it does not gain energy as it sharpens. \emph{Oren--Nayar} treats a rough surface as many tiny Lambertian facets that scatter light back toward the source, so cloth and concrete look flat and do not darken at the edge like Lambert: with $\sigma=\rho$, $A=1-\frac{0.5\sigma^2}{\sigma^2+0.33}$, $B=\frac{0.45\sigma^2}{\sigma^2+0.09}$, $\alpha=\max(\theta_i,\theta_r)$, $\beta=\min(\theta_i,\theta_r)$ and $\Delta\varphi$ the azimuth between light and view around the normal. \emph{Subsurface} lets light wrap a little past the shadow line (the cosine ramps from 1 down to 0 as $\mathbf n\!\cdot\!\mathbf l$ goes from 1 to $-w$), imitating light scattering inside skin. \emph{Cook--Torrance} is the physically based default: $D$ is the GGX facet distribution, $V$ the Smith visibility and $F$ Schlick's Fresnel,
 \begin{equation}\begin{aligned}D&=\frac{\alpha^{2}}{\pi\left((\mathbf n\!\cdot\!\mathbf h)^{2}(\alpha^{2}-1)+1\right)^{2}}, & F&=F_0+(1-F_0)\left(1-\mathbf v\!\cdot\!\mathbf h\right)^{5}, & \alpha&=\rho^{2},\\[4pt]
 V&=\frac{0.5}{(\mathbf n\!\cdot\!\mathbf l)\sqrt{(\mathbf n\!\cdot\!\mathbf v)^2(1-\alpha^2)+\alpha^2}+(\mathbf n\!\cdot\!\mathbf v)\sqrt{(\mathbf n\!\cdot\!\mathbf l)^2(1-\alpha^2)+\alpha^2}}.\end{aligned}\end{equation}
 In the game, cloth and canvas use Oren--Nayar, skin uses Subsurface, and everything else uses Cook--Torrance (Table~\ref{tab:models}).
@@ -495,7 +512,7 @@ In the game, cloth and canvas use Oren--Nayar, skin uses Subsurface, and everyth
 
 \begin{figure}[H]
 	\centering
-	\includegraphics[width=\linewidth]{images/models.jpg}
+	\includegraphics[width=0.85\linewidth]{images/models.jpg}
 	\caption{The same painted-metal sphere under the six illumination models (left to right: Lambert, Phong, Blinn--Phong, Oren--Nayar, Cook--Torrance, Subsurface), lit by the same sun and sky. Lambert has no highlight; Phong and Blinn--Phong add a hot spot; Oren--Nayar flattens the falloff; Cook--Torrance adds Fresnel and a microfacet highlight.}\label{fig:models}
 \end{figure}
 
@@ -507,14 +524,14 @@ where $\theta$ is the angle from the spot axis, $\theta_i$ the inner and $\theta
 \begin{figure}[H]
 	\centering
 	\begin{subfigure}{0.48\linewidth}\centering
-	\begin{tikzpicture}\begin{axis}[width=\linewidth,height=3.6cm,xlabel={distance $d$ (m)},ylabel={att},xlabel style={font=\scriptsize},ylabel style={font=\scriptsize},tick label style={font=\tiny},ymax=0.55,xmin=0,xmax=15,domain=0:14,samples=60]
+	\begin{tikzpicture}\begin{axis}[width=\linewidth,height=3.0cm,xlabel={distance $d$ (m)},ylabel={att},xlabel style={font=\scriptsize},ylabel style={font=\scriptsize},tick label style={font=\tiny},ymax=0.55,xmin=0,xmax=15,domain=0:14,samples=60]
 		\addplot[blue!60!black,thick]{(max(0,1-(x/14)^4))^2/(x^2+1)};
 		\addplot[dashed,gray]{1/(x^2+1)};
 	\end{axis}\end{tikzpicture}
 	\caption{Windowed (solid) vs.\ plain inverse-square (dashed)}
 	\end{subfigure}\hfill
 	\begin{subfigure}{0.48\linewidth}\centering
-	\begin{tikzpicture}\begin{axis}[width=\linewidth,height=3.6cm,xlabel={angle from normal (deg)},ylabel={$F$},xlabel style={font=\scriptsize},ylabel style={font=\scriptsize},tick label style={font=\tiny},xmin=0,xmax=90,ymin=0,ymax=1,domain=0:90,samples=60]
+	\begin{tikzpicture}\begin{axis}[width=\linewidth,height=3.0cm,xlabel={angle from normal (deg)},ylabel={$F$},xlabel style={font=\scriptsize},ylabel style={font=\scriptsize},tick label style={font=\tiny},xmin=0,xmax=90,ymin=0,ymax=1,domain=0:90,samples=60]
 		\addplot[orange!80!black,thick]{0.04+0.96*(1-cos(x))^5};
 	\end{axis}\end{tikzpicture}
 	\caption{Schlick Fresnel, $F_0=0.04$}
@@ -524,12 +541,14 @@ where $\theta$ is the angle from the spot axis, $\theta_i$ the inner and $\theta
 
 \textbf{Shadows.} The sun's shadow uses three \emph{cascaded shadow maps}: the camera's view range is cut at
 \begin{equation}z_i=\lambda\,n\Big(\frac{r}{n}\Big)^{i/N}+(1-\lambda)\Big(n+(r-n)\frac{i}{N}\Big),\quad i=1,\dots,N,\end{equation}
-a blend of logarithmic cuts (sharp shadows nearby) and even cuts, with $\lambda=0.75$, $N=3$, $n=0.1$\,m, $r=100$\,m, giving $9.1$, $24.2$ and $100$\,m. A pixel is looked up in the cascade containing its depth, moved a little along its normal (removes self-shadow acne), and compared against the stored depth with eight rotated percentage-closer taps, so the edge is soft. Spot lights have their own shadow maps, short ``contact'' rays darken crevices, and \emph{screen-space ambient occlusion} (SSAO) darkens corners where the sky is hidden.
+a blend of logarithmic cuts (sharp shadows nearby) and even cuts, with $\lambda=0.75$, $N=3$, $n=0.1$\,m, $r=100$\,m, giving $9.1$, $24.2$ and $100$\,m. A pixel is looked up in the cascade containing its depth, moved a little along its normal (removes self-shadow acne), and compared against the stored depth with eight rotated percentage-closer taps, so the edge is soft. Spot lights have their own shadow maps, and \emph{screen-space ambient occlusion} (SSAO) darkens corners where the sky is hidden.
 
 \textbf{Ambient light} is the sky seen from the surface. Diffuse ambient is the sky's cosine-weighted colour; specular ambient uses Karis's split-sum fit, $\text{prefiltered sky}\times(F_0\,A+B)$, where $(A,B)$ depends only on roughness and $\mathbf n\!\cdot\!\mathbf v$; rough surfaces see a blurred sky. Both are multiplied by the occlusion term AO and fade inside rooms (the room volumes mask the sky), so interiors are lit by their lamps and the light entering by doors.
 
 \subsection{Sky, Time of Day and Clouds}
-The sun's height follows astronomy, $\sin(\text{elev})=\sin\varphi\sin\delta+\cos\varphi\cos\delta\cos h$ (latitude $\varphi$, declination $\delta$, hour angle $h$). The sky colour comes from Rayleigh and Mie scattering~[6]; the moon and a star field take over at night. Clouds live on two planes, cumulus at $H=1500$\,m and cirrus at 7\,km. A view ray with direction $\mathbf d$ meets the plane at
+The sun's height follows astronomy,
+\begin{equation}\sin(\text{elevation})=\sin\varphi\,\sin\delta+\cos\varphi\,\cos\delta\,\cos h,\qquad h=15^{\circ}(\text{hours}-12),\end{equation}
+with latitude $\varphi$, declination $\delta$ and hour angle $h$. The sky colour comes from Rayleigh and Mie scattering~[6]. Clouds live on two planes, cumulus at $H=1500$\,m and cirrus at 7\,km. A view ray with direction $\mathbf d$ meets the plane at
 \begin{equation}\mathbf P_{xz}=\frac{H}{d_y}\,(d_x,d_z)+\mathbf w\,t,\end{equation}
 where $\mathbf w$ is the wind velocity: shifting the noise by $\mathbf wt$ makes the clouds drift (Fig.~\ref{fig:clouds}).
 
@@ -549,16 +568,16 @@ where $\mathbf w$ is the wind velocity: shifting the noise by $\mathbf wt$ makes
 
 
 \subsection{Terrain, Trees, Physics and Gameplay}
-\textbf{Terrain} is warped, ridged noise on a base plateau, streamed in 64\,m chunks. \textbf{Trees} (oak, pine, birch, cypress) are tables of limbs and leaf lumps; each instance gets its own size, lean and tint, and the vertex shader bends it as a cantilever, $\Delta_x=2s\,(0.04+0.1g)(y/9)^2$ ($\Delta_z$ is 35\% of it), where $g=\tfrac12+\tfrac12\sin(1.3t+0.05x+0.03z)$ is a travelling gust.
+\textbf{Terrain} is warped, ridged noise on a base plateau, streamed in 64\,m chunks. \textbf{Trees} (oak, pine, birch, cypress) are tables of limbs and leaf lumps; each instance gets its own size, lean and tint, and the vertex shader bends it as a cantilever,
+\begin{equation}\Delta_x=2s\,(0.04+0.1\,g)\left(\frac{y}{9}\right)^{2},\quad \Delta_z=0.35\,\Delta_x,\quad g=\tfrac12+\tfrac12\sin(1.3\,t+0.05\,x+0.03\,z),\end{equation}
+where $s$ is the sway strength and $g$ a travelling gust.
 
-\textbf{Collision} uses rotatable boxes and a capsule player. Cars follow the bicycle model, $\dot\psi=v\tan\delta/L$, and engine power fades toward top speed, $\dot v=a_0(1-0.6|v|/v_{\max})$. \textbf{Ladders} are a four-state machine (none, mounting, climbing, topping out) in which the controller owns the body, so it cannot stick. A staged machine drives five mission goals; sounds are synthesised.
+\textbf{Collision} uses rotatable boxes and a capsule player. Cars follow the bicycle model, and engine power fades toward top speed:
+\begin{equation}\dot\psi=\frac{v\tan\delta}{L},\qquad \dot v=a_0\left(1-0.6\,\frac{|v|}{v_{\max}}\right),\end{equation}
+with yaw $\psi$, speed $v$, steering $\delta$, wheel base $L$. \textbf{Ladders} are a four-state machine (none, mounting, climbing, topping out) in which the controller owns the body, so it cannot stick. A staged machine drives five mission goals; sounds are synthesised.
 
 
 
-\textbf{Verification.} Unit tests check that a mesh is placed exactly by its matrix, that normals stay perpendicular under non-uniform scale, and that a mirror keeps winding outward. A GPU fixture shader that includes the \emph{real} GLSL checks every illumination model for reciprocity ($f(\mathbf l,\mathbf v)=f(\mathbf v,\mathbf l)$) and with a ``white furnace'' energy test, and checks light falloff, light shapes and sun shadows (acne, detached shadows).
-
-\section{Conclusion}
-Small data-driven techniques give a deterministic world.
 
 % ============================================================
 %  CHAPTER IV
@@ -585,7 +604,8 @@ An Apple-silicon Mac (macOS, OpenGL~4.1 core), release build (\code{-o:speed}): 
 \end{table}
 
 \section{Evaluation Metrics}
-Frame time $t=1000/\text{fps}$ ms (budget 16.7\,ms) and GPU time per pass; test pass or fail; and tiling error $\max|f(\mathbf u+\mathbf k)-f(\mathbf u)|$, which must be zero.
+Frame time $t=1000/\text{fps}$\,ms (budget 16.7\,ms) and GPU time per pass; test pass or fail; and tiling error, which must be zero:
+\begin{equation}\varepsilon=\max_{\mathbf u}\,\left|f(\mathbf u+\mathbf k)-f(\mathbf u)\right|,\qquad \mathbf k\in\mathbb Z^{2}.\end{equation}
 
 \section{Dataset}
 No dataset is used. All content comes from fixed seeds, so every run is reproducible and no image, model or recording is stored.
@@ -622,28 +642,26 @@ Figure~\ref{fig:shots1} shows the running game: the base, a firefight with alarm
 
 \begin{figure}[H]
 	\centering
-	\begin{subfigure}{0.31\linewidth}\includegraphics[width=\linewidth]{images/base.jpg}\caption{Base}\end{subfigure}\hfill
-	\begin{subfigure}{0.31\linewidth}\includegraphics[width=\linewidth]{images/demo.jpg}\caption{Firefight}\end{subfigure}\hfill
-	\begin{subfigure}{0.31\linewidth}\includegraphics[width=\linewidth]{images/showroom.jpg}\caption{Materials}\end{subfigure}\\[2pt]
-	\begin{subfigure}{0.31\linewidth}\includegraphics[width=\linewidth]{images/soldiers.jpg}\caption{Soldiers}\end{subfigure}\hfill
-	\begin{subfigure}{0.31\linewidth}\includegraphics[width=\linewidth]{images/trees.jpg}\caption{Trees}\end{subfigure}\hfill
-	\begin{subfigure}{0.31\linewidth}\includegraphics[width=\linewidth]{images/gate_day.jpg}\caption{Clouds}\end{subfigure}\\[2pt]
-	\begin{subfigure}{0.31\linewidth}\includegraphics[width=\linewidth]{images/ladder.jpg}\caption{Ladder}\end{subfigure}\hfill
-	\begin{subfigure}{0.31\linewidth}\includegraphics[width=\linewidth]{images/gate_night_bug.jpg}\caption{Night, bug}\end{subfigure}\hfill
-	\begin{subfigure}{0.31\linewidth}\includegraphics[width=\linewidth]{images/gate_night.jpg}\caption{Night, fixed}\end{subfigure}
+	\begin{subfigure}{0.27\linewidth}\includegraphics[width=\linewidth]{images/base.jpg}\caption{Base}\end{subfigure}\hfill
+	\begin{subfigure}{0.27\linewidth}\includegraphics[width=\linewidth]{images/demo.jpg}\caption{Firefight}\end{subfigure}\hfill
+	\begin{subfigure}{0.27\linewidth}\includegraphics[width=\linewidth]{images/showroom.jpg}\caption{Materials}\end{subfigure}\\[2pt]
+	\begin{subfigure}{0.27\linewidth}\includegraphics[width=\linewidth]{images/soldiers.jpg}\caption{Soldiers}\end{subfigure}\hfill
+	\begin{subfigure}{0.27\linewidth}\includegraphics[width=\linewidth]{images/trees.jpg}\caption{Trees}\end{subfigure}\hfill
+	\begin{subfigure}{0.27\linewidth}\includegraphics[width=\linewidth]{images/gate_day.jpg}\caption{Clouds}\end{subfigure}\\[2pt]
+	\begin{subfigure}{0.27\linewidth}\includegraphics[width=\linewidth]{images/ladder.jpg}\caption{Ladder}\end{subfigure}\hfill
+	\begin{subfigure}{0.27\linewidth}\includegraphics[width=\linewidth]{images/gate_night_bug.jpg}\caption{Night, bug}\end{subfigure}\hfill
+	\begin{subfigure}{0.27\linewidth}\includegraphics[width=\linewidth]{images/gate_night.jpg}\caption{Night, fixed}\end{subfigure}
 	\caption{The engine and game in action; (h) and (i) show the streak bug and its fix.}\label{fig:shots1}
 \end{figure}
 
 
 \subsection{Analysis of the results}
-Geometry costs most (38\%), so instancing and per-chunk culling matter; the GPU uses two thirds of the budget. The streak was found by bisecting: removing draw items, lights and effects until it vanished.
+Geometry costs most (38\%), so instancing and per-chunk culling matter; the GPU uses two thirds of the budget. The streak was found by bisecting draw items, lights and effects.
 
 \section{Objective Achieved}
 (1) Six layers, downward-only. (2) No model, image or sound file. (3) Deferred PBR with shadows, SSAO, reflections, sky, bloom, ACES, FXAA. (4) Two playable missions. (5) 281 tests, 327\,000 GL checks, 10.9\,ms GPU time.
 
 
-\section{Conclusion}
-A procedural engine meets a 60 fps budget and passes exact checks.
 
 % ============================================================
 %  CHAPTER V
