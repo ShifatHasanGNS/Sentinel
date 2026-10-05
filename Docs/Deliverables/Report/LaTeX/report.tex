@@ -64,19 +64,19 @@
 \titleformat{\chapter}[display]
 {\normalfont\bfseries\centering}
 {\fontsize{14}{21}\selectfont CHAPTER \thechapter}
-{4pt}
-{\fontsize{16}{24}\selectfont}
-[\vspace{6pt}]
-\titlespacing*{\chapter}{0pt}{14pt}{6pt}
+{2pt}
+{\fontsize{16}{20}\selectfont}
+[\vspace{2pt}]
+\titlespacing*{\chapter}{0pt}{8pt}{2pt}
 
-\titleformat{\section}{\normalfont\fontsize{13}{18}\bfseries\raggedright}{\thesection}{0.5em}{}
-\titlespacing*{\section}{0pt}{10pt}{3pt}
+\titleformat{\section}{\normalfont\fontsize{14}{18}\bfseries\raggedright}{\thesection}{0.5em}{}
+\titlespacing*{\section}{0pt}{6pt}{2pt}
 \titleformat{\subsection}{\normalfont\fontsize{12}{16}\bfseries\raggedright}{\thesubsection}{0.5em}{}
-\titlespacing*{\subsection}{0pt}{8pt}{2pt}
+\titlespacing*{\subsection}{0pt}{5pt}{1pt}
 
 % ===== TOC / LOT / LOF FORMAT =====
 \renewcommand{\contentsname}{Contents}
-\setcounter{tocdepth}{1}
+\setcounter{tocdepth}{2}
 \renewcommand{\cftchapfont}{\normalfont\bfseries\fontsize{11}{13}\selectfont}
 \renewcommand{\cftchappagefont}{\normalfont\fontsize{12}{15}\selectfont}
 \renewcommand{\cftchapleader}{\cftdotfill{\cftdotsep}}
@@ -179,7 +179,7 @@
 	{\fontsize{12}{18}\normalfont\selectfont Year and Term: 4th Year 1st Term}
 \end{center}
 \vspace{26pt}
-\noindent\begin{tabular}[t]{@{}l@{\hspace{0em}}l@{}}
+\noindent\begin{tabular}[t]{@{}l@{\hspace{0.8in}}l@{}}
 	{\fontsize{12}{18}\bfseries\selectfont Instructors:} \\
 	& {\fontsize{12}{18}\bfseries\selectfont Md Tajmilur Rahman} \\[2pt]
 	& {\fontsize{12}{18}\normalfont\selectfont Department of Computer Science and Engineering} \\
@@ -241,10 +241,15 @@ The project was measured and verified, not just drawn. At 1080p the renderer nee
 
 \clearpage
 \phantomsection
-\addcontentsline{toc}{frontmatter}{List of Tables and Figures}
+\addcontentsline{toc}{frontmatter}{List of Tables}
 \addtocontents{lot}{\protect\noindent\protect\textbf{Table No.}\protect\hfill\protect\textbf{Description}\protect\hfill\protect\textbf{Page}\protect\par\protect\vspace{4pt}}
 \addtocontents{lof}{\protect\noindent\protect\textbf{Figure No.}\protect\hfill\protect\textbf{Description}\protect\hfill\protect\textbf{Page}\protect\par\protect\vspace{4pt}}
-{\setstretch{1.0}\listoftables\listoffigures}
+{\setstretch{1.0}\listoftables}
+
+\clearpage
+\phantomsection
+\addcontentsline{toc}{frontmatter}{List of Figures}
+{\setstretch{1.0}\listoffigures}
 
 % ============================================================
 %  CHAPTER I
@@ -300,7 +305,7 @@ The work was done by one student, who therefore held every role: designer, progr
 
 \begin{figure}[!tb]
 	\centering
-	\resizebox{\linewidth}{!}{%
+	\resizebox{0.85\linewidth}{!}{%
 	\begin{ganttchart}[hgrid,vgrid={*{1}{black!10}},x unit=0.8cm,y unit chart=0.42cm,y unit title=0.45cm,title height=1,bar height=0.6,
 		bar/.append style={fill=blue!45,rounded corners=2pt},bar label font=\scriptsize,title label font=\scriptsize,
 		bar label node/.append style={text width=4.6cm,align=right,font=\tiny}]{1}{10}
@@ -318,7 +323,7 @@ The work was done by one student, who therefore held every role: designer, progr
 \end{figure}
 
 \section{Applications of the Work}
-The engine is a teaching tool for graphics and procedural generation and a base for small games whose download is only source code. A new material or character is a few lines of data.
+The engine teaches graphics and procedural generation and is a base for small games shipped as source code only.
 
 \section{Organization of the Project}
 Chapter~II surveys related work. Chapter~III explains the design and every major technique. Chapter~IV reports measurements and screenshots. Chapters~V and VI discuss social, ethical and engineering-complexity issues, and Chapter~VII concludes.
@@ -368,7 +373,8 @@ Table~\ref{tab:compare} shows the gap. Existing teaching demos (such as step-by-
 \section{Introduction}
 Making one frame is an assembly line: the game decides what exists, the engine builds its shapes and surfaces, the renderer paints it, and the result appears 60 times per second. This chapter follows that line.
 
-\section{Overall Design}
+\section{Detailed Methodology}
+\subsection{Problem Design and Analysis and Overall Framework}
 Figure~\ref{fig:layers} shows the six layers and the main loop. A lower layer never knows about a higher one, so the renderer can be tested without any game. \code{Source/Main.odin} is only a table of contents: initialise, then repeat \emph{input, update, render}, then shut down. Other rules keep the code readable: procedures at most about 40 lines, full-word names with units last (\code{range\_meters}), assertions on preconditions, and every OpenGL call checked for errors.
 
 \begin{figure}[!tb]
@@ -386,7 +392,7 @@ Figure~\ref{fig:layers} shows the six layers and the main loop. A lower layer ne
 	\caption{The six layers (dependencies point downward) and the main loop.}\label{fig:layers}
 \end{figure}
 
-\section{Procedural Geometry and Characters}
+\subsection{Procedural Geometry and Characters}
 Every object is a \emph{table} of parts, each a primitive (box, sphere, cylinder, cone, capsule, torus, wedge), a transform, optional deformers and a material (Fig.~\ref{fig:parts}). A noise deformer pushes each vertex along its normal $\hat n$ by a smooth random amount, so a perfect sphere becomes a lumpy rock; with noise $\nu\in[-1,1]$ no vertex moves farther than the amplitude $A$:
 \begin{equation}\mathbf p'=\mathbf p+A\,\nu(f\,\mathbf p)\,\hat n,\qquad \lVert\mathbf p'-\mathbf p\rVert\le A.\end{equation}
 Taper, bend, twist and bulge are similar one-line deformers. Soldiers are a skeleton of capsules and boxes; a walk is a sine wave of phase, and a leg reaches its foot target by \emph{two-bone inverse kinematics}: for bone lengths $a,b$ and root--target distance $c$, the knee angle follows from the law of cosines,
@@ -405,7 +411,7 @@ Taper, bend, twist and bulge are similar one-line deformers. Soldiers are a skel
 	\caption{From a data table to pixels: content is data, not code.}\label{fig:parts}
 \end{figure}
 
-\section{Procedural Textures}
+\subsection{Procedural Textures}
 Each material is a \emph{recipe}: a small shader that answers ``what is the colour, bumpiness, shininess and crevice-darkness at this point?'' The engine runs each recipe once at start-up into a 1024$\times$1024 picture (22 materials from 18 recipes, Table~\ref{tab:materials}) and keeps it on the GPU.
 
 \begin{plain}
@@ -418,7 +424,7 @@ Because corner gradients are chosen from the cell index \emph{modulo the period}
 
 \begin{figure}[!tb]
 	\centering
-	\includegraphics[width=\linewidth]{images/noise_stages.png}
+	\includegraphics[width=0.9\linewidth]{images/noise_stages.png}
 	\caption{Noise ingredients (a re-implementation of the shader equations, for illustration): gradient, fractal, domain-warped, ridged, cellular.}\label{fig:noise}
 \end{figure}
 
@@ -440,7 +446,7 @@ Where the height is below its neighbours' average (a crevice), albedo and ambien
 	\end{tabularx}
 \end{table}
 
-\section{The Rendering Pipeline}
+\subsection{The Rendering Pipeline}
 \begin{plain}
 \emph{Deferred shading} is like photographing a ``data poster'' of the scene first (every pixel's colour, direction and shininess), then lighting the poster once instead of lighting every object separately. It makes many lights cheap.
 \end{plain}
@@ -483,7 +489,7 @@ Finally the HDR image is compressed to screen range with the ACES curve~[9] (Nar
 	\caption{One frame, left to right then back along the lower row.}\label{fig:pipeline}
 \end{figure}
 
-\section{Sky, Time of Day and Clouds}
+\subsection{Sky, Time of Day and Clouds}
 The sun's direction comes from astronomy: with latitude $\varphi$, declination $\delta$ and hour angle $h=15^{\circ}(\text{hours}-12)$, its height is
 \begin{equation}\sin(\text{elevation})=\sin\varphi\sin\delta+\cos\varphi\cos\delta\cos h.\end{equation}
 The colour of the sky is precomputed each frame into a small table from Rayleigh and Mie scattering (blue sky, red sunset)~[6]; the moon and a hashed star field take over at night. Clouds live on two imaginary planes, cumulus at $H=1500$\,m and thin cirrus at 7\,km. A view ray with direction $\mathbf d$ meets the plane at
@@ -492,12 +498,12 @@ where $\mathbf w$ is the wind velocity: shifting the noise by $\mathbf wt$ makes
 
 \begin{figure}[!tb]
 	\centering
-	\begin{subfigure}{0.48\linewidth}\includegraphics[width=\linewidth]{images/gate_night_bug.jpg}\caption{Before: bright vertical line}\end{subfigure}\hfill
-	\begin{subfigure}{0.48\linewidth}\includegraphics[width=\linewidth]{images/gate_night.jpg}\caption{After: fixed}\end{subfigure}
+	\begin{subfigure}{0.40\linewidth}\includegraphics[width=\linewidth]{images/gate_night_bug.jpg}\caption{Before: bright vertical line}\end{subfigure}\hfill
+	\begin{subfigure}{0.40\linewidth}\includegraphics[width=\linewidth]{images/gate_night.jpg}\caption{After: fixed}\end{subfigure}
 	\caption{A debugging case. The fog colour sampled the \emph{whole} sky, stars included, along a horizontal direction, so one star at the horizon painted a vertical streak on every surface in that column (left of centre). The fog now uses the smooth atmosphere only.}\label{fig:bug}
 \end{figure}
 
-\section{World, Physics and Gameplay}
+\subsection{World, Physics and Gameplay}
 \textbf{Terrain.} Ground height is fractal noise, warped and blended with a rounded ridged term, flattened into a plateau for the base: $h=h_0+A\,\nu(x,z)\,\operatorname{smoothstep}(r_0,r_0{+}w,\lVert\mathbf p-\mathbf c\rVert)$. It is meshed in 64\,m chunks that stream around the player; layers (grass, dirt, rock, sand) blend by slope and height with wandering borders.
 
 \textbf{Trees.} Four species (oak, pine, birch, cypress) are each a few tables of limbs and leaf lumps. Every instance gets its own height, width, lean and tint, and the vertex shader bends it as a cantilever, $\Delta_{xz}\propto(0.04+0.1g)\,(y/9)^2$, where $g=\tfrac12+\tfrac12\sin(1.3t+0.05x+0.03z)$ is a travelling gust, plus a small leaf flutter.
@@ -539,23 +545,13 @@ Each technique is small and data-driven; together they give a complete, determin
 This chapter states how the work was measured and shows what it produces.
 
 \section{Experimental Setup}
-Table~\ref{tab:setup} gives the environment. Frame times come from the built-in benchmark (a scripted 1\,km flight at 1080p, 300 frames, release build).
-
-\begin{table}[!tb]
-	\caption{Experimental setup}\label{tab:setup}
-	\small\setstretch{1.05}
-	\begin{tabularx}{\linewidth}{lX}
-		\toprule \textbf{Item} & \textbf{Value}\\ \midrule
-		Machine & Apple-silicon Mac, macOS, OpenGL 4.1 core profile\\
-		Compiler / flags & Odin dev-2026-09, \code{-o:speed}\\
-		Code size & 164 Odin files (about 19\,200 lines), 47 GLSL files (about 2\,000 lines)\\
-		Display / benchmark & 2560$\times$1440 screenshots; 1920$\times$1080 benchmark\\
-		\bottomrule
-	\end{tabularx}
-\end{table}
+The machine is an Apple-silicon Mac (macOS, OpenGL~4.1 core profile) running a release build (Odin dev-2026-09, \code{-o:speed}). The code base is 164 Odin files (about 19\,200 lines) and 47 GLSL files (about 2\,000 lines). Screenshots are 2560$\times$1440; frame times come from the built-in benchmark (a scripted 1\,km flight, 1920$\times$1080, 300 frames).
 
 \section{Evaluation Metrics}
-\textbf{Speed:} frame time $t=1000/\text{fps}$ ms (budget 16.7\,ms for 60 fps) and GPU time per pass. \textbf{Correctness:} pass/fail of unit tests, GL checks and a scripted playthrough that must complete five objectives per mission. \textbf{Tiling error:} $\max|f(\mathbf u+\mathbf k)-f(\mathbf u)|$ for integer $\mathbf k$, which must be exactly zero for every material. \textbf{Dataset:} none; all content comes from fixed seeds, so every run is reproducible.
+\textbf{Speed:} frame time $t=1000/\text{fps}$ ms (budget 16.7\,ms for 60 fps) and GPU time per pass. \textbf{Correctness:} pass/fail of unit tests, GL checks and a scripted playthrough that must complete five objectives per mission. \textbf{Tiling error:} $\max|f(\mathbf u+\mathbf k)-f(\mathbf u)|$ for integer $\mathbf k$, which must be exactly zero for every material.
+
+\section{Dataset}
+None is used. All content comes from fixed seeds, so every run is reproducible and no image, model or recording is stored.
 
 \section{Implementation and Results}
 \subsection{Quantitative results}
@@ -574,7 +570,7 @@ The average frame was 16.75\,ms because the display synchronises to 60\,Hz; the 
 \begin{figure}[!tb]
 	\centering
 	\begin{tikzpicture}
-		\begin{axis}[xbar,width=0.85\linewidth,height=3.7cm,symbolic y coords={Sky table,Post,SSAO,Shadows,Lighting,Geometry},ytick=data,xmin=0,xmax=5,scaled x ticks=false,
+		\begin{axis}[xbar,width=0.85\linewidth,height=3.1cm,symbolic y coords={Sky table,Post,SSAO,Shadows,Lighting,Geometry},ytick=data,xmin=0,xmax=5,scaled x ticks=false,
 			nodes near coords,nodes near coords align={horizontal},every node near coord/.append style={font=\scriptsize},tick label style={font=\scriptsize},xlabel={ms per frame},xlabel style={font=\scriptsize},bar width=6pt,enlarge y limits=0.12]
 			\addplot[fill=blue!45] coordinates {(0.05,Sky table)(1.21,Post)(1.20,SSAO)(1.58,Shadows)(2.79,Lighting)(4.11,Geometry)};
 		\end{axis}
@@ -597,7 +593,7 @@ The average frame was 16.75\,ms because the display synchronises to 60\,Hz; the 
 \end{table}
 
 \subsection{Qualitative results}
-Figures~\ref{fig:shots1} and~\ref{fig:shots2} show the running game. The showroom (Fig.~\ref{fig:shots1}c) is an automatic gallery with one sphere per material, so any new recipe is seen at once. Figure~\ref{fig:shots2} shows tree species, drifting clouds and hands on a ladder; the night scene with moonlit clouds is Fig.~\ref{fig:bug}b.
+Figure~\ref{fig:shots1} shows the running game. The showroom (Fig.~\ref{fig:shots1}c) is an automatic gallery with one sphere per material, so any new recipe is seen at once. The last row shows tree species, drifting clouds and hands on a ladder; the night scene with moonlit clouds is Fig.~\ref{fig:bug}b.
 
 \begin{figure}[!tb]
 	\centering
@@ -607,21 +603,17 @@ Figures~\ref{fig:shots1} and~\ref{fig:shots2} show the running game. The showroo
 	\begin{subfigure}{0.325\linewidth}\includegraphics[width=\linewidth]{images/soldiers.jpg}\caption{Procedural soldiers}\end{subfigure}\hfill
 	\begin{subfigure}{0.325\linewidth}\includegraphics[width=\linewidth]{images/map.jpg}\caption{Tactical map}\end{subfigure}\hfill
 	\begin{subfigure}{0.325\linewidth}\includegraphics[width=\linewidth]{images/heli.jpg}\caption{Helicopter from primitives}\end{subfigure}
-	\caption{The engine and game in action (screenshots from the program).}\label{fig:shots1}
-\end{figure}
-
-\begin{figure}[!tb]
-	\centering
+	\\[2pt]
 	\begin{subfigure}{0.325\linewidth}\includegraphics[width=\linewidth]{images/trees.jpg}\caption{Tree species}\end{subfigure}\hfill
 	\begin{subfigure}{0.325\linewidth}\includegraphics[width=\linewidth]{images/gate_day.jpg}\caption{Day: drifting clouds}\end{subfigure}\hfill
 	\begin{subfigure}{0.325\linewidth}\includegraphics[width=\linewidth]{images/ladder.jpg}\caption{Hands grip the rungs}\end{subfigure}
-	\caption{Detail results: vegetation, sky and climbing. The painted vehicles are visible in Fig.~\ref{fig:bug}b and in the base overview.}\label{fig:shots2}
+\caption{The engine and game in action (screenshots from the program), and detail results: tree species, drifting clouds, hands gripping the rungs.}\label{fig:shots1}
 \end{figure}
 
-\subsection{Analysis}
+\subsection{Analysis of the results}
 Geometry is the largest cost because trees, base and terrain are drawn in detail, so instancing (one draw call for thousands of trees) and per-chunk culling matter most. Cheaper clouds (no warp in the sun-shading march, fewer octaves) kept the sky from growing the lighting pass. The bug in Fig.~\ref{fig:bug} was found by bisecting: remove draw items, lights and effects until the line disappeared, which pointed to the fog; it shows why every pass must have a test and a screenshot.
 
-\section{Objectives Achieved}
+\section{Objective Achieved}
 Table~\ref{tab:objectives} compares the five objectives of Section~1.3 with the results.
 \begin{table}[!tb]
 	\caption{Objectives and how they were met}\label{tab:objectives}
@@ -669,20 +661,7 @@ Because no art files are downloaded, the whole project is a few megabytes of sou
 \chapter{Addressing Complex Engineering Problems and Activities}
 
 \section{Complex Engineering Problems}
-Table~\ref{tab:problems} maps the project to the usual attributes.
-
-\begin{table}[!tb]
-	\caption{Complex engineering problem attributes}\label{tab:problems}
-	\small\setstretch{1.05}
-	\begin{tabularx}{\linewidth}{lX}
-		\toprule \textbf{Attribute} & \textbf{In this project}\\ \midrule
-		Depth of knowledge & Radiometry, noise theory, numerical filters, GPU pipelines, collision, state machines, synthesis.\\
-		Conflicting requirements & Realism versus 16.7\,ms; no files versus rich surfaces; OpenGL 4.1 without compute.\\
-		Depth of analysis & Debugging the fog star streak; deriving tiling guarantees; tuning physics curves.\\
-		Interdependence & Renderer, world, game and audio share data layouts and timing.\\
-		\bottomrule
-	\end{tabularx}
-\end{table}
+\textbf{Depth of knowledge:} radiometry, noise theory, numerical filters, GPU pipelines, collision and state machines. \textbf{Conflicting requirements:} realism versus a 16.7\,ms frame, no files versus rich surfaces, OpenGL~4.1 without compute shaders. \textbf{Depth of analysis:} bisecting the fog star streak, deriving tiling guarantees, tuning physics curves. \textbf{Interdependence:} renderer, world, game and audio share data layouts and timing.
 
 \section{Complex Engineering Activities}
 The project used modern tools (compiler, profiler, test runners), integrated many components and verified quality by measurement.
@@ -705,10 +684,12 @@ Add leaf cards with cut-out transparency, screen-space global illumination, poin
 %  REFERENCES
 % ============================================================
 \vspace{10pt}
+\phantomsection
+\addcontentsline{toc}{frontmatter}{References}
 \begin{center}{\fontsize{14}{21}\bfseries\selectfont REFERENCES}\end{center}
 \vspace{2pt}
-\begin{spacing}{0.95}\footnotesize
-\begin{enumerate}[leftmargin=0pt,itemindent=0pt,labelsep=0.5em,labelwidth=1.5em,itemsep=2pt,parsep=0pt,label={[\arabic*]},align=left]
+\begin{spacing}{0.9}\footnotesize
+\begin{enumerate}[leftmargin=0pt,itemindent=0pt,labelsep=0.5em,labelwidth=1.5em,itemsep=0pt,parsep=0pt,label={[\arabic*]},align=left]
 	\item K.~Perlin, ``Improving noise,'' \textit{ACM Trans. Graph. (SIGGRAPH)}, vol.~21, no.~3, pp.~681--682, 2002.
 	\item S.~Worley, ``A cellular texture basis function,'' in \textit{Proc. SIGGRAPH}, 1996, pp.~291--294.
 	\item R.~L. Cook and K.~E. Torrance, ``A reflectance model for computer graphics,'' \textit{ACM Trans. Graph.}, vol.~1, no.~1, pp.~7--24, 1982.
