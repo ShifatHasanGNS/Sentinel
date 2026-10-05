@@ -339,8 +339,8 @@ Figure~\ref{fig:layers}: a lower layer never knows about a higher one. \code{Sou
 \subsection{Procedural Geometry and Characters}
 Every object is a \emph{table} of parts, each a primitive (box, sphere, cylinder, cone, capsule, torus, wedge), a transform, optional deformers and a material. A noise deformer moves each vertex along its normal $\hat n$ by a smooth random amount of at most $A$, so a perfect sphere becomes a lumpy rock:
 \begin{equation}\mathbf p'=\mathbf p+A\,\nu(f\mathbf p)\,\hat n,\qquad \lVert\mathbf p'-\mathbf p\rVert\le A.\end{equation}
-Soldiers are capsule skeletons; legs use two-bone IK: for bone lengths $a,b$ and root-to-target distance $c$, the law of cosines gives the knee angle
-\begin{equation}\cos\theta_{\text{knee}}=\frac{a^{2}+b^{2}-c^{2}}{2ab}.\end{equation}
+Soldiers are capsule skeletons; legs use two-bone IK: for upper and lower bone lengths $a,b$ and hip-to-target distance $c$, the law of cosines gives the hip angle $\alpha$ between the target direction and the upper bone
+\begin{equation}\cos\alpha=\frac{a^{2}+c^{2}-b^{2}}{2ac}.\end{equation}
 
 
 \subsection{Procedural Textures}
@@ -358,14 +358,15 @@ Choosing gradients from the cell index \emph{modulo the period} $P$ gives $F(\ma
 \end{figure}
 
 \textbf{Bumps without geometry.} A recipe's height map becomes a \emph{normal map} that fools the lighting into seeing bumps. The slope uses the Scharr $3\times3$ filter, the most direction-fair small filter, and crevices (height below the neighbours' average) darken the albedo and ambient occlusion:
-\begin{equation}h_x\approx\frac{3(h_{NE}+h_{SE}-h_{NW}-h_{SW})+10(h_E-h_W)}{32\,\Delta},\qquad \hat n=\frac{(-k\,h_x,\,-k\,h_y,\,1)}{\lVert\cdot\rVert}.\end{equation}
-Triplanar mapping (three axis projections blended by $|n_i|^k$) avoids stretching.
+\begin{equation}h_x\approx\frac{3(h_{NE}+h_{SE}-h_{NW}-h_{SW})+10(h_E-h_W)}{32\,\Delta\,N},\qquad \hat n=\frac{(-k\,h_x,\,-k\,h_y,\,1)}{\lVert\cdot\rVert},\end{equation}
+where $\Delta$ is one texel and $N$ the cells per tile, so bump strength $k$ is scale-independent.
+Triplanar mapping (weights $w_i=|n_i|^4/\sum_j|n_j|^4$) avoids stretching.
 
 
 \subsection{The Rendering Pipeline}
 \emph{Deferred shading} photographs a ``data poster'' of the scene first (each pixel's colour, direction and shininess) and lights it once, which makes many lights cheap. The poster is the \emph{G-buffer}: albedo, octahedral-packed normal with roughness and metalness, emission with occlusion, and depth (from which position is rebuilt). Fig.~\ref{fig:pipeline} lists the passes. Direct light uses the Cook--Torrance model~[3]: a diffuse part plus a mirror-like specular part,
-\begin{equation}f_s=\frac{D\,F\,G}{4(\mathbf n\!\cdot\!\mathbf l)(\mathbf n\!\cdot\!\mathbf v)},\quad D=\frac{\alpha^{2}}{\pi\big((\mathbf n\!\cdot\!\mathbf h)^{2}(\alpha^{2}-1)+1\big)^{2}},\quad F=F_0+(1-F_0)(1-\mathbf v\!\cdot\!\mathbf h)^{5},\end{equation}
-where $D$ counts tiny mirror facets facing the viewer (GGX), $G$ their mutual shading, $F$ glancing-angle reflection (Schlick) and $\alpha$ the roughness squared. Distant things fade into haze, $C=T\,C_{\text{surf}}+(1-T)\,C_{\text{haze}}$, $T=e^{-kd}$. Finally the HDR image is compressed to screen range by the ACES curve~[9], graded, dithered~[10] and smoothed (FXAA~[11]):
+\begin{equation}f=\frac{(1-F_l)(1-F_v)\,\mathbf c_d}{\pi}+D\,V\,F,\quad D=\frac{\alpha^{2}}{\pi\big((\mathbf n\!\cdot\!\mathbf h)^{2}(\alpha^{2}-1)+1\big)^{2}},\quad F=F_0+(1-F_0)(1-\mathbf v\!\cdot\!\mathbf h)^{5},\end{equation}
+where $\mathbf c_d$ is the diffuse colour, $D$ counts tiny mirror facets facing the viewer (GGX), $V=G/(4\,\mathbf n\!\cdot\!\mathbf l\;\mathbf n\!\cdot\!\mathbf v)$ is the Smith visibility (facets shading each other), $F$ is glancing-angle reflection (Schlick, $F_0=0.04$ for non-metals), $F_l,F_v$ are $F$ at the light and view angles, and $\alpha$ is roughness squared. Distant things fade into haze, $C=T\,C_{\text{surf}}+(1-T)\,C_{\text{haze}}$, $T=e^{-kd}$. Finally the HDR image is compressed to screen range by the ACES curve~[9], graded, dithered~[10] and smoothed (FXAA~[11]):
 \begin{equation}C_{\text{out}}=\operatorname{clamp}\!\Big(\frac{x(2.51x+0.03)}{x(2.43x+0.59)+0.14}\Big),\quad x=\text{exposure}\times\text{radiance}.\end{equation}
 
 
@@ -405,9 +406,9 @@ where $\mathbf w$ is the wind velocity: shifting the noise by $\mathbf wt$ makes
 
 
 \subsection{Terrain, Trees, Physics and Gameplay}
-\textbf{Terrain} is warped, ridged fractal noise flattened into a plateau for the base and streamed in 64\,m chunks; grass, dirt, rock and sand blend by slope and height. \textbf{Trees} (oak, pine, birch, cypress) are tables of limbs and leaf lumps; each instance gets its own size, lean and tint, and the vertex shader bends it as a cantilever, $\Delta_{xz}\propto(0.04+0.1g)(y/9)^2$, where $g=\tfrac12+\tfrac12\sin(1.3t+0.05x+0.03z)$ is a travelling gust.
+\textbf{Terrain} is warped, ridged fractal noise flattened into a plateau for the base and streamed in 64\,m chunks; grass, dirt, rock and sand blend by slope and height. \textbf{Trees} (oak, pine, birch, cypress) are tables of limbs and leaf lumps; each instance gets its own size, lean and tint, and the vertex shader bends it as a cantilever, $\Delta_x=2s\,(0.04+0.1g)(y/9)^2$ ($\Delta_z$ is 35\% of it), where $g=\tfrac12+\tfrac12\sin(1.3t+0.05x+0.03z)$ is a travelling gust.
 
-\textbf{Collision} uses rotatable boxes and a capsule player. Cars follow the bicycle model, $\dot\psi=v\tan\delta/L$ and engine power fades toward top speed, $\dot v=a_0(1-0.6|v|/v_{\max})$,. \textbf{Ladders} are a four-state machine (none, mounting, climbing, topping out) in which the controller owns the body, so it cannot stick. A staged machine drives five mission goals; sounds are synthesised.
+\textbf{Collision} uses rotatable boxes and a capsule player. Cars follow the bicycle model, $\dot\psi=v\tan\delta/L$, and engine power fades toward top speed, $\dot v=a_0(1-0.6|v|/v_{\max})$. \textbf{Ladders} are a four-state machine (none, mounting, climbing, topping out) in which the controller owns the body, so it cannot stick. A staged machine drives five mission goals; sounds are synthesised.
 
 
 
