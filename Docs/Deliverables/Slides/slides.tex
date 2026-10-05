@@ -79,14 +79,14 @@
 \column{0.55\textwidth}
 \textbf{Can a complete, playable 3D game be made by code alone on a student laptop?}
 \vspace{2pt}
-\begin{block}{Two hard limits}\footnotesize
-No model, image or precomputed data file; macOS OpenGL 4.1 has no compute shaders.
+\begin{block}{Two hard limits}\small
+No model, image or precomputed file; OpenGL 4.1, no compute shaders.
 \end{block}
-\begin{block}{Objectives}\footnotesize
-Layered engine; all content from code and seeds; modern renderer and a playable game; verified by tests and a 16.7\,ms budget.
+\begin{block}{Objectives}\small
+Layered engine; all content from code; modern renderer; playable game; tested, 16.7\,ms budget.
 \end{block}
-\begin{block}{The game}\footnotesize
-Drivable jeep, truck, carrier, tank, helicopter; ladders, doors, stealth enemies; five-objective mission; synthesised sound.
+\begin{block}{The game}\small
+Drivable vehicles and helicopter; ladders, doors, stealth enemies; five-objective mission.
 \end{block}
 \column{0.42\textwidth}
 \centering
@@ -128,21 +128,23 @@ Drivable jeep, truck, carrier, tank, helicopter; ladders, doors, stealth enemies
 \node[box] (a) {Primitive\\mesh};\node[box,right=of a] (b) {Deformers\\own space};\node[box,right=of b] (c) {$M_{\rm part}$\\scale, turn, move};\node[box,right=of c] (d) {Merge by\\material};\node[box,right=of d] (e) {$M_{\rm world}$\\instances};\node[box,right=of e] (f) {$V$ then $P$\\to screen};
 \foreach \x/\y in {a/b,b/c,c/d,d/e,e/f}\draw[arr](\x)--(\y);
 \end{tikzpicture}
-\vspace{3pt}
+\vspace{4pt}
 \begin{columns}[T]
-\column{0.53\textwidth}\raggedright
+\column{0.52\textwidth}\raggedright
 \begin{block}{One part: scale, turn, then move}
-\small$M_{\rm part}=T(\mathbf t)\,R_z R_y R_x\,S(\mathbf s)$\\
-Right to left: stretched, turned about its own centre, moved last. $(1,0,0)\to S(2,1,1)\to R_y90^\circ\to T(5,0,0)=(5,0,-2)$
+$M_{\rm part}=T(\mathbf t)\,R_z R_y R_x\,S(\mathbf s)$\\[1pt]
+\small Right to left: stretched, turned about its own centre, moved last. $(1,0,0)\to S(2,1,1)\to R_y90^\circ\to T(5,0,0)=(5,0,-2)$
 \end{block}
 \begin{block}{Normals: inverse transpose}
-\small$\hat n'=\dfrac{(L^{-1})^{\top}\hat n}{\lVert(L^{-1})^{\top}\hat n\rVert}$\ keeps normals perpendicular after a stretch; $S=\mathrm{diag}(2,1,1)$: correct $(0.447,0.894,0)$, naive $(0.894,0.447,0)$; $\det<0$ flips winding.
+$\hat n'=\dfrac{(L^{-1})^{\top}\hat n}{\lVert(L^{-1})^{\top}\hat n\rVert}$\\[1pt]
+\small $S=\mathrm{diag}(2,1,1)$: correct $(0.447,0.894,0)$, naive $(0.894,0.447,0)$
 \end{block}
 \column{0.45\textwidth}
-\begin{columns}\column{0.5\linewidth}\pic{1}{tank.jpg}\column{0.5\linewidth}\pic{1}{truck.jpg}\end{columns}
-\vspace{2pt}
+\begin{block}{Rotation about $y$}
+\small$R_y(\theta)=\begin{pmatrix}\cos\theta&0&\sin\theta\\0&1&0\\-\sin\theta&0&\cos\theta\end{pmatrix}$
+\end{block}
 \begin{block}{Hierarchy and screen}
-\footnotesize$M_{\rm gun}=M_{\rm hull}\,T(\mathbf c_t)R_y(\theta_t)\,T(\mathbf c_g)R_x(-\theta_g)$\\[2pt]
+\small$M_{\rm gun}=M_{\rm hull}\,T(\mathbf c_t)R_y(\theta_t)\,T(\mathbf c_g)R_x(-\theta_g)$\\[2pt]
 $\mathbf p_{\rm clip}=P\,V\,M_{\rm world}\,M_{\rm part}\,\mathbf p$
 \end{block}
 \end{columns}
@@ -151,22 +153,24 @@ $\mathbf p_{\rm clip}=P\,V\,M_{\rm world}\,M_{\rm part}\,\mathbf p$
 % 6 ---------------- illumination
 \begin{frame}[c]{4. Illumination models and light sources}
 \centering{\small$\displaystyle L_o=\sum_j f(\mathbf l_j,\mathbf v)\,L_j\,\mathrm{att}_j\,\mathrm{sh}_j\max(0,\mathbf n\!\cdot\!\mathbf l_j)+\mathrm{ambient}\cdot\mathrm{AO}+\mathbf e$}
-\vspace{2pt}
+\vspace{3pt}
 \begin{columns}[T]
-\column{0.6\textwidth}\footnotesize
-\begin{tabular}{@{}p{1.9cm}l@{}}
-\textbf{Lambert} & $f=\frac{\mathbf c_d}{\pi}$\\[3pt]
-\textbf{Phong} & $\frac{\mathbf c_d(1-F_0)}{\pi}+F_0\frac{m+2}{2\pi}(\mathbf r\!\cdot\!\mathbf v)^m$\\[3pt]
-\textbf{Blinn--Phong} & $\frac{\mathbf c_d(1-F_0)}{\pi}+F_0\frac{m+8}{8\pi}(\mathbf n\!\cdot\!\mathbf h)^m$\\[3pt]
-\textbf{Oren--Nayar} & $\frac{\mathbf c_d}{\pi}(A+B\max(0,\cos\Delta\varphi)\sin\alpha\tan\beta)$\\[3pt]
-\textbf{Cook--Torrance} & $\frac{(1-F_l)(1-F_v)\mathbf c_d}{\pi}+DVF$\\[3pt]
+\column{0.63\textwidth}\small
+\renewcommand{\arraystretch}{1.5}
+\begin{tabular}{@{}p{2.5cm}l@{}}
+\textbf{Lambert} & $\frac{\mathbf c_d}{\pi}$\\
+\textbf{Phong} & $\frac{\mathbf c_d(1-F_0)}{\pi}+F_0\frac{m+2}{2\pi}(\mathbf r\!\cdot\!\mathbf v)^m$\\
+\textbf{Blinn--Phong} & $\frac{\mathbf c_d(1-F_0)}{\pi}+F_0\frac{m+8}{8\pi}(\mathbf n\!\cdot\!\mathbf h)^m$\\
+\textbf{Oren--Nayar} & $\frac{\mathbf c_d}{\pi}(A+B\max(0,\cos\Delta\varphi)\sin\alpha\tan\beta)$\\
+\textbf{Cook--Torrance} & $\frac{(1-F_l)(1-F_v)\mathbf c_d}{\pi}+DVF$\\
 \textbf{Subsurface} & cosine $\to\frac{\mathbf n\cdot\mathbf l+w}{1+w}$, $w=0.5$
 \end{tabular}
-\column{0.38\textwidth}
-\pic{1}{models.jpg}\\[1pt]{\scriptsize\centering Lambert $\cdot$ Phong $\cdot$ Blinn--Phong $\cdot$ Oren--Nayar $\cdot$ Cook--Torrance $\cdot$ Subsurface}
-\begin{block}{Light sources}\footnotesize
-Directional (sun, moon); point (lamps) with $\mathrm{att}=\frac{\mathrm{clamp}(1-(d/R)^4)^2}{d^2+1}$; spot (cone factor); area ($4\times4$ samples).
+\column{0.35\textwidth}
+\begin{block}{Light sources}
+\normalsize Directional: sun, moon\\ Point: lamps, flashes\\ Spot: floodlights (cone)\\ Area: $4\times4$ samples\\[2pt]
+\small $\mathrm{att}=\frac{\mathrm{clamp}(1-(d/R)^4)^2}{d^2+1}$
 \end{block}
+\pic{0.95}{models.jpg}\\[1pt]{\scriptsize\centering Six models, one sphere each}
 \end{columns}
 \end{frame}
 
@@ -182,10 +186,10 @@ Directional (sun, moon); point (lamps) with $\mathrm{att}=\frac{\mathrm{clamp}(1
 \column{0.56\textwidth}\raggedright
 \textbf{Deferred shading:} store colour, normal, shininess, depth first; light each pixel once.
 \begin{block}{Cascaded shadow maps}
-\scriptsize$z_i=\lambda n(\frac{r}{n})^{i/N}+(1-\lambda)(n+(r-n)\frac iN)$, $\lambda=0.75$, $N=3$: cuts at 9.1, 24.2, 100\,m; normal-offset lookup, 8 rotated PCF taps.
+\footnotesize$z_i=\lambda n(\frac{r}{n})^{i/N}+(1-\lambda)(n+(r-n)\frac iN)$, $\lambda=0.75$, $N=3$: cuts at 9.1, 24.2, 100\,m; normal-offset lookup, 8 rotated PCF taps.
 \end{block}
 \begin{block}{Fog, tone map, ambient}
-\scriptsize$C=TC_s+(1-T)C_h,\ T=e^{-kd}$\hfill $C_{\rm out}=\frac{x(2.51x+0.03)}{x(2.43x+0.59)+0.14}$\\ ambient = sky diffuse + split-sum specular, times SSAO.
+\footnotesize$C=TC_s+(1-T)C_h,\ T=e^{-kd}$\hfill $C_{\rm out}=\frac{x(2.51x+0.03)}{x(2.43x+0.59)+0.14}$\\ ambient = sky diffuse + split-sum specular, times SSAO.
 \end{block}
 \column{0.42\textwidth}
 \pic{1}{dusk.jpg}\\[1pt]{\small\centering Dusk: sun, sky, haze, shadows}

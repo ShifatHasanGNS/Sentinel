@@ -173,49 +173,49 @@ s=new_slide('3. Transformations: creating and combining objects')
 chain=['Primitive\nmesh','Deformers\n(own space)','M_part\nscale, turn, move','Merge by\nmaterial','M_world\ninstances','V then P\nto screen']
 x=0.6; wb=1.85; gp=0.2
 for i,t in enumerate(chain):
-    rect(s,x,1.15,wb,0.8,fill=WHITE,line=GREEN)
-    textbox(s,x,1.15,wb,0.8,t.split('\n'),size=13,align=PP_ALIGN.CENTER,anchor=MSO_ANCHOR.MIDDLE,space=0,check=False)
-    if i<len(chain)-1: line_arrow(s,x+wb,1.55,x+wb+gp,1.55,width=1.5)
+    rect(s,x,1.15,wb,0.85,fill=WHITE,line=GREEN)
+    textbox(s,x,1.15,wb,0.85,t.split('\n'),size=15,align=PP_ALIGN.CENTER,anchor=MSO_ANCHOR.MIDDLE,space=0,check=False)
+    if i<len(chain)-1: line_arrow(s,x+wb,1.57,x+wb+gp,1.57,width=1.5)
     x+=wb+gp
-rect(s,0.6,2.2,6.3,2.15,fill=WHITE,line=LINE)
-textbox(s,0.75,2.24,6.0,0.35,['One part: scale, then turn, then move'],size=14,bold=True,color=GREEN,check=False)
-picture(s,EQ+'mpart.png',0.8,2.65,w=5.8,border=False)
-textbox(s,0.75,3.15,6.0,1.2,['Matrices act right to left, so the brick is stretched, turned about its own centre, and carried last.','Example: (1,0,0) → S(2,1,1) → R_y 90° → T(5,0,0) = (5, 0, −2)'],size=14,space=3)
-rect(s,0.6,4.5,6.3,2.45,fill=WHITE,line=LINE)
-textbox(s,0.75,4.54,6.0,0.35,['Normals use the inverse transpose'],size=14,bold=True,color=GREEN,check=False)
-picture(s,EQ+'nmat.png',0.9,4.95,h=0.85,border=False)
-textbox(s,3.1,4.95,3.7,1.1,['Keeps normals perpendicular after a stretch'],size=14,space=2)
-textbox(s,0.75,5.95,6.0,0.95,['S = diag(2,1,1), n = (1,1,0)/√2: correct (0.447, 0.894, 0), naive (0.894, 0.447, 0) is wrong; det < 0 flips winding'],size=13,color=GREY)
-p,w1,h1=picture(s,IMG+'tank.jpg',7.2,2.2,w=2.7)
-p,w2,h2=picture(s,IMG+'truck.jpg',10.1,2.2,w=2.7)
-textbox(s,7.2,2.2+h1+0.04,5.6,0.35,['Tank (hull, turret, gun) and truck: transformed primitives'],size=13,color=GREY,italic=True,align=PP_ALIGN.CENTER)
-rect(s,7.2,3.75,5.6,3.2,fill=WHITE,line=LINE)
-textbox(s,7.35,3.79,5.3,0.35,['Hierarchy: products down the chain'],size=14,bold=True,color=GREEN,check=False)
-picture(s,EQ+'mgun.png',7.4,4.2,w=5.2,border=False)
-textbox(s,7.35,4.7,5.3,0.9,['The turret and gun inherit the hull matrix: turning the hull carries them along.'],size=14,space=2)
-textbox(s,7.35,5.55,5.3,0.35,['World to screen'],size=14,bold=True,color=GREEN,check=False)
-picture(s,EQ+'clip.png',7.4,5.95,w=4.4,border=False)
-textbox(s,7.35,6.45,5.3,0.45,['view V (look-at), projection P divides by depth'],size=13,color=GREY)
+rect(s,0.6,2.25,6.2,2.45,fill=WHITE,line=LINE)
+textbox(s,0.75,2.3,5.9,0.4,['One part: scale, then turn, then move'],size=17,bold=True,color=GREEN,check=False)
+picture(s,EQ+'mpart.png',0.8,2.78,w=5.8,border=False)
+textbox(s,0.75,3.3,5.9,1.4,['Matrices act right to left: the brick is stretched, turned about its own centre, and moved last.','(1,0,0) → S(2,1,1) → R_y 90° → T(5,0,0) = (5, 0, −2)'],size=16,space=4)
+rect(s,0.6,4.85,6.2,2.1,fill=WHITE,line=LINE)
+textbox(s,0.75,4.9,5.9,0.4,['Normals use the inverse transpose'],size=17,bold=True,color=GREEN,check=False)
+picture(s,EQ+'nmat.png',0.85,5.35,h=0.9,border=False)
+textbox(s,3.2,5.4,3.5,0.9,['stays perpendicular after a stretch'],size=16,space=2)
+textbox(s,0.75,6.3,5.9,0.6,['S = diag(2,1,1): correct (0.447, 0.894, 0); naive (0.894, 0.447, 0) is wrong'],size=15,color=GREY)
+rect(s,7.1,2.25,5.7,1.75,fill=WHITE,line=LINE)
+textbox(s,7.25,2.3,5.4,0.4,['Rotation about y'],size=17,bold=True,color=GREEN,check=False)
+picture(s,EQ+'ry.png',7.6,2.75,h=1.15,border=False)
+rect(s,7.1,4.15,5.7,1.45,fill=WHITE,line=LINE)
+textbox(s,7.25,4.2,5.4,0.4,['Hierarchy: products down the chain'],size=17,bold=True,color=GREEN,check=False)
+picture(s,EQ+'mgun.png',7.25,4.7,w=5.4,border=False)
+textbox(s,7.25,5.1,5.4,0.5,['Turning the hull carries turret and gun'],size=15,color=GREY)
+rect(s,7.1,5.75,5.7,1.2,fill=WHITE,line=LINE)
+textbox(s,7.25,5.8,5.4,0.4,['World to screen'],size=17,bold=True,color=GREEN,check=False)
+picture(s,EQ+'clip.png',7.3,6.3,w=4.6,border=False)
 
 # ---------------- 6 illumination
 s=new_slide('4. Illumination models and light sources')
-picture(s,EQ+'sum.png',0.6,1.12,w=8.3,border=False)
-textbox(s,9.05,1.1,3.8,0.55,['f = illumination model, att = falloff, sh = shadow'],size=12,color=GREY,italic=True)
-rect(s,0.6,1.8,6.3,5.15,fill=WHITE,line=LINE)
-rows=[('Lambert','lambert',0.5,1.0),('Phong','phong',0.5,3.6),('Blinn–Phong','blinn',0.5,3.6),('Oren–Nayar','oren',0.5,4.1),('Cook–Torrance','ct2',0.5,3.2),('Subsurface','sss',0.5,2.6)]
-y=1.9
-for name,img,hh,ww in rows:
-    textbox(s,0.75,y+0.04,1.85,0.5,[name],size=14,bold=True,color=GREEN,anchor=MSO_ANCHOR.MIDDLE,check=False)
-    im=Image.open(EQ+img+'.png'); w_=hh*im.size[0]/im.size[1]; w_=min(w_,4.2); picture(s,EQ+img+'.png',2.7,y+0.02,w=w_,border=False)
-    y+=0.8
-p,w,h=picture(s,IMG+'models.jpg',7.2,1.8,w=5.6)
-textbox(s,7.2,1.8+h+0.03,5.6,0.35,['Lambert · Phong · Blinn–Phong · Oren–Nayar · Cook–Torrance · Subsurface'],size=11,color=GREY,italic=True,align=PP_ALIGN.CENTER,check=False)
-y2=1.8+h+0.45
-rect(s,7.2,y2,5.6,6.95-y2,fill=WHITE,line=LINE)
-textbox(s,7.35,y2+0.04,5.3,0.35,['Light sources'],size=14,bold=True,color=GREEN,check=False)
-textbox(s,7.35,y2+0.42,5.3,1.55,['Directional: sun, moon (no falloff)','Point: lamps, flashes','Spot: floodlights; cone factor','Area: 4×4 point samples'],size=14,bullets=True,space=2)
-picture(s,EQ+'att.png',7.4,6.95-1.05,w=3.0,border=False)
-picture(s,EQ+'spot.png',10.5,6.95-1.0,w=2.2,border=False)
+picture(s,EQ+'sum.png',0.6,1.15,w=9.2,border=False)
+textbox(s,10.3,1.12,2.6,0.8,['f = model, att = falloff, sh = shadow'],size=13,color=GREY,italic=True)
+rect(s,0.6,1.95,7.0,5.0,fill=WHITE,line=LINE)
+rows=[('Lambert','lambert',0.62),('Phong','phong',0.58),('Blinn–Phong','blinn',0.58),('Oren–Nayar','oren',0.58),('Cook–Torrance','ct2',0.62),('Subsurface','sss',0.62)]
+y=2.05
+for name,img,hh in rows:
+    textbox(s,0.75,y+0.06,2.1,0.55,[name],size=16,bold=True,color=GREEN,anchor=MSO_ANCHOR.MIDDLE,check=False)
+    im=Image.open(EQ+img+'.png'); w_=min(hh*im.size[0]/im.size[1],4.6); picture(s,EQ+img+'.png',2.9,y+0.02,w=w_,border=False)
+    y+=0.81
+p,w,h=picture(s,IMG+'models.jpg',7.9,1.95,w=4.9)
+textbox(s,7.9,1.95+h+0.02,4.9,0.3,['Six models, one sphere each'],size=12,color=GREY,italic=True,align=PP_ALIGN.CENTER,check=False)
+y2=1.95+h+0.4
+rect(s,7.9,y2,4.9,6.95-y2,fill=WHITE,line=LINE)
+textbox(s,8.05,y2+0.04,4.6,0.4,['Light sources'],size=17,bold=True,color=GREEN,check=False)
+textbox(s,8.05,y2+0.5,4.6,1.7,['Directional: sun, moon','Point: lamps, flashes','Spot: floodlights (cone)','Area: 4×4 point samples'],size=16,bullets=True,space=3)
+picture(s,EQ+'att.png',8.05,6.95-1.2,w=3.4,border=False)
+picture(s,EQ+'spot.png',8.05,6.95-0.5,w=2.4,border=False) if False else None
 
 # ---------------- 7 rendering pipeline
 s=new_slide('5. The rendering pipeline: shadows, ambient, tone map')
@@ -228,16 +228,16 @@ for i,t in enumerate(stages):
     x+=wbox+gap
 textbox(s,0.6,2.2,6.9,0.95,[[('Deferred shading: ',{'bold':True}),('store colour, normal, shininess and depth first, then light each pixel once.',{})]],size=16)
 rect(s,0.6,3.2,6.9,3.75,fill=WHITE,line=LINE)
-textbox(s,0.75,3.25,6.5,0.35,['Cascaded shadow maps (λ = 0.75, N = 3, n = 0.1, r = 100 m)'],size=14,bold=True,color=GREEN,check=False)
+textbox(s,0.75,3.25,6.5,0.4,['Cascaded shadow maps (λ = 0.75, N = 3, n = 0.1, r = 100 m)'],size=16,bold=True,color=GREEN,check=False)
 picture(s,EQ+'csm.png',0.9,3.7,w=5.6,border=False)
-textbox(s,0.75,4.5,6.5,0.7,['Cuts at 9.1, 24.2, 100 m; normal-offset lookup, 8 rotated PCF taps'],size=14,space=2)
-textbox(s,0.75,5.1,6.5,0.35,['Fog and tone map'],size=14,bold=True,color=GREEN,check=False)
+textbox(s,0.75,4.55,6.5,0.7,['Cuts at 9.1, 24.2, 100 m; normal-offset lookup, 8 rotated PCF taps'],size=15,space=2)
+textbox(s,0.75,5.15,6.5,0.4,['Fog and tone map'],size=16,bold=True,color=GREEN,check=False)
 picture(s,EQ+'fog.png',0.9,5.55,w=3.1,border=False)
 picture(s,EQ+'aces.png',4.3,5.45,w=3.0,border=False)
-textbox(s,0.75,6.35,6.6,0.55,['Ambient = sky diffuse + split-sum specular, times SSAO'],size=13,color=GREY)
+textbox(s,0.75,6.3,6.6,0.6,['Ambient = sky diffuse + split-sum specular, times SSAO'],size=15,color=GREY)
 p,w,h=picture(s,IMG+'dusk.jpg',7.85,2.25,w=5.0)
 textbox(s,7.85,2.25+h+0.08,5.0,0.4,['Dusk: sun, sky, haze, shadows'],size=14,color=GREY,italic=True,align=PP_ALIGN.CENTER)
-textbox(s,7.85,2.25+h+0.6,5.0,1.2,['Sun, moon, lamps, cascaded shadows, SSAO, screen-space reflections, bloom and FXAA'],size=15,color=INK)
+textbox(s,7.85,2.25+h+0.6,5.0,1.2,['Sun, moon, lamps, cascaded shadows, SSAO, screen-space reflections, bloom and FXAA'],size=16,color=INK)
 
 # ---------------- 8 results + challenge
 s=new_slide('6. Results, verification and a bug fixed')
