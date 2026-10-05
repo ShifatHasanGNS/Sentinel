@@ -110,7 +110,8 @@ def panel(slide, x, y, w, h, label=None, accent=TEAL):
 def eq_panel(slide, x, y, w, h, label, names, note=None, scale=None, gap=0.12, maxscale=2.5):
     """A card with a small label, equations scaled to fill the width (never above maxscale, never taller than the card), and an optional note."""
     panel(slide, x, y, w, h, label)
-    top = y + 0.5; bottom = y + h - (0.7 if note else 0.12)
+    nlines = (note.count('\n') + 1) if note else 0
+    top = y + 0.45; bottom = y + h - ((0.28 + 0.2 * nlines) if note else 0.12)
     avail = bottom - top
     scales = [min(maxscale, (w - 0.7) / SIZES[n][0]) for n in names]
     tall = sum(SIZES[n][1] * sc for n, sc in zip(names, scales)) + gap * (len(names) - 1)
@@ -118,7 +119,7 @@ def eq_panel(slide, x, y, w, h, label, names, note=None, scale=None, gap=0.12, m
     cy = top + max(0, (avail - tall * k) / 2)
     for n, sc in zip(names, scales):
         dh = eq(slide, n, x + 0.2, cy, w - 0.4, scale=sc * k); cy += dh + gap * k
-    if note: textbox(slide, x + 0.25, y + h - 0.66, w - 0.4, 0.62, note.split('\n'), size=13, color=SLATE, anchor=MSO_ANCHOR.MIDDLE, space=1, check=False)
+    if note: textbox(slide, x + 0.25, y + h - (0.12 + 0.22 * nlines), w - 0.4, 0.1 + 0.22 * nlines, note.split('\n'), size=12, color=SLATE, anchor=MSO_ANCHOR.BOTTOM, space=0, check=False)
 
 
 def card(slide, x, y, w, h, title, body, size=16, bullets=True):
@@ -211,8 +212,8 @@ y0 = 1.15 + h + 0.45
 eq_panel(s, 0.6, y0, 6.0, 2.55, 'Fractal noise (tiles exactly)', ['fractal'])
 eq_panel(s, 0.6, y0 + 2.7, 6.0, 6.95 - (y0 + 2.7), 'Vertex push by a noise deformer', ['push'])
 textbox(s, 6.95, 1.2, 5.85, 3.3, ['18 recipes → 22 materials, baked once at 1024²', 'Scharr filter turns height into bumps; crevices darken', 'Objects are tables of primitives plus noise deformers', 'Soldiers: skeletons with two-bone IK legs'], size=19, bullets=True, space=9)
-p, w, h = picture(s, IMG + 'showroom.jpg', 7.4, 4.3, w=4.6, shadowed=True)
-caption(s, 7.4, 4.3 + h + 0.04, 4.6, 'The material showroom: one sphere per recipe')
+p, w, h = picture(s, IMG + 'showroom.jpg', 7.1, 3.75, w=5.6, shadowed=True)
+caption(s, 7.1, 3.75 + h + 0.06, 5.6, 'The material showroom: one sphere per recipe')
 
 # ================= 5 transformations
 s = new_slide('3. Transformations: creating and combining objects')
@@ -225,7 +226,9 @@ eq_panel(s, 7.05, 5.75, 5.75, 1.2, 'World to screen', ['clip'], scale=1.5)
 
 # ================= 6 illumination
 s = new_slide('4. Illumination models and light sources')
-eq_panel(s, 0.6, 1.1, 12.2, 1.3, 'Direct light + ambient + emission     (f: illumination model · att: falloff · sh: shadow · N_L: number of lights)', ['sum'])
+eq_panel(s, 0.6, 1.08, 8.9, 1.4, 'Direct light + ambient + emission', ['sum'])
+panel(s, 9.65, 1.08, 3.15, 1.4, 'Symbols', accent=AMBER)
+textbox(s, 9.9, 1.5, 2.85, 1.0, ['f: illumination model', 'att: falloff · sh: shadow', 'N_L: lights · AO: occlusion', 'e: emission'], size=12, color=SLATE, space=0, check=False)
 panel(s, 0.6, 2.55, 7.0, 4.4)
 rows = [('Lambert', 'lambert'), ('Phong', 'phong'), ('Blinn–Phong', 'blinn'), ('Oren–Nayar', 'oren'), ('Cook–Torrance', 'ct2'), ('Subsurface', 'sss')]
 y = 2.62
@@ -244,7 +247,7 @@ eq_panel(s, 7.9, 4.45, 4.9, 2.5, 'Definitions used above', ['defs', 'ctdefs'], g
 s = new_slide('5. The rendering pipeline: shadows, ambient, tone map')
 chevrons(s, ['Sky\ntable', 'Shadows\n3 cascades', 'Geometry\nG-buffer', 'SSAO', 'Lighting,\nreflect, fog', 'Smoke,\nfire', 'Bloom, ACES,\nFXAA'], 0.6, 1.15, 12.2, 0.85, size=13)
 textbox(s, 0.6, 2.2, 6.9, 0.9, [[('Deferred shading: ', {'bold': True, 'color': TEAL}), ('store colour, normal, shininess and depth first, then light each pixel once.', {})]], size=17)
-eq_panel(s, 0.6, 3.15, 6.9, 1.9, 'Cascaded shadow maps  (λ = 0.75, N = 3, n = 0.1 m, r = 100 m)', ['csm'], note='Cuts at 9.1, 24.2, 100 m · normal-offset lookup · 8 rotated PCF taps', scale=1.45)
+eq_panel(s, 0.6, 3.15, 6.9, 1.9, 'Cascaded shadow maps', ['csm'], note='λ = 0.75, N = 3, n = 0.1 m, r = 100 m  →  cuts at 9.1, 24.2, 100 m\nnormal-offset lookup · 8 rotated percentage-closer taps', scale=1.45)
 eq_panel(s, 0.6, 5.2, 6.9, 1.75, 'Fog and tone map', ['fog', 'aces'], scale=1.2, gap=0.1)
 p, w, h = picture(s, IMG + 'dusk.jpg', 7.85, 2.2, w=5.0, shadowed=True)
 caption(s, 7.85, 2.2 + h + 0.06, 5.0, 'Dusk: sun, sky, haze, shadows')

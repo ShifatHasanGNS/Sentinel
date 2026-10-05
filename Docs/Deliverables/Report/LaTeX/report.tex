@@ -365,8 +365,8 @@ with hull position $\mathbf p$, yaw $\psi$, pitch $\phi$, roll $\rho$, turret pi
 
 \begin{figure}[H]
 	\centering
-	\begin{subfigure}{0.3\linewidth}\includegraphics[width=\linewidth]{images/tank.jpg}\caption{Tank: hull, turret and gun}\end{subfigure}\hfill
-	\begin{subfigure}{0.3\linewidth}\includegraphics[width=\linewidth]{images/truck.jpg}\caption{Truck: body, cab and wheels}\end{subfigure}
+	\begin{subfigure}{0.26\linewidth}\includegraphics[width=\linewidth]{images/tank.jpg}\caption{Tank: hull, turret and gun}\end{subfigure}\hfill
+	\begin{subfigure}{0.26\linewidth}\includegraphics[width=\linewidth]{images/truck.jpg}\caption{Truck: body, cab and wheels}\end{subfigure}
 	\caption{Objects built from transformed primitives; the turret and gun inherit the hull's matrix.}\label{fig:hier}
 \end{figure}
 
@@ -491,7 +491,8 @@ f_{\text{Cook--Torrance}}&=\frac{(1-F_l)(1-F_v)\,\mathbf c_d}{\pi}+D\,V\,F\\[4pt
 The shininess exponent comes from roughness $\rho$,
 \begin{equation}m=\max\!\left(\frac{2}{\rho^{2}+10^{-4}}-2,\;1\right),\end{equation}
 so roughness $0.5$ gives $m=6$. Phong's mirror direction $\mathbf r$ is cheap but needs a reflection per light; Blinn--Phong replaces it by $\mathbf h$, which is cheaper and behaves better at glancing angles, and the factors $(m+2)/2\pi$ and $(m+8)/8\pi$ normalise the highlight so it does not gain energy as it sharpens. \emph{Oren--Nayar} treats a rough surface as many tiny Lambertian facets that scatter light back toward the source, so cloth and concrete look flat and do not darken at the edge like Lambert: with $\sigma=\rho$, $A=1-\frac{0.5\sigma^2}{\sigma^2+0.33}$, $B=\frac{0.45\sigma^2}{\sigma^2+0.09}$, $\alpha=\max(\theta_i,\theta_r)$, $\beta=\min(\theta_i,\theta_r)$ and $\Delta\varphi$ the azimuth between light and view around the normal. \emph{Subsurface} lets light wrap a little past the shadow line (the cosine ramps from 1 down to 0 as $\mathbf n\!\cdot\!\mathbf l$ goes from 1 to $-w$), imitating light scattering inside skin. \emph{Cook--Torrance} is the physically based default: $D$ is the GGX facet distribution, $V$ the Smith visibility and $F$ Schlick's Fresnel,
-\begin{equation}\begin{aligned}D&=\frac{\alpha^{2}}{\pi\left((\mathbf n\!\cdot\!\mathbf h)^{2}(\alpha^{2}-1)+1\right)^{2}}, & F&=F_0+(1-F_0)\left(1-\mathbf v\!\cdot\!\mathbf h\right)^{5}, & \alpha&=\rho^{2},\\[4pt]
+\begin{equation}\begin{aligned}D&=\frac{\alpha^{2}}{\pi\left((\mathbf n\!\cdot\!\mathbf h)^{2}(\alpha^{2}-1)+1\right)^{2}},\qquad \alpha=\rho^{2},\\[6pt]
+F&=F_0+(1-F_0)\left(1-\mathbf v\!\cdot\!\mathbf h\right)^{5},\\[6pt]
 V&=\frac{0.5}{(\mathbf n\!\cdot\!\mathbf l)\sqrt{(\mathbf n\!\cdot\!\mathbf v)^2(1-\alpha^2)+\alpha^2}+(\mathbf n\!\cdot\!\mathbf v)\sqrt{(\mathbf n\!\cdot\!\mathbf l)^2(1-\alpha^2)+\alpha^2}}.\end{aligned}\end{equation}
 In the game, cloth and canvas use Oren--Nayar, skin uses Subsurface, and everything else uses Cook--Torrance (Table~\ref{tab:models}).
 
@@ -512,7 +513,7 @@ In the game, cloth and canvas use Oren--Nayar, skin uses Subsurface, and everyth
 
 \begin{figure}[H]
 	\centering
-	\includegraphics[width=0.85\linewidth]{images/models.jpg}
+	\includegraphics[width=0.78\linewidth]{images/models.jpg}
 	\caption{The same painted-metal sphere under the six illumination models (left to right: Lambert, Phong, Blinn--Phong, Oren--Nayar, Cook--Torrance, Subsurface), lit by the same sun and sky. Lambert has no highlight; Phong and Blinn--Phong add a hot spot; Oren--Nayar flattens the falloff; Cook--Torrance adds Fresnel and a microfacet highlight.}\label{fig:models}
 \end{figure}
 
@@ -524,14 +525,14 @@ where $\theta$ is the angle from the spot axis, $\theta_i$ the inner and $\theta
 \begin{figure}[H]
 	\centering
 	\begin{subfigure}{0.48\linewidth}\centering
-	\begin{tikzpicture}\begin{axis}[width=\linewidth,height=3.0cm,xlabel={distance $d$ (m)},ylabel={att},xlabel style={font=\scriptsize},ylabel style={font=\scriptsize},tick label style={font=\tiny},ymax=0.55,xmin=0,xmax=15,domain=0:14,samples=60]
+	\begin{tikzpicture}\begin{axis}[width=\linewidth,height=2.7cm,xlabel={distance $d$ (m)},ylabel={att},xlabel style={font=\scriptsize},ylabel style={font=\scriptsize},tick label style={font=\tiny},ymax=0.55,xmin=0,xmax=15,domain=0:14,samples=60]
 		\addplot[blue!60!black,thick]{(max(0,1-(x/14)^4))^2/(x^2+1)};
 		\addplot[dashed,gray]{1/(x^2+1)};
 	\end{axis}\end{tikzpicture}
 	\caption{Windowed (solid) vs.\ plain inverse-square (dashed)}
 	\end{subfigure}\hfill
 	\begin{subfigure}{0.48\linewidth}\centering
-	\begin{tikzpicture}\begin{axis}[width=\linewidth,height=3.0cm,xlabel={angle from normal (deg)},ylabel={$F$},xlabel style={font=\scriptsize},ylabel style={font=\scriptsize},tick label style={font=\tiny},xmin=0,xmax=90,ymin=0,ymax=1,domain=0:90,samples=60]
+	\begin{tikzpicture}\begin{axis}[width=\linewidth,height=2.7cm,xlabel={angle from normal (deg)},ylabel={$F$},xlabel style={font=\scriptsize},ylabel style={font=\scriptsize},tick label style={font=\tiny},xmin=0,xmax=90,ymin=0,ymax=1,domain=0:90,samples=60]
 		\addplot[orange!80!black,thick]{0.04+0.96*(1-cos(x))^5};
 	\end{axis}\end{tikzpicture}
 	\caption{Schlick Fresnel, $F_0=0.04$}
@@ -550,21 +551,8 @@ The sun's height follows astronomy,
 \begin{equation}\sin(\text{elevation})=\sin\varphi\,\sin\delta+\cos\varphi\,\cos\delta\,\cos h,\qquad h=15^{\circ}(\text{hours}-12),\end{equation}
 with latitude $\varphi$, declination $\delta$ and hour angle $h$. The sky colour comes from Rayleigh and Mie scattering~[6]. Clouds live on two planes, cumulus at $H=1500$\,m and cirrus at 7\,km. A view ray with direction $\mathbf d$ meets the plane at
 \begin{equation}\mathbf P_{xz}=\frac{H}{d_y}\,(d_x,d_z)+\mathbf w\,t,\end{equation}
-where $\mathbf w$ is the wind velocity: shifting the noise by $\mathbf wt$ makes the clouds drift (Fig.~\ref{fig:clouds}).
+where $\mathbf w$ is the wind velocity: shifting the noise by $\mathbf wt$ makes the clouds drift.
 
-\begin{figure}[H]
-	\centering
-	\begin{tikzpicture}[scale=0.5]
-		\draw[thick] (0,0) -- (7,0) node[right,font=\scriptsize]{ground};
-		\draw[blue!60,thick] (0,1.8) -- (7,1.8) node[right,font=\scriptsize]{cumulus, 1.5 km};
-		\draw[blue!40,thick] (0,2.8) -- (7,2.8) node[right,font=\scriptsize]{cirrus, 7 km};
-		\fill (2.2,0) circle (2pt) node[below,font=\scriptsize]{viewer};
-		\draw[arr] (2.2,0) -- (4.0,1.8) node[midway,right,font=\scriptsize]{$\mathbf d$};
-		\draw[arr] (2.2,0) -- (4.9,2.8);
-		\draw[arr,orange!80!black] (4.0,1.95) -- (5.1,1.95) node[above,font=\scriptsize]{wind $\mathbf w$};
-	\end{tikzpicture}
-	\caption{A view ray meets each cloud plane; the noise slides with the wind.}\label{fig:clouds}
-\end{figure}
 
 
 \subsection{Terrain, Trees, Physics and Gameplay}
@@ -574,7 +562,7 @@ where $s$ is the sway strength and $g$ a travelling gust.
 
 \textbf{Collision} uses rotatable boxes and a capsule player. Cars follow the bicycle model, and engine power fades toward top speed:
 \begin{equation}\dot\psi=\frac{v\tan\delta}{L},\qquad \dot v=a_0\left(1-0.6\,\frac{|v|}{v_{\max}}\right),\end{equation}
-with yaw $\psi$, speed $v$, steering $\delta$, wheel base $L$. \textbf{Ladders} are a four-state machine (none, mounting, climbing, topping out) in which the controller owns the body, so it cannot stick. A staged machine drives five mission goals; sounds are synthesised.
+with yaw $\psi$, speed $v$, steering $\delta$, wheel base $L$. \textbf{Ladders} are a four-state machine (mounting, climbing, topping out), owned by the controller so it cannot stick. Five mission goals and all sounds are code-driven.
 
 
 
@@ -751,7 +739,7 @@ The engine can be extended with leaf cards with cut-out transparency for more re
 \begin{center}{\fontsize{14}{21}\bfseries\selectfont REFERENCES}\end{center}
 \vspace{4pt}
 \begin{spacing}{1.25}\small
-\begin{enumerate}[leftmargin=0pt,itemindent=0pt,labelsep=0.5em,labelwidth=1.8em,itemsep=4pt,parsep=0pt,label={[\arabic*]},align=left]
+\begin{enumerate}[leftmargin=2.3em,itemindent=0pt,labelsep=0.5em,labelwidth=1.8em,itemsep=4pt,parsep=0pt,label={[\arabic*]},align=left]
 	\item K.~Perlin, ``Improving noise,'' \textit{ACM Trans. Graph. (SIGGRAPH)}, vol.~21, no.~3, pp.~681--682, 2002.
 	\item S.~Worley, ``A cellular texture basis function,'' in \textit{Proc. SIGGRAPH}, 1996, pp.~291--294.
 	\item R.~L. Cook and K.~E. Torrance, ``A reflectance model for computer graphics,'' \textit{ACM Trans. Graph.}, vol.~1, no.~1, pp.~7--24, 1982.

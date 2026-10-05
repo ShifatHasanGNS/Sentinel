@@ -62,8 +62,8 @@
 % 2 ---------------- outline
 \begin{frame}[c]{Outline}
 \begin{columns}[T]
-\column{0.6\textwidth}\large
-\begin{enumerate}\setlength{\itemsep}{5pt}
+\column{0.62\textwidth}\normalsize
+\begin{enumerate}\setlength{\itemsep}{2pt}
   \item Problem, objectives, architecture
   \item Procedural shapes and textures
   \item Transformations: creating and combining objects
@@ -130,11 +130,11 @@ Layered engine; all content from code; modern renderer; a playable game (vehicle
 \node[box] (a) {Primitive\\mesh};\node[box,right=of a] (b) {Deformers\\own space};\node[box,right=of b] (c) {$M_{\rm part}$\\scale, turn, move};\node[box,right=of c] (d) {Merge by\\material};\node[box,right=of d] (e) {$M_{\rm world}$\\instances};\node[box,right=of e] (f) {$V$ then $P$\\to screen};
 \foreach \x/\y in {a/b,b/c,c/d,d/e,e/f}\draw[arr](\x)--(\y);
 \end{tikzpicture}
-\vspace{4pt}
+\vspace{3pt}
 \begin{columns}[T]
 \column{0.52\textwidth}
 \begin{block}{One part: scale, turn, then move}
-\eqimg{0.88}{mpart}
+\eqimg{0.9}{mpart}
 \scriptsize Right to left: stretched, turned, moved last.\par\centering $(1,0,0)\xrightarrow{S(2,1,1)}(2,0,0)\xrightarrow{R_y(90^\circ)}(0,0,-2)\xrightarrow{T(5,0,0)}(5,0,-2)$
 \end{block}
 \begin{block}{Normals use the inverse transpose}
@@ -143,7 +143,7 @@ Layered engine; all content from code; modern renderer; a playable game (vehicle
 \end{block}
 \column{0.45\textwidth}
 \begin{block}{Rotation about $y$}
-\eqimg{0.8}{ry}
+\eqimg{0.75}{ry}
 \end{block}
 \begin{block}{Hierarchy: products down the chain}
 \eqimg{0.98}{mgun}
@@ -158,10 +158,10 @@ Layered engine; all content from code; modern renderer; a playable game (vehicle
 \begin{frame}[c]{4. Illumination models and light sources}
 \begin{panelbox}{Direct light + ambient + emission \hfill \textcolor{black!55}{\scriptsize\textrm{f: model \ att: falloff \ sh: shadow \ $N_L$: lights}}}\eqimg{0.52}{sum}\end{panelbox}
 \begin{columns}[T]
-\column{0.6\textwidth}
+\column{0.57\textwidth}
 \begin{panelbox}{Six illumination models}
-\begin{tabular}{@{}m{2.75cm}m{5.0cm}@{}}
-\small\textcolor{kuet}{\bfseries Lambert} & \includegraphics[height=0.46cm]{equation_images/lambert.png}\\[-2pt]
+\begin{tabular}{@{}m{2.45cm}m{4.7cm}@{}}
+\small\textcolor{kuet}{\bfseries Lambert} & \includegraphics[height=0.5cm]{equation_images/lambert.png}\\[-2pt]
 \small\textcolor{kuet}{\bfseries Phong} & \includegraphics[height=0.68cm]{equation_images/phong.png}\\[-2pt]
 \small\textcolor{kuet}{\bfseries Blinn--Phong} & \includegraphics[height=0.68cm]{equation_images/blinn.png}\\[-2pt]
 \small\textcolor{kuet}{\bfseries Oren--Nayar} & \includegraphics[height=0.58cm]{equation_images/oren.png}\\[-2pt]
@@ -169,12 +169,12 @@ Layered engine; all content from code; modern renderer; a playable game (vehicle
 \small\textcolor{kuet}{\bfseries Subsurface} & \includegraphics[height=0.58cm]{equation_images/sss.png}
 \end{tabular}
 \end{panelbox}
-\column{0.38\textwidth}
+\column{0.41\textwidth}
 \begin{panelbox}{Light sources}
-\eqimg{0.8}{att}
+\eqimg{0.95}{att}
 \end{panelbox}
 \begin{panelbox}{Definitions}
-\eqimg{0.98}{defs}\eqimg{0.98}{ctdefs}
+\eqimg{1.0}{defs}\eqimg{1.0}{ctdefs}
 \end{panelbox}
 \end{columns}
 \end{frame}
@@ -191,15 +191,15 @@ Layered engine; all content from code; modern renderer; a playable game (vehicle
 \column{0.58\textwidth}\raggedright
 \textbf{Deferred shading:} store colour, normal, shininess and depth first; light each pixel once.
 \begin{block}{Cascaded shadow maps}
-\eqimg{0.92}{csm}
+\eqimg{0.9}{csm}
 \footnotesize\centering $\lambda=0.75,\ N=3,\ n=0.1,\ r=100$\par cuts $z_{1,2,3}=9.1,\ 24.2,\ 100$\,m; normal-offset lookup, 8 rotated PCF taps.
 \end{block}
 \begin{block}{Fog and tone map}
-\eqimg{0.62}{fog}\eqimg{0.88}{aces}
+\eqimg{0.6}{fog}\eqimg{0.85}{aces}
 \end{block}
 \column{0.4\textwidth}
-\pic{1}{dusk.jpg}\\[1pt]{\small\centering Dusk: sun, sky, haze, shadows}\\[3pt]
-\small Ambient = sky diffuse + split-sum specular, times SSAO.
+\pic{1}{dusk.jpg}\\[1pt]{\small\centering Dusk: sun, sky, haze, shadows}\\[1pt]
+\footnotesize Ambient = sky diffuse + split-sum specular, times SSAO.
 \end{columns}
 \end{frame}
 

@@ -1,10 +1,10 @@
-% Companion to report.tex: every equation explained for oral presentation.
+% Companion to report.tex and the slides: every equation explained for oral presentation.
 \documentclass[11pt,a4paper]{article}
 \usepackage[T1]{fontenc}
 \usepackage{newtxtext,newtxmath}
 \usepackage[a4paper,margin=0.9in]{geometry}
-\usepackage{setspace}\setstretch{1.12}
-\usepackage{amsmath,booktabs,tabularx,enumitem,xcolor,microtype}
+\usepackage{setspace}\setstretch{1.1}
+\usepackage{amsmath,booktabs,tabularx,enumitem,xcolor,microtype,titlesec}
 \usepackage[most]{tcolorbox}
 \usepackage[hidelinks]{hyperref}
 \setlength{\parindent}{0pt}\setlength{\parskip}{5pt}
@@ -13,106 +13,145 @@
 	title={\small\bfseries How to say it in 20 seconds},coltitle=black,colbacktitle=black!12,fontupper=\small}
 \newtcolorbox{ex}{colback=blue!3,colframe=blue!40,boxrule=0.4pt,arc=1.5mm,left=4pt,right=4pt,top=2pt,bottom=2pt,
 	title={\small\bfseries Worked example (numbers checked by script)},coltitle=black,colbacktitle=blue!10,fontupper=\small}
-\usepackage{titlesec}
 \titleformat{\section}{\large\bfseries}{}{0pt}{}
 \titlespacing*{\section}{0pt}{12pt}{4pt}
 
 \begin{document}
 \begin{center}
-	{\LARGE\bfseries Equation Guide for the Sentinel Report}\\[4pt]
+	{\LARGE\bfseries Equation Guide for the Sentinel Report and Slides}\\[4pt]
 	{\large Md.\ Shifat Hasan, Roll 2107067 \,|\, CSE 4102}
 \end{center}
 
-Each section matches one equation of Chapter~III (numbers in brackets are the report's equation numbers). For every equation: what it does, what each symbol means, why it has that shape, a numeric example, the exact place in the code, and a short script for the viva. All formulas were re-checked against the source files; four statements in the first draft were corrected (the IK angle, the Cook--Torrance form, the normal-map scale and the wind formula) and the report now matches the code.
+Each section explains one group of equations from Chapter~III and the slides: what it does, what each symbol means, why it has that shape, a numeric example, where it lives in the code, and a short spoken summary. All formulas were checked against the source files. Part A (T1--T6) covers \emph{transformations}, how objects are created and combined; Part B (G1--G4) noise, textures and shapes; Part C (L1--L5) \emph{illumination models and lights}; Part D (G5--G10) fog, tone mapping, sky and world.
 
-\section{G1. Noise deformer (3.1): turning a sphere into a rock}
-\[\mathbf p'=\mathbf p+A\,\nu(f\,\mathbf p)\,\hat n,\qquad \lVert\mathbf p'-\mathbf p\rVert\le A.\]
-\textbf{Meaning.} Every vertex $\mathbf p$ of a mesh is pushed along its surface direction $\hat n$ by a smooth random amount. \textbf{Symbols:} $A$ amplitude in metres (largest possible push); $\nu\in[-1,1]$ a 3-D fractal noise value; $f$ frequency, in cycles per metre (higher $f$ gives smaller bumps, because the noise is sampled at $f\mathbf p$); $\hat n$ unit normal of the original surface. \textbf{Why the bound holds:} $|\nu|\le1$ and $\lVert\hat n\rVert=1$, so the push is at most $A$; this is what makes object size ranges testable. Neighbouring vertices get nearly equal $\nu$ (noise is smooth), so the surface stays connected and lumpy, not spiky.
-\begin{ex}$A=0.3$\,m and $\nu=0.5$ at one vertex: the vertex moves $0.3\times0.5=0.15$\,m outward. At $\nu=-1$ it moves 0.3\,m inward.\end{ex}
-\textbf{Code:} \code{Engine/Procedural/Deform.odin}, case \code{Noise\_Displace}.
-\begin{say}``A noise deformer moves each vertex along its normal by amplitude times smooth noise, so shapes get natural lumps while the maximum change is guaranteed to be the amplitude.''\end{say}
+\section*{Part A. Transformations}
 
-\section{G2. Two-bone inverse kinematics (3.2): placing a foot}
+\section{T1. Homogeneous coordinates and the three basic matrices}
+\[\begin{gathered}T(\mathbf t)=\begin{pmatrix}I&\mathbf t\\\mathbf 0^{\top}&1\end{pmatrix},\quad S(\mathbf s)=\operatorname{diag}(s_x,s_y,s_z,1),\\[4pt] R_y(\theta)=\begin{pmatrix}\cos\theta&0&\sin\theta&0\\0&1&0&0\\-\sin\theta&0&\cos\theta&0\\0&0&0&1\end{pmatrix}\end{gathered}\]
+\textbf{Meaning.} A point $(x,y,z)$ is stored as $(x,y,z,1)^{\top}$. With that extra $1$, \emph{moving} (adding a vector) becomes a matrix multiplication like turning and scaling, so any chain of moves, turns and stretches collapses into a single $4\times4$ matrix. \textbf{Symbols:} $\mathbf t$ the move vector; $\mathbf s$ the per-axis stretch; $\theta$ the turn angle (radians). $R_x$ and $R_z$ follow the same pattern about their axes.
+\begin{ex}$R_y(90^{\circ})$ applied to $(1,0,0)$: $x'=x\cos\theta+z\sin\theta=0$, $z'=-x\sin\theta+z\cos\theta=-1$, so the point goes to $(0,0,-1)$.\end{ex}
+\textbf{Code:} \code{Engine/Procedural/Assembly.odin}, \code{part\_transform}.
+\begin{say}``A fourth coordinate of one lets a move be a matrix too, so any sequence of moves, turns and scales is one matrix.''\end{say}
+
+\section{T2. The transform of one part, and why the order matters}
+\[M_{\text{part}}=T(\mathbf t)\,R_z(\gamma)\,R_y(\beta)\,R_x(\alpha)\,S(\mathbf s),\qquad \mathbf p_{\text{object}}=M_{\text{part}}\,\mathbf p_{\text{part}}\]
+\textbf{Meaning.} Matrices multiply the point from the right, so the \emph{rightmost} acts first: the part is stretched, then turned about $x$, then $y$, then $z$, and finally moved. Because the move comes last, the turn happens about the part's own centre. Rotations and scaling do not commute, so the order is part of the definition.
+\begin{ex}Vertex $(1,0,0)$, $\mathbf s=(2,1,1)$, $\beta=90^{\circ}$, $\mathbf t=(5,0,0)$: scale gives $(2,0,0)$; $R_y(90^{\circ})$ gives $(0,0,-2)$; the move gives $(5,0,-2)$.\end{ex}
+\textbf{Code:} \code{Engine/Procedural/Assembly.odin}. \textbf{Say:} ``Scale first, turn about the centre, move last, because the right-most matrix acts first.''
+
+\section{T3. Normals use the inverse transpose}
+\[\hat n'=\frac{(L^{-1})^{\top}\hat n}{\left\lVert(L^{-1})^{\top}\hat n\right\rVert},\qquad L=\text{upper-left }3\times3\text{ block of }M\]
+\textbf{Meaning.} A normal must stay perpendicular to its surface. Stretching a surface changes its tangent directions, so multiplying the normal by $M$ would tilt it. The inverse transpose is exactly the matrix that keeps $\hat n'\cdot(L\mathbf t)=\hat n\cdot\mathbf t=0$ for every tangent $\mathbf t$ (proof: $((L^{-1})^{\top}\hat n)^{\top}L\mathbf t=\hat n^{\top}L^{-1}L\mathbf t=\hat n^{\top}\mathbf t$). The result is re-normalised to unit length. If $\det L<0$ the object is mirrored, so the engine also reverses each triangle's winding and the tangent handedness.
+\begin{ex}$S=\operatorname{diag}(2,1,1)$, $\hat n=(1,1,0)/\sqrt2$, tangent $(1,-1,0)\to(2,-1,0)$. Correct: $(0.5,1,0)/1.118=(0.447,0.894,0)$, dot with the stretched tangent $=0$. Naive $S\hat n\propto(0.894,0.447,0)$ gives $1.34\neq0$ (tilted).\end{ex}
+\textbf{Code:} \code{Engine/Procedural/MeshBuilder.odin}, \code{Mesh\_Append}. \textbf{Say:} ``Normals transform by the inverse transpose so they stay perpendicular after a stretch.''
+
+\section{T4. Hierarchies: products down the chain}
+\[M_{\text{gun}}=\underbrace{T(\mathbf p)\,R_y(\psi)\,R_x(-\phi)\,R_z(\rho)}_{\text{hull}}\;\underbrace{T(\mathbf c_t)\,R_y(\theta_t)}_{\text{turret}}\;\underbrace{T(\mathbf c_g)\,R_x(-\theta_g)}_{\text{gun}}\]
+\textbf{Meaning.} A child part's world matrix is its parent's matrix times its own local matrix. $\mathbf p,\psi,\phi,\rho$: hull position, yaw, pitch, roll; $\mathbf c_t,\theta_t$: turret pivot and turn; $\mathbf c_g,\theta_g$: gun pivot and elevation. Turning the hull changes the leftmost factor, so the turret and gun are carried along, while turning the turret alone leaves the hull factor unchanged. Soldiers work the same way: each limb matrix puts its origin at the upper joint and its local $y$ axis along (lower joint $-$ upper joint).
+\textbf{Code:} \code{Game/Vehicles/Vehicle.odin} (\code{Vehicle\_Hull/Turret/Gun\_Matrix}); \code{Game/Characters/Soldier.odin} (\code{Segment\_Matrix}). \textbf{Say:} ``Each child multiplies its parent's matrix, so moving the parent moves everything below it.''
+
+\section{T5. Combining parts, placing and instancing}
+\[M_{\text{world}}=T(x,\text{ground},z)\,R_y(\text{yaw}),\qquad \mathbf p_{\text{world}}=M_{\text{world}}\,M_{\text{part}}\,\mathbf p\]
+\textbf{Meaning.} Every part of an object that shares a material is appended into \emph{one} mesh, each vertex multiplied by its $M_{\text{part}}$ (so one draw call per material). The finished object is placed by $M_{\text{world}}$; \emph{instancing} draws that mesh many times, each with its own $M_{\text{world}}$ in an instance buffer (one call for thousands of trees).
+\textbf{Code:} \code{Engine/Procedural/Assembly.odin} (\code{Assembly\_Build}); \code{Game/Base/BaseScene.odin}. \textbf{Say:} ``Bricks are merged by material, then the whole object is stamped many times by one matrix per copy.''
+
+\section{T6. From the world to the screen: view, projection, zoom}
+\[\mathbf p_{\text{clip}}=P\,V\,M_{\text{world}}\,M_{\text{part}}\,\mathbf p,\quad P=\begin{pmatrix}f/a&0&0&0\\0&f&0&0\\0&0&\tfrac{n+r}{n-r}&\tfrac{2nr}{n-r}\\0&0&-1&0\end{pmatrix},\quad f=\frac{1}{\tan(\mathrm{fov}/2)},\quad \mathbf p_{\text{screen}}=\frac{(x,y)}{w}\]
+\[\tan\frac{\mathrm{fov}'}{2}=\frac{1}{k}\tan\frac{\mathrm{fov}}{2}\]
+\textbf{Meaning.} $V$ is the look-at matrix: it moves the camera to the origin and turns the target onto $-z$. $P$ is the perspective matrix: $a$ aspect ratio, $n,r$ near and far planes, $f$ the focal factor. The fourth output $w$ equals the distance in front of the camera, and dividing $(x,y)$ by $w$ makes far things smaller. A zoom of factor $k$ narrows the field of view as shown.
+\begin{ex}fov $=72^{\circ}$: $f=1/\tan36^{\circ}=1.376$. Binocular zoom $k=4$: $\tan(\mathrm{fov}'/2)=0.7265/4$, so $\mathrm{fov}'=20.6^{\circ}$.\end{ex}
+\textbf{Code:} \code{Engine/Render/Camera.odin}. \textbf{Say:} ``Model, view, projection, then divide by depth: that is the whole path from a vertex to a pixel.''
+
+\section*{Part B. Noise, textures and shapes}
+
+\section{G1. Noise deformer}
+\[\mathbf p'=\mathbf p+A\,\nu(f\,\mathbf p)\,\hat n,\qquad \lVert\mathbf p'-\mathbf p\rVert\le A,\quad \nu\in[-1,1]\]
+Every vertex is pushed along its normal by a smooth random amount. $A$: amplitude (m); $f$: cycles per metre (higher means smaller bumps). Because $|\nu|\le1$ and $\lVert\hat n\rVert=1$, no vertex moves farther than $A$, which makes object sizes testable. \emph{Example:} $A=0.3$, $\nu=0.5\Rightarrow$ the vertex moves $0.15$\,m outward. \textbf{Code:} \code{Engine/Procedural/Deform.odin}. \textbf{Other deformers:} taper scales $(x,z)$ by a factor linear in height; twist rotates by $\theta(y)=\Theta\,y/h$; bend wraps the axis on a circle of curvature $1/R$.
+
+\section{G2. Two-bone inverse kinematics}
 \[\cos\alpha=\frac{a^{2}+c^{2}-b^{2}}{2ac}\]
-\textbf{Meaning.} A leg has an upper bone (length $a$, thigh) and a lower bone (length $b$, shin). Given where the foot must be, we need the hip angle. The hip, knee and foot form a triangle with sides $a$, $b$ and $c=|{\rm target}-{\rm hip}|$; the \emph{law of cosines} gives any angle from the three sides. \textbf{Symbols:} $\alpha$ angle at the hip between the hip-to-target line and the thigh. The knee position then lies at distance $a\cos\alpha$ along the target line and $a\sin\alpha$ to the side. The interior knee angle $\theta$ uses the same law: $\cos\theta=(a^2+b^2-c^2)/2ab$. \textbf{Safety:} the code clamps $c$ and the cosine to $[-1,1]$, so an unreachable target gives a straight leg instead of a numerical error.
-\begin{ex}$a=b=0.45$\,m, foot target $c=0.8$\,m away: $\cos\alpha=0.64/0.72=0.889$, so $\alpha=27.3^{\circ}$ and the knee angle is $125.5^{\circ}$ (bent but not folded). At $c=0.9=a+b$ the leg is straight ($\alpha=0$).\end{ex}
-\textbf{Code:} \code{Game/Characters/Ik.odin} (law of cosines in the header comment and body).
-\begin{say}``Hip, knee and foot make a triangle whose sides I know, so the law of cosines gives the joint angle; no animation files are needed.''\end{say}
+Hip, knee and foot form a triangle with sides $a$ (thigh), $b$ (shin) and $c=|\text{target}-\text{hip}|$; the law of cosines gives the hip angle $\alpha$ between the target line and the thigh. The code clamps $c$ and the cosine to $[-1,1]$ so an unreachable target gives a straight leg. \emph{Example:} $a=b=0.45$, $c=0.8$: $\cos\alpha=0.889$, $\alpha=27.3^{\circ}$; knee angle $\cos\theta=(a^2+b^2-c^2)/2ab\Rightarrow125.5^{\circ}$. \textbf{Code:} \code{Game/Characters/Ik.odin}.
 
-\section{G3. Fractal noise (3.3) and why textures tile}
-\[F(\mathbf x)=\frac{\sum_{i=0}^{n-1}2^{-i}\,\nu(2^{i}\mathbf x)}{\sum_{i=0}^{n-1}2^{-i}}\]
-\textbf{Base noise $\nu$.} At each grid corner a random unit direction (one of 16, picked by a hash of the corner index) is stored. For a point inside a cell, $\nu$ takes the dot product of each corner direction with the vector from that corner to the point, then blends the four values with the smooth curve $s(t)=6t^5-15t^4+10t^3$ (it has zero slope and zero curvature at 0 and 1, so no grid lines show), and multiplies by $\sqrt2$ so the result spans $[-1,1]$.
-\textbf{Fractal sum.} Octave $i$ has twice the frequency ($2^i\mathbf x$) and half the strength ($2^{-i}$): big hills, then boulders, then pebbles. The denominator is the total strength, so $F$ stays in $[-1,1]$.
-\textbf{Tiling.} The corner direction is chosen from the \emph{cell index modulo the period} $P$ (and $P$ doubles each octave). Then $F(\mathbf x+P\mathbf e)=F(\mathbf x)$ for whole-number shifts $\mathbf e$: the right edge of a texture equals its left edge, so repeated tiles have no seam. The test suite checks this exactly (shift $(1,-2)$ tiles; difference must be 0).
-\begin{ex}$n=4$ octaves: weights $1,\tfrac12,\tfrac14,\tfrac18$ sum to $1.875$. A value $\nu=+1$ in every octave gives $F=1$; typical values mix and give about $\pm0.4$. $s(0.5)=0.5$ exactly, and $s(0.25)=0.104$, so the blend is gentle near cell edges.\end{ex}
-\textbf{Code:} \code{Shaders/Include/Noise.glsl} (\code{gradient\_noise}, \code{fbm}).
-\begin{say}``Fractal noise adds smooth random layers, each twice as detailed and half as strong; by wrapping the grid index it repeats exactly, so textures tile.''\end{say}
-\textbf{Variants used:} \emph{domain warping} $F(\mathbf x+s[F_1(\mathbf x),F_2(\mathbf x)])$ evaluates $F$ at a point shifted by two other noises, which bends straight lattice patterns into swirls (still periodic, since every term is). \emph{Ridged} noise uses $(1-|\nu|)^2$: $|\nu|$ folds the noise at zero so zero crossings become sharp ridges (cracks, bark). \emph{Cellular (Worley)} noise uses the distance to the nearest random point (leaves, pebbles).
+\section{G3. Fade curve, fractal noise and tiling}
+\[s(t)=6t^{5}-15t^{4}+10t^{3},\qquad F(\mathbf x)=\frac{\displaystyle\sum\limits_{i=0}^{n-1}2^{-i}\,\nu\!\left(2^{i}\mathbf x\right)}{\displaystyle\sum\limits_{i=0}^{n-1}2^{-i}},\qquad F(\mathbf x+P\mathbf e)=F(\mathbf x)\]
+\textbf{Fade.} $s$ blends the four corner gradients; it has zero first and second derivative at 0 and 1 (so no grid lines show). The raw value is multiplied by $\sqrt2$ so $\nu\in[-1,1]$ (unit gradients bound it by $\sqrt2/2$). \textbf{Fractal sum.} Octave $i$ has twice the frequency and half the strength; the denominator is the total weight, so $F\in[-1,1]$. \textbf{Tiling.} Corner gradients are chosen from the cell index \emph{modulo the period} $P$ (doubling each octave), so the right edge equals the left edge: textures tile exactly (tested). \emph{Example:} $n=4$: weights $1,\tfrac12,\tfrac14,\tfrac18$ sum to $1.875$; $s(0.5)=0.5$, $s(0.25)=0.104$. \textbf{Variants:} warping $F(\mathbf x+s[F_1,F_2])$, ridged $\sum2^{-i}(1-|\nu_i|)^2/\sum2^{-i}$, cellular (distance to the nearest random point). \textbf{Code:} \code{Shaders/Include/Noise.glsl}.
 
-\section{G4. Normal map from a height map (3.4)}
-\[h_x\approx\frac{3(h_{NE}+h_{SE}-h_{NW}-h_{SW})+10(h_E-h_W)}{32\,\Delta\,N},\qquad \hat n=\frac{(-k\,h_x,\,-k\,h_y,\,1)}{\lVert(-k\,h_x,\,-k\,h_y,\,1)\rVert}\]
-\textbf{Meaning.} A recipe provides a height $h$ per texel. Lighting only needs the surface \emph{direction}, which tilts away from the slope: a surface rising to the right ($h_x>0$) tilts its normal to the left ($-h_x$). \textbf{Scharr filter:} the slope is a weighted difference of the right column ($3,10,3$) minus the left column of the $3\times3$ neighbourhood. Weights sum to 16 over a distance of two texels, hence the divisor $32\Delta$; it treats diagonal and axis-aligned slopes equally, which the plain two-point difference does not. \textbf{Symbols:} $\Delta$ one texel (here $1/1024$ of the tile); $N$ cells per tile (so a bumpy recipe with more cells is not made steeper); $k$ the per-material bump strength; the vector is normalised to unit length. The last component $1$ means a flat area gives $\hat n=(0,0,1)$.
-\begin{ex}A perfect ramp $h=0.7x$ (with $\Delta=1$): the numerator is $3\cdot2.8+10\cdot1.4=22.4$, divided by 32 gives $0.7$, the true slope (verified by script). With $k=1$: $\hat n=(-0.7,0,1)/1.22=(-0.57,0,0.82)$, tilted $35^{\circ}$.\end{ex}
-\textbf{Cavity darkening.} Where $h$ is below the mean of its four neighbours (a negative Laplacian), the albedo is multiplied by $1-0.5c$ and the ambient occlusion by $1-c$, where $c\in[0,0.5]$ grows with the depth of the dent. \textbf{Triplanar weights:} $w_i=|n_i|^4/\sum_j|n_j|^4$ (the code uses exponent 4): a surface facing $+y$ mostly uses the top-down projection. For $\mathbf n=(0.6,0.8,0)$ the weights are $0.24,0.76,0$.
-\textbf{Code:} \code{Shaders/Include/BakeMain.glsl}, \code{Shaders/Include/Triplanar.glsl}.
-\begin{say}``The height map's slope tells how the surface tilts; a Scharr filter measures it fairly in every direction, and the normal is minus the slope with a one up, normalised.''\end{say}
+\section{G4. Normal map from a height map, and triplanar weights}
+\[\begin{gathered}h_x\approx\frac{3(h_{NE}+h_{SE}-h_{NW}-h_{SW})+10(h_E-h_W)}{32\,\Delta\,N},\qquad \hat n=\frac{(-k\,h_x,\,-k\,h_y,\,1)}{\lVert(-k\,h_x,\,-k\,h_y,\,1)\rVert}\\[6pt] w_i=\frac{|n_i|^{4}}{\displaystyle\sum\limits_{j\in\{x,y,z\}}|n_j|^{4}}\end{gathered}\]
+The surface direction tilts away from the slope. The \emph{Scharr} filter weights the right column by $3,10,3$ minus the left column; weights sum to $16$ over two texels, hence $32\Delta$; it treats diagonal and axis slopes equally. $\Delta$: one texel; $N$: cells per tile; $k$: bump strength. \emph{Example:} ramp $h=0.7x$ gives $h_x=0.7$ exactly. Triplanar weights project the picture along three axes: for $\mathbf n=(0.6,0.8,0)$ they are $(0.24,0.76,0)$. \textbf{Code:} \code{Shaders/Include/BakeMain.glsl}, \code{Triplanar.glsl}.
 
-\section{G5. Cook--Torrance reflection (3.5)}
-\[f=\frac{(1-F_l)(1-F_v)\,\mathbf c_d}{\pi}+D\,V\,F,\quad D=\frac{\alpha^{2}}{\pi\big((\mathbf n\!\cdot\!\mathbf h)^{2}(\alpha^{2}-1)+1\big)^{2}},\quad F=F_0+(1-F_0)(1-\mathbf v\!\cdot\!\mathbf h)^{5}\]
-\[V=\frac{0.5}{(\mathbf n\!\cdot\!\mathbf l)\sqrt{(\mathbf n\!\cdot\!\mathbf v)^2(1-\alpha^2)+\alpha^2}+(\mathbf n\!\cdot\!\mathbf v)\sqrt{(\mathbf n\!\cdot\!\mathbf l)^2(1-\alpha^2)+\alpha^2}}\]
-\textbf{Meaning.} $f$ is the fraction of light arriving from direction $\mathbf l$ that leaves toward the viewer $\mathbf v$; the lighting pass multiplies it by the light's brightness and $\mathbf n\!\cdot\!\mathbf l$. The surface is imagined as many tiny mirrors (microfacets). \textbf{Vectors:} $\mathbf n$ surface normal, $\mathbf l$ to the light, $\mathbf v$ to the eye, $\mathbf h$ halfway between $\mathbf l$ and $\mathbf v$ (only facets facing $\mathbf h$ reflect light from $\mathbf l$ to $\mathbf v$).
-\textbf{Specular part $DVF$.} $D$ (GGX): the share of facets facing $\mathbf h$; rough surfaces have small peak, wide lobe. $\alpha=\text{roughness}^2$. $V=G/(4\,\mathbf n\!\cdot\!\mathbf l\,\mathbf n\!\cdot\!\mathbf v)$: the geometry term $G$ (facets blocking each other) with the denominator folded in (height-correlated Smith form). $F$ (Schlick): every surface reflects more at glancing angles; $F_0$ is reflectance looking straight on ($0.04$ for plastic, stone, paint; the albedo colour for metals).
-\textbf{Diffuse part.} $\mathbf c_d/\pi$ is the Lambert term ($\pi$ makes total reflected light equal the colour). It is scaled by $(1-F_l)(1-F_v)$ because light that mirror-reflected at the surface cannot also scatter inside; this keeps energy $\le1$. Metals have $\mathbf c_d=0$.
-\begin{ex}Roughness 0.5 gives $\alpha=0.25$. Peak of $D$ at $\mathbf n\!\cdot\!\mathbf h=1$: $1/(\pi\cdot0.0625)=5.09$. Fresnel with $F_0=0.04$: looking at $60^{\circ}$ gives $F=0.07$; at $85^{\circ}$ (grazing) $F=0.65$, why wet roads shine at low angles.\end{ex}
-\textbf{Code:} \code{Shaders/Include/Brdf.glsl}, \code{microfacet\_cook\_torrance}.
-\begin{say}``Light reflects as a diffuse part plus a specular part from microscopic mirrors: GGX says how many face the eye, Smith says how many hide each other, Schlick says how reflective at this angle.''\end{say}
+\section*{Part C. Illumination models and lights}
 
-\section{G6. Fog by distance (haze)}
-\[C=T\,C_{\text{surface}}+(1-T)\,C_{\text{haze}},\qquad T=e^{-kd},\quad k=3.5\times10^{-4}\ \text{m}^{-1}\]
-\textbf{Meaning.} Air absorbs and scatters light. $T$ is the fraction of a surface's light that survives $d$ metres of air (Beer--Lambert law: equal thickness removes an equal \emph{fraction}, so the decay is exponential); the missing part is replaced by the sky-coloured haze, a linear mix. \textbf{Symbols:} $d$ distance to the camera; $k$ density.
-\begin{ex}$d=100$\,m: $T=0.966$ (almost clear). $d=1$\,km: $T=0.705$. $d=3$\,km: $T=0.35$, so far hills are mostly sky colour, giving depth. The haze colour uses only the smooth atmosphere (never stars or the moon), which fixed the night streak bug.\end{ex}
-\textbf{Code:} \code{Shaders/DeferredBase.glsl} (\code{FOG\_DENSITY\_PER\_METER}).
-\begin{say}``Each metre of air removes the same percentage of light, so transmittance is an exponential, and what is lost is replaced by sky colour.''\end{say}
+\section{L1. The lighting sum}
+\[L_o=\sum\limits_{j=1}^{N_L}f(\mathbf l_j,\mathbf v)\,L_j\,\mathrm{att}_j\,\mathrm{sh}_j\,\max(0,\mathbf n\cdot\mathbf l_j)\;+\;\mathrm{ambient}\cdot\mathrm{AO}\;+\;\mathbf e\]
+Light leaving a pixel is the sum over all $N_L$ lights of: the illumination model $f$ (share of light from $\mathbf l$ that leaves toward the eye $\mathbf v$), the light's colour times intensity $L_j$, its distance falloff $\mathrm{att}_j$, its shadow $\mathrm{sh}_j\in[0,1]$, and Lambert's cosine $\mathbf n\cdot\mathbf l$ (light spreads over a larger area at a slant); plus sky ambient light darkened by ambient occlusion AO, plus the surface's own emission $\mathbf e$. \textbf{Code:} \code{Shaders/Include/Lighting.glsl}, \code{Shaders/DeferredBase.glsl}. \textbf{Say:} ``Every light adds model times colour times falloff times shadow times cosine; then add sky ambient and emission.''
 
-\section{G7. ACES tone mapping (3.6)}
-\[C_{\text{out}}=\operatorname{clamp}_{[0,1]}\!\left(\frac{x(2.51x+0.03)}{x(2.43x+0.59)+0.14}\right),\qquad x=\text{exposure}\times\text{radiance}\]
-\textbf{Meaning.} Scene light (HDR) can be 0.01 in shade or 40 at the sun, but a display shows 0 to 1. This curve (Narkowicz's fit of the ACES film curve) compresses highlights smoothly (shoulder), lifts dark detail gently (toe) and has an S-shaped contrast like film. \textbf{Symbols:} $x$ radiance scaled by exposure (1 by day, rising to 6 at night, like the eye adapting); applied to each colour channel. The numbers are fitted constants.
-\begin{ex}$x=0.18$ (mid-grey) $\to0.267$; $x=1\to0.804$; $x=4\to0.973$. Quadrupling brightness from 1 to 4 changes the output by only 0.17: highlights do not clip to white abruptly.\end{ex}
-After the curve the image is graded, converted to sRGB for the display and dithered by about one 8-bit step to avoid banding. \textbf{Code:} \code{Shaders/Include/Tonemap.glsl}, \code{Shaders/PostTonemap.glsl}.
-\begin{say}``A rational curve maps unlimited brightness into zero-to-one with a soft shoulder, the way film does.''\end{say}
+\section{L2. The six illumination models}
+\begin{align*}
+f_{\text{Lambert}}&=\frac{\mathbf c_d}{\pi}\\[3pt]
+f_{\text{Phong}}&=\frac{\mathbf c_d(1-F_0)}{\pi}+F_0\,\frac{m+2}{2\pi}\,(\mathbf r\cdot\mathbf v)^{m},\quad \mathbf r=2(\mathbf n\cdot\mathbf l)\mathbf n-\mathbf l\\[3pt]
+f_{\text{Blinn--Phong}}&=\frac{\mathbf c_d(1-F_0)}{\pi}+F_0\,\frac{m+8}{8\pi}\,(\mathbf n\cdot\mathbf h)^{m},\quad \mathbf h=\frac{\mathbf l+\mathbf v}{\lVert\mathbf l+\mathbf v\rVert}\\[3pt]
+f_{\text{Oren--Nayar}}&=\frac{\mathbf c_d}{\pi}\left(A+B\max(0,\cos\Delta\varphi)\sin\alpha\tan\beta\right)\\[3pt]
+f_{\text{Cook--Torrance}}&=\frac{(1-F_l)(1-F_v)\,\mathbf c_d}{\pi}+D\,V\,F\\[3pt]
+\langle\mathbf n\cdot\mathbf l\rangle_{\text{Subsurface}}&=\operatorname{clamp}\!\left(\frac{\mathbf n\cdot\mathbf l+w}{1+w},0,1\right),\quad w=0.5
+\end{align*}
+\textbf{Common symbols.} $\mathbf c_d$ diffuse colour (metals have none); $F_0$ base reflectance ($0.04$ for non-metals, the albedo for metals); $m=\max\!\big(2/(\rho^2+10^{-4})-2,\,1\big)$ shininess from roughness $\rho$ (roughness $0.5\Rightarrow m=6$).
+\textbf{Lambert:} matte; $\mathbf c_d/\pi$ makes the total reflected light equal the colour (albedo $0.5\Rightarrow0.159$).
+\textbf{Phong:} adds a highlight along the mirror direction $\mathbf r$; $(m+2)/2\pi$ normalises it so a sharper highlight does not gain energy.
+\textbf{Blinn--Phong:} uses the half vector $\mathbf h$ (cheaper, stable at glancing angles); normaliser $(m+8)/8\pi$.
+\textbf{Oren--Nayar:} rough surfaces are many tiny Lambertian facets that scatter light back toward the source, so they look flat instead of darkening at the edge. $\sigma=\rho$, $A=1-\tfrac{0.5\sigma^2}{\sigma^2+0.33}$, $B=\tfrac{0.45\sigma^2}{\sigma^2+0.09}$, $\alpha=\max(\theta_i,\theta_r)$, $\beta=\min(\theta_i,\theta_r)$, $\Delta\varphi$ the azimuth between light and view. For $\sigma=0.6$: $A=0.739$, $B=0.360$ (Lambert is $A=1,B=0$).
+\textbf{Subsurface:} the cosine ramps from 1 to 0 as $\mathbf n\cdot\mathbf l$ goes $1\to-w$, so light wraps past the shadow line like skin. \emph{Example:} $\mathbf n\cdot\mathbf l=0.5\to0.667$; $0\to0.333$; $-0.25\to0.167$; $-0.5\to0$.
+\textbf{Cook--Torrance:} see L3. Where used: cloth and canvas Oren--Nayar, skin Subsurface, everything else Cook--Torrance. \textbf{Code:} \code{Shaders/Include/Brdf.glsl}.
+\begin{say}``Lambert is matte; Phong and Blinn--Phong add a highlight; Oren--Nayar flattens rough cloth; Cook--Torrance is the physical default; Subsurface lets light wrap through skin.''\end{say}
 
-\section{G8. Sun height (inline in Section 3.2.5)}
-\[\sin(\text{elev})=\sin\varphi\sin\delta+\cos\varphi\cos\delta\cos h,\qquad h=15^{\circ}(\text{hours}-12)\]
-\textbf{Meaning.} Standard spherical astronomy. $\varphi=35^{\circ}$ latitude, $\delta=15^{\circ}$ the sun's declination (a late-spring day), $h$ the hour angle (the Earth turns $15^{\circ}$ per hour; $h=0$ at noon). The full direction vector uses the same terms with east and south components. Positive result: sun above the horizon.
-\begin{ex}Noon: $\sin=0.1485+0.7913=0.9398$, elevation $70^{\circ}$. At 6:00 and 18:00: $8.5^{\circ}$ (low, orange sun). Midnight: $-40^{\circ}$, so the moon (opposite the sun) lights the scene.\end{ex}
-\textbf{Code:} \code{Game/Gameplay/TimeOfDay.odin}.
+\section{L3. Cook--Torrance: distribution, Fresnel and visibility}
+\[D=\frac{\alpha^{2}}{\pi\left((\mathbf n\cdot\mathbf h)^{2}(\alpha^{2}-1)+1\right)^{2}},\qquad \alpha=\rho^{2},\qquad F=F_0+(1-F_0)\left(1-\mathbf v\cdot\mathbf h\right)^{5}\]
+\[V=\frac{0.5}{(\mathbf n\cdot\mathbf l)\sqrt{(\mathbf n\cdot\mathbf v)^{2}(1-\alpha^{2})+\alpha^{2}}+(\mathbf n\cdot\mathbf v)\sqrt{(\mathbf n\cdot\mathbf l)^{2}(1-\alpha^{2})+\alpha^{2}}}\]
+The surface is imagined as tiny mirrors. $D$ (GGX) is the share of mirrors facing $\mathbf h$ (only those reflect $\mathbf l$ toward $\mathbf v$); $F$ (Schlick) is how reflective a surface is at this angle (every surface becomes a mirror at glancing angles); $V=G/(4\,\mathbf n\cdot\mathbf l\,\mathbf n\cdot\mathbf v)$ is the Smith visibility (mirrors hiding each other). The diffuse term is scaled by $(1-F_l)(1-F_v)$ because light that mirror-reflected cannot also scatter inside, keeping energy $\le1$. \emph{Example:} roughness $0.5$: $\alpha=0.25$, peak $D=1/(\pi\alpha^2)=5.09$; $F_0=0.04$: $F=0.07$ at $60^{\circ}$, $0.65$ at $85^{\circ}$. \textbf{Code:} \code{Shaders/Include/Brdf.glsl}.
 
-\section{G9. Cloud plane and wind (3.7)}
-\[\mathbf P_{xz}=\frac{H}{d_y}\,(d_x,d_z)+\mathbf w\,t\]
-\textbf{Meaning.} Clouds are drawn as a flat noise layer at height $H$. For a view direction $\mathbf d=(d_x,d_y,d_z)$, a ray from the ground reaches height $H$ after travelling $H/d_y$ times the direction (similar triangles); that gives the horizontal position $(d_x,d_z)H/d_y$ where the noise is looked up. Adding $\mathbf wt$ ($\mathbf w$ wind velocity in m/s, $t$ time) slides the pattern, so clouds drift. A faster detail layer ($\times1.35$) and a cirrus layer at 7\,km ($\times1.8$ speed) make shapes change and give depth. Rays near the horizon ($d_y<0.04$) are skipped, because $H/d_y$ would blow up.
-\begin{ex}$\mathbf d=(0.8,0.5,0.33)$ and $H=1500$: $H/d_y=3000$, point $(2400,995)$\,m. With $\mathbf w=(14,5)$\,m/s the pattern moved $(840,300)$\,m after one minute.\end{ex}
-\textbf{Code:} \code{Shaders/Include/Sky.glsl} (\code{add\_clouds}, \code{cloud\_density}); wind in \code{Game/Sandbox/Sandbox.odin}.
+\section{L4. Light sources: falloff and spot cone}
+\[\mathrm{att}(d)=\begin{cases}\dfrac{\left(1-(d/R)^{4}\right)^{2}}{d^{2}+1},&0\le d\le R\\[8pt]0,&d>R\end{cases}\qquad c(\theta)=\begin{cases}1,&\theta\le\theta_i\\[2pt]\left(\dfrac{\cos\theta-\cos\theta_o}{\cos\theta_i-\cos\theta_o}\right)^{2},&\theta_i<\theta<\theta_o\\[8pt]0,&\theta\ge\theta_o\end{cases}\]
+\textbf{Directional} (sun, moon): parallel rays, no falloff. \textbf{Point} (lamps): inverse-square law $1/(d^2+1)$ (the $+1$ keeps it finite at the lamp) times a smooth window $(1-(d/R)^4)^2$ that reaches exactly zero, with zero slope, at the range $R$, so the lamp can be drawn as a bounded sphere. \textbf{Spot} (floodlights): the point light times the cone factor $c$, where $\theta$ is the angle from the spot axis, $\theta_i$ inner and $\theta_o$ outer. \textbf{Area} (ceiling panel): a $4\times4$ grid of point emitters, each intensity$/16$ and weighted by its emission cosine. \emph{Example} $R=14$\,m: $\mathrm{att}(1)=0.50$, $(5)=0.037$, $(10)=0.0054$, $(14)=0$. Spot with $14^{\circ}/26^{\circ}$: $c=1$ at $10^{\circ}$, $0.33$ at $20^{\circ}$, $0$ at $26^{\circ}$. \textbf{Code:} \code{Shaders/Include/Lighting.glsl}.
 
-\section{G10. Tree sway (cantilever wind)}
+\section{L5. Cascaded shadow maps}
+\[z_i=\lambda\,n\left(\frac{r}{n}\right)^{i/N}+(1-\lambda)\left(n+(r-n)\frac{i}{N}\right),\qquad i=1,\dots,N\]
+The view range from near plane $n$ to far $r$ is cut into $N=3$ slices. Logarithmic cuts (first term) keep shadow texels the same size on screen; even cuts (second term) cover the range uniformly; $\lambda=0.75$ blends them. \emph{Example:} $n=0.1$, $r=100$: cuts at $9.1$, $24.2$ and $100$\,m. A pixel uses the slice containing its depth, its lookup is moved along its normal (no self-shadow acne), and eight rotated percentage-closer taps soften the edge. \textbf{Code:} \code{Engine/Render/Shadows.odin}, \code{Shaders/Include/Shadow.glsl}.
+
+\section*{Part D. Atmosphere, fog, tone map, world}
+
+\section{G5. Fog}
+\[C=T\,C_{\text{surface}}+(1-T)\,C_{\text{haze}},\qquad T=e^{-k\,d},\quad k=3.5\times10^{-4}\ \text{m}^{-1}\]
+Each metre of air removes the same fraction of light (Beer--Lambert), so the surviving fraction $T$ is exponential in distance $d$; the rest is replaced by haze colour. \emph{Example:} $d=100$\,m: $T=0.966$; $1$\,km: $0.705$; $3$\,km: $0.35$. The haze colour is the smooth atmosphere only (never stars or the moon, which caused the night streak bug). \textbf{Code:} \code{Shaders/DeferredBase.glsl}.
+
+\section{G6. ACES tone mapping}
+\[C_{\text{out}}=\operatorname{clamp}_{[0,1]}\!\left(\frac{x\,(2.51\,x+0.03)}{x\,(2.43\,x+0.59)+0.14}\right),\qquad x=\text{exposure}\times\text{radiance}\]
+Scene light can range from $0.01$ to $40$, a display shows $0$ to $1$. This fitted film curve compresses highlights smoothly, lifts dark detail and gives an S-shaped contrast; exposure rises from 1 (day) to 6 (night) like the eye adapting. \emph{Example:} $x=0.18\to0.267$, $x=1\to0.804$, $x=4\to0.973$. \textbf{Code:} \code{Shaders/Include/Tonemap.glsl}.
+
+\section{G7. Sun height and cloud plane}
+\[\sin(\text{elevation})=\sin\varphi\sin\delta+\cos\varphi\cos\delta\cos h,\quad h=15^{\circ}(\text{hours}-12),\qquad \mathbf P_{xz}=\frac{H}{d_y}(d_x,d_z)+\mathbf w\,t\]
+Spherical astronomy: latitude $\varphi=35^{\circ}$, declination $\delta=15^{\circ}$, hour angle $h$ ($15^{\circ}$ per hour). Noon: $70^{\circ}$; 6:00 and 18:00: $8.5^{\circ}$; midnight $-40^{\circ}$ (the moon takes over). Clouds are a noise layer at height $H$: a ray with direction $\mathbf d$ reaches it after $H/d_y$ times the direction (similar triangles); adding $\mathbf wt$ (wind velocity times time) slides the pattern. \emph{Example:} $\mathbf d=(0.8,0.5,0.33)$, $H=1500$: point $(2400,995)$\,m; with $\mathbf w=(14,5)$\,m/s the pattern moves $(840,300)$\,m per minute. \textbf{Code:} \code{Game/Gameplay/TimeOfDay.odin}, \code{Shaders/Include/Sky.glsl}.
+
+\section{G8. Tree sway}
 \[\Delta_x=2s\,(0.04+0.1\,g)\left(\frac{y}{9}\right)^{2},\quad \Delta_z=0.35\,\Delta_x,\quad g=\tfrac12+\tfrac12\sin(1.3\,t+0.05\,x+0.03\,z)\]
-\textbf{Meaning.} The vertex shader shifts each tree vertex sideways. A real tree is like a beam fixed at the root: it barely moves at the bottom and most at the top, so the shift grows with the \emph{square} of height $y$ (clamped to 9\,m). $g\in[0,1]$ is a gust that travels across the land (position terms $0.05x+0.03z$ delay it from tree to tree, so trees do not sway in lockstep). $s$ is the per-mesh sway (0.6 for trunks, 1 for foliage; foliage above 1 also adds a small fast flutter). The factor 2 and offsets $0.04$/$0.1$ are tuned amplitudes: calm sway 0.08\,m, full gust 0.28\,m at the top.
-\begin{ex}Foliage ($s=1$), full gust $g=1$: at $y=9$\,m, $\Delta_x=2(0.14)(1)=0.28$\,m; at half height $4.5$\,m it is $0.07$\,m (a quarter, because of the square).\end{ex}
-\textbf{Code:} \code{Shaders/Geometry.glsl}, \code{wind\_offset}.
+A tree is a beam fixed at the root, so it moves little at the bottom and most at the top: the shift grows with the \emph{square} of height $y$. $g\in[0,1]$ is a gust travelling across the land; $s$ is the sway strength (0.6 trunks, 2 foliage with flutter). \emph{Example:} foliage $s=1$, full gust, $y=9$\,m: $0.28$\,m; at $4.5$\,m: $0.07$\,m. \textbf{Code:} \code{Shaders/Geometry.glsl}.
 
-\section{G11. Vehicle steering (bicycle model) and engine power}
+\section{G9. Vehicle steering and engine power}
 \[\dot\psi=\frac{v\tan\delta}{L},\qquad \dot v=a_0\left(1-0.6\,\frac{|v|}{v_{\max}}\right)\]
-\textbf{Steering.} Treat the car as a bicycle with wheel base $L$ (m), front wheel angle $\delta$, speed $v$. The car turns on a circle of radius $R=L/\tan\delta$, so the yaw rate is $v/R=v\tan\delta/L$ (rad/s). Faster means turning faster; reversing flips the sign, as in a real car. (Tracked vehicles instead turn at a fixed rate and can pivot.)
-\textbf{Power fade.} Engine thrust is power divided by speed, so acceleration is high from rest and falls as speed rises. $a_0$ is the maximum acceleration, $v_{\max}$ the limit; at top speed acceleration is still $0.4a_0$ but the speed is clamped to the limit.
-\begin{ex}Jeep ($L=3$, $\delta_{\max}=0.55$\,rad, $v_{\max}=18$, $a_0=2.6$): at 10\,m/s full lock gives $\dot\psi=10\tan0.55/3=2.04$\,rad/s. Solving the speed equation, $v(t)=30(1-e^{-0.0867t})$: 2.5\,m/s after 1\,s, and 18\,m/s after 10.6\,s (it was 24\,m/s with 7\,m/s$^2$ before the realism change).\end{ex}
-\textbf{Code:} \code{Engine/World/GroundVehicle.odin} (\code{yaw\_rate\_for}, \code{next\_speed}).
+Bicycle model: wheel base $L$, steering angle $\delta$, speed $v$; the car turns on a circle of radius $L/\tan\delta$, so yaw rate $=v/R$. Thrust is power over speed, so acceleration is high from rest and fades with speed. \emph{Example} (jeep, $L=3$, $\delta=0.55$, $v_{\max}=18$, $a_0=2.6$): $\dot\psi=2.04$\,rad/s at $10$\,m/s; $v(t)=30(1-e^{-0.0867t})$ gives $2.5$\,m/s after one second and $18$\,m/s after $10.6$\,s. \textbf{Code:} \code{Engine/World/GroundVehicle.odin}.
 
-\section{Short answers to likely questions}
+\section{G10. Evaluation metrics}
+\[t=\frac{1000}{\text{fps}}\ \text{ms},\qquad \varepsilon=\max_{\mathbf u}\left|f(\mathbf u+\mathbf k)-f(\mathbf u)\right|,\ \mathbf k\in\mathbb Z^{2}\]
+Frame time for a 60 fps budget is $16.7$\,ms; our GPU work is $10.9$\,ms (the display waits for refresh). The tiling error $\varepsilon$ is the largest difference between a texture and itself shifted by whole tiles; it must be exactly $0$ for every material (TextureCheck).
+
+\section*{Likely questions}
 \begin{itemize}[leftmargin=0.25in,itemsep=1pt]
-	\item \textbf{Why not use image textures?} The project rule forbids files; noise gives infinite variety from a seed and tiles exactly.
-	\item \textbf{Why a quintic fade and not linear blending?} Linear blending shows grid lines (slope jumps at cell edges); $6t^5-15t^4+10t^3$ has zero first and second derivative there.
-	\item \textbf{Why $\sqrt2$ in the noise?} Unit gradients bound the raw value by $\sqrt2/2\approx0.707$; multiplying by $\sqrt2$ makes the range $[-1,1]$.
-	\item \textbf{Why exponential fog?} Beer--Lambert: each metre removes the same fraction of light.
-	\item \textbf{Why is the GPU time 10.9\,ms but the frame 16.7\,ms?} The display waits for the 60\,Hz refresh; the extra 5.8\,ms is idle headroom.
-	\item \textbf{What did you correct after checking?} IK used the root angle (law of cosines on $a,c,b$), Cook--Torrance has a visibility term $V$ and a diffuse part, the normal-map slope is divided by cells per tile, and the wind has exact constants.
+	\item \textbf{Why $4\times4$ matrices for 3D?} The fourth coordinate lets translation be a matrix; chains collapse to one matrix.
+	\item \textbf{Why is the transform order right to left?} Matrices multiply the column vector from the right, so the rightmost acts first.
+	\item \textbf{Why the inverse transpose for normals?} It keeps normals perpendicular to the stretched surface (proof in T3).
+	\item \textbf{Why a quintic fade and not linear?} Linear shows grid lines; the quintic has zero first and second derivative at the cell edges.
+	\item \textbf{Why Blinn--Phong over Phong?} The half vector is cheaper and behaves better at glancing angles.
+	\item \textbf{Why $(1-F_l)(1-F_v)$ on the diffuse term?} Mirror-reflected light cannot also scatter inside; this keeps energy $\le1$.
+	\item \textbf{Why cascades?} Near shadows need fine texels, far ones can be coarse; $\lambda$ blends logarithmic and even cuts.
+	\item \textbf{GPU 10.9\,ms but frame 16.7\,ms?} The display waits for the 60\,Hz refresh; the rest is idle headroom.
 \end{itemize}
 \end{document}
