@@ -7,7 +7,7 @@
 \usepackage{booktabs,tabularx,amsmath}
 
 \definecolor{kuet}{RGB}{0,122,61}
-\definecolor{ink}{RGB}{30,40,50}
+\definecolor{ink}{RGB}{15,27,45}
 \usetheme{default}
 \usecolortheme{default}
 \setbeamercolor{frametitle}{fg=white,bg=kuet}
@@ -30,25 +30,16 @@
 % 1 ---------------- cover
 \begin{frame}[plain]
 \begin{tikzpicture}[remember picture,overlay]
-  \fill[kuet] (current page.north west) rectangle ([yshift=-3.2cm]current page.north east);
-  \node[white,align=center,font=\small] at ([yshift=-0.9cm]current page.north) {Khulna University of Engineering \& Technology\\Department of Computer Science and Engineering};
-  \node[white,font=\footnotesize] at ([yshift=-2.5cm]current page.north) {CSE 4102: Computer Graphics and Image Processing Laboratory \,|\, 4th Year 1st Term};
+  \fill[ink] (current page.south west) rectangle (current page.north east);
+  \fill[kuet] ([xshift=1.4cm,yshift=-0.0cm]current page.north west) rectangle ++(0.12,-9cm);
+  \node[anchor=west,text=white!60,font=\scriptsize] at ([xshift=2.1cm,yshift=-1.0cm]current page.north west) {KHULNA UNIVERSITY OF ENGINEERING \& TECHNOLOGY \,|\, CSE 4102};
+  \node[anchor=west,text=white,font=\fontsize{46}{50}\selectfont\bfseries] at ([xshift=2.1cm,yshift=-3.2cm]current page.north west) {Sentinel};
+  \node[anchor=west,text=white,font=\Large,align=left] at ([xshift=2.1cm,yshift=-4.75cm]current page.north west) {A Fully Procedural Game Engine\\and Open-World Military Shooter};
+  \fill[kuet] ([xshift=2.1cm,yshift=-5.85cm]current page.north west) rectangle ++(1.6,-0.05);
+  \node[anchor=west,text=white!75,font=\small,align=left] at ([xshift=2.1cm,yshift=-6.6cm]current page.north west) {Nothing is loaded from a model, image or sound file:\\everything is generated from code and a seed.};
+  \node[anchor=west,text=white,font=\small,align=left] at ([xshift=2.1cm,yshift=-8.2cm]current page.north west) {\textbf{Md.\ Shifat Hasan} \ \textcolor{white!60}{Roll 2107067}};
+  \node[anchor=east,text=white!75,font=\scriptsize,align=right] at ([xshift=-1.0cm,yshift=-8.2cm]current page.north east) {Instructors: Md Tajmilur Rahman, Md.\ Mubtashim Abrar Nihal\\4th Year 1st Term \,|\, October 7, 2026};
 \end{tikzpicture}
-\vspace{3.1cm}
-\begin{center}
-{\fontsize{34}{38}\selectfont\bfseries\color{kuet}Sentinel}\\[4pt]
-{\Large\bfseries A Fully Procedural Game Engine\\and Open-World Military Shooter}\\[10pt]
-{\small Nothing is loaded from a model, image or sound file: everything is generated from code and a seed.}
-\end{center}
-\vfill
-\begin{columns}[b]
-\column{0.4\textwidth}\footnotesize
-\textbf{Presented by}\\ Md.\ Shifat Hasan, Roll 2107067
-\column{0.3\textwidth}\centering
-\includegraphics[height=1.5cm]{images/KUET_Logo.png}
-\column{0.3\textwidth}\footnotesize\raggedleft
-\textbf{Instructors}\\ Md Tajmilur Rahman\\ Md.\ Mubtashim Abrar Nihal\\[2pt] October 7, 2026
-\end{columns}
 \end{frame}
 
 % 2 ---------------- outline
@@ -205,31 +196,28 @@
 \end{frame}
 
 % 10 ---------------- references + thanks
-\begin{frame}[c]{References and thank you}
+\begin{frame}{References}
 \begin{columns}[T]
-\column{0.68\textwidth}\fontsize{6.8}{8}\selectfont\setlength{\parskip}{0.5pt}
-[1] K. Perlin, ``Improving noise,'' \emph{ACM TOG (SIGGRAPH)}, 21(3), 2002.\par
+\column{0.49\textwidth}\fontsize{9}{10.5}\selectfont\setlength{\parskip}{1.5pt}
+[1] K. Perlin, ``Improving noise,'' \emph{ACM TOG}, 21(3), 2002.\par
 [2] S. Worley, ``A cellular texture basis function,'' \emph{SIGGRAPH}, 1996.\par
-[3] R. Cook and K. Torrance, ``A reflectance model for computer graphics,'' \emph{ACM TOG}, 1(1), 1982.\par
+[3] R. Cook, K. Torrance, ``A reflectance model for computer graphics,'' \emph{ACM TOG}, 1(1), 1982.\par
 [4] B. Walter et al., ``Microfacet models for refraction through rough surfaces,'' \emph{EGSR}, 2007.\par
 [5] B. Karis, ``Real shading in Unreal Engine 4,'' SIGGRAPH Course, 2013.\par
 [6] S. Hillaire, ``A scalable and production ready sky and atmosphere rendering technique,'' \emph{CGF}, 39(4), 2020.\par
 [7] R. Dimitrov, ``Cascaded shadow maps,'' NVIDIA, 2007.\par
-[8] M. Oren and S. Nayar, ``Generalization of Lambert's reflectance model,'' \emph{SIGGRAPH}, 1994.\par
+[8] M. Oren, S. Nayar, ``Generalization of Lambert's reflectance model,'' \emph{SIGGRAPH}, 1994.
+\column{0.49\textwidth}\fontsize{9}{10.5}\selectfont\setlength{\parskip}{1.5pt}
 [9] K. Narkowicz, ``ACES filmic tone mapping curve,'' 2016.\par
 [10] J. Jimenez, ``Next generation post processing in Call of Duty: Advanced Warfare,'' SIGGRAPH, 2014.\par
 [11] T. Lottes, ``FXAA,'' NVIDIA, 2009.\par
-[12] M. Segal and K. Akeley, \emph{The OpenGL Graphics System, v4.1}, Khronos, 2010.\par
+[12] M. Segal, K. Akeley, \emph{The OpenGL Graphics System, v4.1}, Khronos, 2010.\par
 [13] I. Quilez, ``Domain warping,'' iquilezles.org.\par
-[14] S. Hargreaves and M. Harris, ``Deferred shading,'' NVIDIA, GDC 2004.\par
+[14] S. Hargreaves, M. Harris, ``Deferred shading,'' NVIDIA, GDC 2004.\par
 [15] H. Scharr, ``Optimal operators in digital image processing,'' Ph.D., Heidelberg, 2000.\par
 [16] T. Akenine-M\"oller et al., \emph{Real-Time Rendering}, 4th ed., CRC Press, 2018.
-\column{0.3\textwidth}
-\centering\vspace{0.6cm}
-{\Huge\bfseries\color{kuet}Thank you}\\[8pt]
-{\small Questions are welcome}\\[10pt]
-\includegraphics[height=1.6cm]{images/KUET_Logo.png}\\[6pt]
-{\scriptsize Md.\ Shifat Hasan \,|\, Roll 2107067}
 \end{columns}
+\vspace{-2pt}
+\begin{center}{\Large\bfseries\color{kuet}Thank you} \ \ {\normalsize Questions are welcome \ $\cdot$ \ Md.\ Shifat Hasan, Roll 2107067}\end{center}
 \end{frame}
 \end{document}
