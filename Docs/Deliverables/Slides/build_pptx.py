@@ -12,8 +12,9 @@ from PIL import Image, ImageFont
 
 IMG=os.path.join(os.path.dirname(os.path.abspath(__file__)),'images')+'/'
 EQ=os.path.join(os.path.dirname(os.path.abspath(__file__)),'equation_images')+'/'
-INK=RGBColor(0x0F,0x1B,0x2D); GREEN=RGBColor(0x00,0x7A,0x3D); MINT=RGBColor(0xE8,0xF3,0xEC)
-GREY=RGBColor(0x5A,0x66,0x73); WHITE=RGBColor(255,255,255); LINE=RGBColor(0xC9,0xD3,0xCC)
+INK=RGBColor(0x1E,0x29,0x3B); GREEN=RGBColor(0x0F,0x8F,0x85); MINT=RGBColor(0xE6,0xF4,0xF2); DEEP=RGBColor(0x0B,0x12,0x20); BRIGHT=RGBColor(0x2D,0xD4,0xBF); AMBER=RGBColor(0xF5,0x9E,0x0B)
+GREY=RGBColor(0x64,0x74,0x8B); WHITE=RGBColor(255,255,255); LINE=RGBColor(0xD5,0xDE,0xE8)
+BD=os.path.join(os.path.dirname(os.path.abspath(__file__)),'backdrops')+'/'
 FONT='Calibri'; HEAD='Georgia'
 try: MET=lambda pt,b=False: ImageFont.truetype('/System/Library/Fonts/Supplemental/Arial Bold.ttf' if b else '/System/Library/Fonts/Supplemental/Arial.ttf', int(pt*10))
 except Exception: MET=None
@@ -80,16 +81,18 @@ def picture(slide,path,x,y,w=None,h=None,border=True):
 def new_slide(title=None,bar=True):
     count[0]+=1
     s=prs.slides.add_slide(blank)
+    s.shapes.add_picture(BD+'content.jpg',0,0,prs.slide_width,prs.slide_height)
     if title is not None:
-        rect(s,0,0,13.333,0.95,fill=INK,shape=MSO_SHAPE.RECTANGLE)
-        rect(s,0,0,0.22,0.95,fill=GREEN,shape=MSO_SHAPE.RECTANGLE)
-        textbox(s,0.55,0.13,11,0.7,[title],size=30,color=WHITE,bold=True,font=HEAD,anchor=MSO_ANCHOR.MIDDLE,check=False)
+        s.shapes.add_picture(BD+'header.jpg',0,0,prs.slide_width,Inches(0.95))
+        rect(s,0,0.95,13.333,0.045,fill=BRIGHT,shape=MSO_SHAPE.RECTANGLE)
+        rect(s,0.55,0.3,0.1,0.38,fill=AMBER,shape=MSO_SHAPE.RECTANGLE)
+        textbox(s,0.8,0.13,11,0.7,[title],size=30,color=WHITE,bold=True,font=HEAD,anchor=MSO_ANCHOR.MIDDLE,check=False)
         textbox(s,11.8,7.08,1.3,0.3,[f'{count[0]} / 10'],size=11,color=GREY,align=PP_ALIGN.RIGHT,check=False)
     return s
 
 def card(slide,x,y,w,h,title,body,size=16,bullets=True):
-    rect(slide,x,y,w,h,fill=MINT)
-    rect(slide,x,y,0.08,h,fill=GREEN,shape=MSO_SHAPE.RECTANGLE)
+    rect(slide,x,y,w,h,fill=WHITE,line=LINE)
+    rect(slide,x,y,0.09,h,fill=GREEN,shape=MSO_SHAPE.RECTANGLE)
     textbox(slide,x+0.2,y+0.08,w-0.3,0.4,[title],size=size+1,bold=True,color=GREEN,check=False)
     textbox(slide,x+0.2,y+0.5,w-0.3,h-0.58,body,size=size,bullets=bullets,space=3)
 
@@ -114,15 +117,15 @@ def line_arrow(slide,x1,y1,x2,y2,color=GREEN,width=2):
 # ---------------- 1 cover
 count[0]+=1
 s=prs.slides.add_slide(blank)
-rect(s,0,0,13.333,7.5,fill=INK,shape=MSO_SHAPE.RECTANGLE)
-rect(s,0.9,0,0.12,7.5,fill=GREEN,shape=MSO_SHAPE.RECTANGLE)
-textbox(s,1.5,0.7,10.5,0.4,['KHULNA UNIVERSITY OF ENGINEERING & TECHNOLOGY   |   CSE 4102'],size=13,color=RGBColor(0xA9,0xB4,0xC2),check=False)
-textbox(s,1.5,1.9,10,1.5,['Sentinel'],size=80,bold=True,color=WHITE,font=HEAD,check=False)
-textbox(s,1.5,3.45,10.5,1.2,['A Fully Procedural Game Engine','and Open-World Military Shooter'],size=30,color=WHITE,space=0,check=False)
-rect(s,1.55,4.85,1.6,0.06,fill=GREEN,shape=MSO_SHAPE.RECTANGLE)
-textbox(s,1.5,5.1,10,0.9,['Nothing is loaded from a model, image or sound file:','everything is generated from code and a seed.'],size=18,color=RGBColor(0xD0,0xD8,0xE2),italic=True,space=0,check=False)
-textbox(s,1.5,6.55,5.5,0.7,[[('Md. Shifat Hasan',{'bold':True,'color':WHITE,'size':18})],[('Roll 2107067  ·  4th Year 1st Term',{'color':RGBColor(0xA9,0xB4,0xC2),'size':13})]],size=14,space=1,check=False)
-textbox(s,7.2,6.55,5.4,0.7,[[('Instructors: Md Tajmilur Rahman, Md. Mubtashim Abrar Nihal',{'size':13,'color':RGBColor(0xA9,0xB4,0xC2)})],[('Computer Graphics and Image Processing Laboratory  ·  October 7, 2026',{'size':13,'color':RGBColor(0xA9,0xB4,0xC2)})]],size=13,align=PP_ALIGN.RIGHT,space=1,check=False)
+s.shapes.add_picture(BD+'cover.jpg',0,0,prs.slide_width,prs.slide_height)
+LIGHT=RGBColor(0xC7,0xD2,0xE0)
+textbox(s,1.0,0.75,10.5,0.4,['KHULNA UNIVERSITY OF ENGINEERING & TECHNOLOGY   ·   CSE 4102'],size=13,color=LIGHT,check=False)
+rect(s,1.05,1.25,0.9,0.05,fill=AMBER,shape=MSO_SHAPE.RECTANGLE)
+textbox(s,1.0,1.55,11,1.6,['Sentinel'],size=88,bold=True,color=WHITE,font=HEAD,check=False)
+textbox(s,1.0,3.2,11,1.2,['A Fully Procedural Game Engine','and Open-World Military Shooter'],size=30,color=RGBColor(0xE6,0xFB,0xF8),space=0,check=False)
+textbox(s,1.0,4.55,9,0.9,['Nothing is loaded from a model, image or sound file:','everything is generated from code and a seed.'],size=18,color=BRIGHT,italic=True,space=0,check=False)
+textbox(s,1.0,6.45,5.5,0.8,[[('Md. Shifat Hasan',{'bold':True,'color':WHITE,'size':19})],[('Roll 2107067  ·  4th Year 1st Term',{'color':LIGHT,'size':13})]],size=14,space=1,check=False)
+textbox(s,6.6,6.45,6.0,0.8,[[('Instructors: Md Tajmilur Rahman, Md. Mubtashim Abrar Nihal',{'size':13,'color':LIGHT})],[('Computer Graphics and Image Processing Laboratory  ·  October 7, 2026',{'size':13,'color':LIGHT})]],size=13,align=PP_ALIGN.RIGHT,space=1,check=False)
 
 # ---------------- 2 outline
 s=new_slide('Outline')
@@ -145,7 +148,7 @@ textbox(s,0.6,4.4,6.4,2.6,['Layered engine with downward-only dependencies','All
 layers=['Game: mission, AI, vehicles, sound','Render: deferred, lights, sky, post','World: collision, terrain','Procedural: noise, textures','GPU: shaders, buffers','Platform: window, input']
 y=1.35
 for i,t in enumerate(layers):
-    r=rect(s,7.5,y,4.7,0.72,fill=RGBColor(0xDC-i*10,0xEE-i*8,0xE2-i*8),line=GREEN)
+    r=rect(s,7.5,y,4.7,0.72,fill=RGBColor(0xE4-i*14,0xF6-i*9,0xF3-i*8),line=GREEN)
     textbox(s,7.5,y,4.7,0.72,[t],size=17,align=PP_ALIGN.CENTER,anchor=MSO_ANCHOR.MIDDLE,check=False)
     y+=0.86
 line_arrow(s,12.55,1.4,12.55,6.35)
@@ -246,10 +249,10 @@ refs=['[1] K. Perlin, "Improving noise," ACM TOG, 21(3), 2002.','[2] S. Worley, 
 '[9] K. Narkowicz, "ACES filmic tone mapping curve," 2016.','[10] J. Jimenez, "Next generation post processing in Call of Duty: Advanced Warfare," SIGGRAPH, 2014.','[11] T. Lottes, "FXAA," NVIDIA, 2009.','[12] M. Segal, K. Akeley, The OpenGL Graphics System, v4.1, Khronos, 2010.','[13] I. Quilez, "Domain warping," iquilezles.org.','[14] S. Hargreaves, M. Harris, "Deferred shading," NVIDIA, GDC 2004.','[15] H. Scharr, "Optimal operators in digital image processing," Ph.D., Heidelberg, 2000.','[16] T. Akenine-Möller et al., Real-Time Rendering, 4th ed., CRC Press, 2018.']
 textbox(s,0.6,1.15,6.0,5.0,refs[:8],size=16,space=6)
 textbox(s,6.85,1.15,6.0,5.0,refs[8:],size=16,space=6)
-rect(s,0,6.25,13.333,1.25,fill=INK,shape=MSO_SHAPE.RECTANGLE)
-rect(s,0,6.25,0.22,1.25,fill=GREEN,shape=MSO_SHAPE.RECTANGLE)
-textbox(s,0.7,6.4,5,0.9,['Thank you'],size=40,bold=True,color=WHITE,font=HEAD,anchor=MSO_ANCHOR.MIDDLE,check=False)
-textbox(s,6.0,6.4,6.9,0.9,['Questions are welcome','Md. Shifat Hasan  ·  Roll 2107067'],size=18,color=RGBColor(0xD0,0xD8,0xE2),align=PP_ALIGN.RIGHT,anchor=MSO_ANCHOR.MIDDLE,space=2,check=False)
+s.shapes.add_picture(BD+'band.jpg',0,Inches(6.25),prs.slide_width,Inches(1.25))
+rect(s,0.7,6.4,0.08,0.9,fill=AMBER,shape=MSO_SHAPE.RECTANGLE)
+textbox(s,0.95,6.4,5,0.9,['Thank you'],size=40,bold=True,color=WHITE,font=HEAD,anchor=MSO_ANCHOR.MIDDLE,check=False)
+textbox(s,6.0,6.4,6.9,0.9,['Questions are welcome','Md. Shifat Hasan  ·  Roll 2107067'],size=18,color=RGBColor(0xC7,0xD2,0xE0),align=PP_ALIGN.RIGHT,anchor=MSO_ANCHOR.MIDDLE,space=2,check=False)
 
 out=os.path.join(os.path.dirname(os.path.abspath(__file__)),'Sentinel_Presentation.pptx')
 prs.save(out); print('saved',out,len(prs.slides.__iter__.__self__._sldIdLst),'slides'); print('\n'.join(warnings) or 'no overflow warnings')
