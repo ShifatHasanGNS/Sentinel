@@ -1,4 +1,4 @@
-\documentclass[aspectratio=169,11pt]{beamer}
+\documentclass[aspectratio=169,12pt]{beamer}
 \usepackage[T1]{fontenc}
 \usepackage{newtxtext,newtxmath}
 \usepackage{tikz,pgfplots}
@@ -54,185 +54,160 @@
 % 2 ---------------- outline
 \begin{frame}[c]{Outline}
 \begin{columns}[T]
-\column{0.55\textwidth}
-\begin{enumerate}\setlength{\itemsep}{5pt}
-  \item Problem and objectives
-  \item Engine architecture
-  \item Procedural content: shapes and textures
+\column{0.56\textwidth}\large
+\begin{enumerate}\setlength{\itemsep}{7pt}
+  \item Problem, objectives, architecture
+  \item Procedural shapes and textures
   \item The rendering pipeline
   \item World, physics and gameplay
   \item Results and verification
-  \item Challenges, limits and future work
+  \item Challenge, limits, future work
+  \item Video tour of the project
 \end{enumerate}
 \column{0.42\textwidth}
-\pic{1}{showroom.jpg}\\[-1pt]{\scriptsize\centering Every material is a code-generated recipe.}
+\pic{1}{showroom.jpg}\\[2pt]{\small\centering Every material is a code-generated recipe.}
 \end{columns}
 \end{frame}
 
-% 3 ---------------- problem
-\begin{frame}[c]{1. Problem and objectives}
+% 3 ---------------- problem + architecture
+\begin{frame}[c]{1. Problem, objectives and architecture}
 \begin{columns}[T]
-\column{0.55\textwidth}
-\textbf{The question:} can a complete, good-looking, playable 3D game be made by \emph{code alone} on a student laptop?
-\vspace{4pt}
-\vspace{-2pt}\begin{block}{Two hard limits}
+\column{0.53\textwidth}
+\textbf{Can a complete, playable 3D game be made by code alone on a student laptop?}
+\vspace{3pt}
+\begin{block}{Two hard limits}
 \begin{itemize}\setlength{\itemsep}{1pt}
- \item No pre-saved model, image or precomputed data file (only shader text is read)
- \item macOS stops at OpenGL~4.1: no compute shaders
+ \item No model, image or precomputed data file
+ \item macOS OpenGL 4.1: no compute shaders
 \end{itemize}
 \end{block}
-\textbf{Objectives}\vspace{-2pt}
-\begin{enumerate}\small\setlength{\itemsep}{1pt}
- \item Layered engine, dependencies only downward
- \item All meshes, textures, sounds from code and seeds
- \item Modern renderer: PBR, shadows, sky, post-processing
- \item Playable game: vehicles, ladders, doors, mission
- \item Verified by tests and a 16.7\,ms frame budget
-\end{enumerate}
-\column{0.43\textwidth}
-\pic{1}{base.jpg}\\[4pt]
-\pic{0.7}{demo.jpg}
-\end{columns}
-\end{frame}
-
-% 4 ---------------- architecture
-\begin{frame}[c]{2. Engine architecture}
-\begin{columns}[T]
-\column{0.5\textwidth}
+\vspace{2pt}
+\textbf{Objectives}
+\begin{itemize}\small\setlength{\itemsep}{0pt}
+ \item Layered engine, downward dependencies
+ \item All content from code and seeds
+ \item Modern renderer, playable game
+ \item Verified: tests, 16.7\,ms budget
+\end{itemize}
+\column{0.45\textwidth}
 \centering
 \begin{tikzpicture}
-\foreach \i/\t in {0/{Game: mission, AI, weapons, vehicles, HUD, sound},1/{Render: deferred renderer, lights, sky, post},2/{World: collision, controller, terrain streaming},3/{Procedural: noise, primitives, textures},4/{GPU: shaders, buffers, framebuffers},5/{Platform: window, input, clock}}
-  \node[draw=kuet,minimum width=5.6cm,minimum height=0.55cm,font=\scriptsize,fill=kuet!\the\numexpr 6+\i*5\relax] at (0,-\i*0.62) {\t};
-\draw[arr] (3.1,-0.1)--(3.1,-3.0) node[midway,right,font=\tiny,rotate=-90,yshift=0.1cm]{depends on};
-\end{tikzpicture}
-\\[4pt]{\footnotesize A lower layer never knows a higher one.}
-\column{0.48\textwidth}
-\textbf{Readable by design}
-\begin{itemize}\setlength{\itemsep}{4pt}
- \item \texttt{Main.odin} = table of contents: init, loop (input, update, render), shutdown
- \item One feature per file; procedures $\approx$40 lines
- \item Content is data: object = table of \emph{part, transform, deformers, material}
- \item Every GL call checked; preconditions asserted
-\end{itemize}
-\vspace{4pt}
-\begin{block}{Size} 164 Odin files ($\approx$19\,200 lines), 47 GLSL files ($\approx$2\,000 lines), 138 commits\end{block}
+\foreach \i/\t in {0/{Game: mission, AI, vehicles, sound},1/{Render: deferred, lights, sky, post},2/{World: collision, terrain},3/{Procedural: noise, textures},4/{GPU: shaders, buffers},5/{Platform: window, input}}
+  \node[draw=kuet,minimum width=5.6cm,minimum height=0.75cm,font=\small,fill=kuet!\the\numexpr 6+\i*5\relax] at (0,-\i*0.78) {\t};
+\draw[arr] (3.2,-0.1)--(3.2,-3.8);
+\end{tikzpicture}\\[2pt]
+{\small A lower layer never knows a higher one.}
 \end{columns}
 \end{frame}
 
-% 5 ---------------- procedural
-\begin{frame}{3. Procedural content: shapes and textures}
+% 4 ---------------- procedural
+\begin{frame}[c]{2. Procedural shapes and textures}
+\centering\pic{0.62}{noise_stages.png}\\[-1pt]{\small gradient, fractal, warped, ridged and cellular noise}
+\vspace{4pt}
 \begin{columns}[T]
-\column{0.56\textwidth}
-\pic{1}{noise_stages.png}\\[-2pt]{\scriptsize gradient, fractal, warped, ridged, cellular noise}
-\vspace{3pt}
-\begin{itemize}\setlength{\itemsep}{3pt}\small
- \item \textbf{Fractal noise} sums octaves, each 2$\times$ finer and $\tfrac12$ as strong; wrapped grid index $\Rightarrow$ \textbf{exact tiling}
- \item 18 recipes $\to$ 22 materials, baked once at 1024$^2$
- \item \textbf{Scharr} filter turns height into bumps
- \item Shapes: primitives + noise deformers; legs by two-bone IK
-\end{itemize}
-\column{0.42\textwidth}
-\begin{block}{Fractal noise}
-$\displaystyle F(\mathbf x)=\frac{\sum_{i=0}^{n-1}2^{-i}\nu(2^i\mathbf x)}{\sum_{i=0}^{n-1}2^{-i}}$
-\end{block}
-\begin{block}{Normal from height}
-$\displaystyle h_x\!\approx\!\frac{3(h_{NE}\!+\!h_{SE}\!-\!h_{NW}\!-\!h_{SW})\!+\!10(h_E\!-\!h_W)}{32\Delta N}$\\[1pt]\scriptsize $\hat n\propto(-kh_x,-kh_y,1)$
+\column{0.37\textwidth}
+\begin{block}{Fractal noise (tiles exactly)}
+\small$\displaystyle F(\mathbf x)=\frac{\sum_{i=0}^{n-1}2^{-i}\nu(2^i\mathbf x)}{\sum_{i=0}^{n-1}2^{-i}}$
 \end{block}
 \begin{block}{Vertex push}
-$\mathbf p'=\mathbf p+A\,\nu(f\mathbf p)\,\hat n$, \ $|\mathbf p'-\mathbf p|\le A$
+\small$\mathbf p'=\mathbf p+A\,\nu(f\mathbf p)\,\hat n,\ |\mathbf p'-\mathbf p|\le A$
 \end{block}
-
+\column{0.6\textwidth}
+\begin{itemize}\setlength{\itemsep}{2pt}
+ \item 18 recipes $\to$ 22 materials, baked once at 1024$^2$
+ \item \textbf{Scharr} filter turns height into bumps; crevices darken
+ \item Objects = tables of primitives + noise deformers
+ \item Soldiers: skeletons with two-bone IK legs
+\end{itemize}
 \end{columns}
 \end{frame}
 
-% 6 ---------------- rendering
-\begin{frame}[c]{4. The rendering pipeline}
+% 5 ---------------- rendering
+\begin{frame}[c]{3. The rendering pipeline}
 \centering
-\begin{tikzpicture}[node distance=0.15cm and 0.25cm]
-\node[box] (s) {Sky\\table};\node[box,right=of s] (sh) {Shadows\\3 cascades};\node[box,right=of sh] (g) {Geometry\\G-buffer};\node[box,right=of g] (ao) {SSAO};\node[box,right=of ao] (li) {Lighting,\\reflection, fog};\node[box,right=of li] (pa) {Smoke,\\fire};\node[box,right=of pa] (po) {Bloom, ACES,\\grade, FXAA};
+\begin{tikzpicture}[node distance=0.15cm and 0.22cm]
+\node[box] (s) {Sky\\table};\node[box,right=of s] (sh) {Shadows\\3 cascades};\node[box,right=of sh] (g) {Geometry\\G-buffer};\node[box,right=of g] (ao) {SSAO};\node[box,right=of ao] (li) {Lighting,\\reflect, fog};\node[box,right=of li] (pa) {Smoke,\\fire};\node[box,right=of pa] (po) {Bloom, ACES,\\FXAA};
 \foreach \x/\y in {s/sh,sh/g,g/ao,ao/li,li/pa,pa/po}\draw[arr](\x)--(\y);
 \end{tikzpicture}
-\vspace{3pt}
+\vspace{4pt}
 \begin{columns}[T]
-\column{0.5\textwidth}\raggedright\small
-\textbf{Deferred shading:} first store each pixel's colour, normal, shininess, depth (the ``data poster''), then light it once; many lights stay cheap.
+\column{0.56\textwidth}\raggedright
+\textbf{Deferred shading:} store each pixel's colour, normal, shininess and depth first, then light it once.
 \begin{block}{Cook--Torrance reflection}
-\scriptsize$f=\frac{(1-F_l)(1-F_v)\mathbf c_d}{\pi}+D\,V\,F$\\
-$D=\frac{\alpha^2}{\pi((\mathbf n\cdot\mathbf h)^2(\alpha^2-1)+1)^2}$, \ $F=F_0+(1-F_0)(1-\mathbf v\cdot\mathbf h)^5$
+\small$f=\frac{(1-F_l)(1-F_v)\mathbf c_d}{\pi}+DVF$\\[1pt]
+\footnotesize$D=\frac{\alpha^2}{\pi((\mathbf n\cdot\mathbf h)^2(\alpha^2-1)+1)^2}$, $F=F_0+(1-F_0)(1-\mathbf v\cdot\mathbf h)^5$
 \end{block}
 \begin{block}{Fog and tone map}
-\scriptsize$C=TC_s+(1-T)C_h,\ T=e^{-kd}$\\ $C_{\rm out}=\frac{x(2.51x+0.03)}{x(2.43x+0.59)+0.14}$
+\small$C=TC_s+(1-T)C_h,\ T=e^{-kd}$\hfill $C_{\rm out}=\frac{x(2.51x+0.03)}{x(2.43x+0.59)+0.14}$
 \end{block}
-\column{0.48\textwidth}
-\pic{1}{dusk.jpg}\\[1pt]{\scriptsize\centering Dusk: sun, sky, haze, shadows, clouds}
+\column{0.42\textwidth}
+\pic{1}{dusk.jpg}\\[1pt]{\small\centering Dusk: sun, sky, haze, shadows}
 \end{columns}
 \end{frame}
 
-% 7 ---------------- world
-\begin{frame}{5. World, physics and gameplay}
+% 6 ---------------- world
+\begin{frame}[c]{4. World, physics and gameplay}
 \begin{columns}[T]
-\column{0.5\textwidth}\small
-\begin{itemize}\setlength{\itemsep}{2.5pt}
- \item \textbf{Sky:} sun height $\sin e=\sin\varphi\sin\delta+\cos\varphi\cos\delta\cos h$; scattering sky; wind-driven cumulus and cirrus: $\mathbf P_{xz}=\frac{H}{d_y}(d_x,d_z)+\mathbf w t$
- \item \textbf{Terrain:} warped ridged noise, 64\,m streamed chunks
- \item \textbf{Trees:} 4 species, per-tree size and tint, cantilever wind sway
- \item \textbf{Vehicles:} jeep, truck, carrier, tank, helicopter; bicycle steering $\dot\psi=\frac{v\tan\delta}{L}$, power fade $\dot v=a_0(1-0.6\frac{|v|}{v_{\max}})$
- \item \textbf{Ladders:} 4-state grip machine, hands on rungs
- \item \textbf{Mission:} hack, destroy, rescue, extract; stealth AI; all sound synthesised
+\column{0.56\textwidth}
+\begin{itemize}\setlength{\itemsep}{5pt}
+ \item \textbf{Sky:} sun height from astronomy; scattering; wind-driven clouds $\mathbf P_{xz}=\frac{H}{d_y}(d_x,d_z)+\mathbf wt$
+ \item \textbf{Terrain:} warped ridged noise, streamed in 64\,m chunks
+ \item \textbf{Trees:} 4 species, swaying in the wind
+ \item \textbf{Vehicles:} jeep, truck, carrier, tank, helicopter; $\dot\psi=\frac{v\tan\delta}{L}$
+ \item \textbf{Ladders:} 4-state grip machine
+ \item \textbf{Mission:} hack, destroy, rescue, extract; stealth AI; synthesised sound
 \end{itemize}
-\column{0.48\textwidth}
-\pic{0.8}{gate_day.jpg}\\[2pt]
-\begin{columns}\column{0.5\linewidth}\pic{1}{ladder.jpg}\column{0.5\linewidth}\pic{1}{soldiers.jpg}\end{columns}
+\column{0.42\textwidth}
+\pic{1}{gate_day.jpg}\\[3pt]
+\begin{columns}\column{0.5\linewidth}\pic{1}{ladder.jpg}\column{0.5\linewidth}\pic{1}{trees.jpg}\end{columns}
 \end{columns}
 \end{frame}
 
-% 8 ---------------- results
-\begin{frame}{6. Results and verification}
+% 7 ---------------- results
+\begin{frame}[c]{5. Results and verification}
 \begin{columns}[T]
-\column{0.5\textwidth}
+\column{0.52\textwidth}
 \begin{tikzpicture}
-\begin{axis}[xbar,width=6.2cm,height=3.6cm,symbolic y coords={Sky,Post,SSAO,Shadows,Lighting,Geometry},ytick=data,xmin=0,xmax=5.3,scaled x ticks=false,nodes near coords,every node near coord/.append style={font=\tiny},tick label style={font=\scriptsize},xlabel={GPU ms per frame},xlabel style={font=\scriptsize},bar width=6pt,enlarge y limits=0.12]
+\begin{axis}[xbar,width=6.6cm,height=4.2cm,symbolic y coords={Sky,Post,SSAO,Shadows,Lighting,Geometry},ytick=data,xmin=0,xmax=5.4,scaled x ticks=false,nodes near coords,every node near coord/.append style={font=\scriptsize},tick label style={font=\footnotesize},xlabel={GPU ms per frame},xlabel style={font=\footnotesize},bar width=7pt,enlarge y limits=0.12]
 \addplot[fill=kuet!60] coordinates {(0.05,Sky)(1.21,Post)(1.20,SSAO)(1.58,Shadows)(2.79,Lighting)(4.11,Geometry)};
 \end{axis}
 \end{tikzpicture}\\[2pt]
-{\small \textbf{10.9\,ms} GPU of the 16.7\,ms budget (1080p); display locks 60\,Hz.}
-\vspace{4pt}
-\begin{tabularx}{\linewidth}{lr}\toprule\multicolumn{2}{l}{\small\textbf{Verification}}\\\midrule
-\scriptsize Unit tests (13 packages) & \scriptsize 281\\
-\scriptsize TextureCheck (exact tiling) & \scriptsize 8\,318\\
-\scriptsize RenderCheck & \scriptsize 318\,567\\
-\scriptsize GpuCheck & \scriptsize 30\\
-\scriptsize Scripted playthroughs (5/5 objectives) & \scriptsize 2\\\bottomrule\end{tabularx}
-\column{0.48\textwidth}
-\pic{0.78}{hq.jpg}\\[2pt]
-\pic{0.78}{map.jpg}
+\textbf{10.9\,ms} of the 16.7\,ms budget at 1080p
+\vspace{3pt}
+
+\begin{tabularx}{\linewidth}{lr}\toprule
+\small Unit tests (13 packages) & \small 281\\
+\small TextureCheck (exact tiling) & \small 8\,318\\
+\small RenderCheck & \small 318\,567\\
+\small GpuCheck & \small 30\\
+\small Playthroughs, 5/5 objectives & \small 2\\\bottomrule\end{tabularx}
+\column{0.45\textwidth}
+\pic{1}{hq.jpg}\\[3pt]
+\pic{1}{map.jpg}
 \end{columns}
 \end{frame}
 
-% 9 ---------------- challenges
-\begin{frame}[c]{7. Challenge solved, limits and future work}
-\begin{columns}[T]
-\column{0.58\textwidth}
-\large\textbf{Bug: a bright vertical line at night.} Found by bisecting draw items, lights and passes. Cause: the fog colour sampled the \emph{whole} sky, so one horizon star painted a streak down every surface in its column. Fix: fog uses the smooth atmosphere only.
+% 8 ---------------- challenge
+\begin{frame}[c]{6. Challenge solved, limits and future work}
+\textbf{Bug: a bright vertical line at night.} The fog colour sampled the \emph{whole} sky, so one horizon star painted a streak on every surface in its column. Fix: fog uses the smooth atmosphere only.
 \vspace{3pt}
-\begin{columns}\column{0.5\linewidth}\pic{1}{gate_night_bug.jpg}\\[-2pt]{\scriptsize\centering before}\column{0.5\linewidth}\pic{1}{gate_night.jpg}\\[-2pt]{\scriptsize\centering after}\end{columns}
-\column{0.4\textwidth}
-\begin{block}{Limitations}\footnotesize
-Blocky primitive models; no true global illumination; lumpy foliage; tuned by scripts and screenshots, not a big playtest.
-\end{block}
-\begin{block}{Future work}\footnotesize
-Leaf cards, screen-space GI, point-light shadows, multiplayer, a compute-shader port.
-\end{block}
-\begin{block}{Take-away}\footnotesize
-Most ``art'' is a few simple ideas (smooth noise, a lighting formula, transforms) applied consistently and tested.
-\end{block}
+\begin{columns}[T]
+\column{0.27\textwidth}\pic{1}{gate_night_bug.jpg}\\[-2pt]{\footnotesize\centering before}\\[1pt]\pic{1}{gate_night.jpg}\\[-2pt]{\footnotesize\centering after}
+\column{0.69\textwidth}
+\begin{block}{Limitations}\small Blocky primitive models; no true global illumination; lumpy foliage; tuned by scripts and screenshots.\end{block}
+\begin{block}{Future work}\small Leaf cards, screen-space GI, point-light shadows, multiplayer, a compute-shader port.\end{block}
+\begin{block}{Take-away}\small Most ``art'' is a few simple ideas, applied consistently and tested.\end{block}
 \end{columns}
+\end{frame}
+
+% 9 ---------------- video placeholder
+\begin{frame}{7. Video tour of the project}
 \end{frame}
 
 % 10 ---------------- references + thanks
 \begin{frame}[c]{References and thank you}
 \begin{columns}[T]
-\column{0.68\textwidth}\scriptsize\setlength{\parskip}{1pt}
+\column{0.68\textwidth}\fontsize{6.8}{8}\selectfont\setlength{\parskip}{0.5pt}
 [1] K. Perlin, ``Improving noise,'' \emph{ACM TOG (SIGGRAPH)}, 21(3), 2002.\par
 [2] S. Worley, ``A cellular texture basis function,'' \emph{SIGGRAPH}, 1996.\par
 [3] R. Cook and K. Torrance, ``A reflectance model for computer graphics,'' \emph{ACM TOG}, 1(1), 1982.\par
