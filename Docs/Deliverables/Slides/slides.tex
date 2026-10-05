@@ -103,23 +103,23 @@ Layered engine; all content from code; modern renderer; a playable game (vehicle
 
 % 4 ---------------- procedural
 \begin{frame}[c]{2. Procedural shapes and textures}
-\centering\pic{0.6}{noise_stages.png}\\[-1pt]{\small gradient, fractal, warped, ridged and cellular noise}
-\vspace{4pt}
 \begin{columns}[T]
-\column{0.4\textwidth}
+\column{0.52\textwidth}
+\centering\pic{0.95}{noise_stages.png}\\[-1pt]{\scriptsize gradient, fractal, warped, ridged, cellular noise}
 \begin{block}{Fractal noise (tiles exactly)}
-\eqimg{0.8}{fractal}
+\eqimg{0.4}{fractal}
 \end{block}
-\begin{block}{Vertex push}
-\eqimg{0.95}{push}
+\begin{block}{Vertex push by a noise deformer}
+\eqimg{1.0}{push}
 \end{block}
-\column{0.57\textwidth}
-\begin{itemize}\setlength{\itemsep}{2pt}
+\column{0.45\textwidth}
+\begin{itemize}\setlength{\itemsep}{3pt}
  \item 18 recipes $\to$ 22 materials, baked once at 1024$^2$
  \item \textbf{Scharr} filter turns height into bumps; crevices darken
  \item Objects: tables of primitives and noise deformers
  \item Soldiers: skeletons with two-bone IK legs
 \end{itemize}
+\centering\pic{0.6}{showroom.jpg}
 \end{columns}
 \end{frame}
 
@@ -138,7 +138,7 @@ Layered engine; all content from code; modern renderer; a playable game (vehicle
 \footnotesize Right to left: stretched, turned about its own centre, moved last. $(1,0,0)\to S(2,1,1)\to R_y90^\circ\to T(5,0,0)=(5,0,-2)$
 \end{block}
 \begin{block}{Normals use the inverse transpose}
-\eqimg{0.5}{nmat}
+\eqimg{0.95}{nmat}
 \footnotesize $S=\mathrm{diag}(2,1,1)$: correct $(0.447,0.894,0)$, naive $(0.894,0.447,0)$
 \end{block}
 \column{0.45\textwidth}
@@ -156,26 +156,26 @@ Layered engine; all content from code; modern renderer; a playable game (vehicle
 
 % 6 ---------------- illumination
 \begin{frame}[c]{4. Illumination models and light sources}
-\begin{panelbox}{Direct light + ambient + emission}\eqimg{0.62}{sum}\end{panelbox}
+\begin{panelbox}{Direct light + ambient + emission \hfill \textcolor{black!55}{\scriptsize\textrm{f: model \ att: falloff \ sh: shadow \ $N_L$: lights}}}\eqimg{0.52}{sum}\end{panelbox}
 \begin{columns}[T]
-\column{0.63\textwidth}
+\column{0.6\textwidth}
 \begin{panelbox}{Six illumination models}
-\renewcommand{\arraystretch}{1.0}
-\begin{tabular}{@{}m{2.75cm}m{4.6cm}@{}}
-\small\textcolor{kuet}{\bfseries Lambert} & \includegraphics[height=0.52cm]{equation_images/lambert.png}\\[3pt]
-\small\textcolor{kuet}{\bfseries Phong} & \includegraphics[height=0.58cm]{equation_images/phong.png}\\[3pt]
-\small\textcolor{kuet}{\bfseries Blinn--Phong} & \includegraphics[height=0.58cm]{equation_images/blinn.png}\\[3pt]
-\small\textcolor{kuet}{\bfseries Oren--Nayar} & \includegraphics[height=0.5cm]{equation_images/oren.png}\\[3pt]
-\small\textcolor{kuet}{\bfseries Cook--Torrance} & \includegraphics[height=0.58cm]{equation_images/ct2.png}\\[3pt]
-\small\textcolor{kuet}{\bfseries Subsurface} & \includegraphics[height=0.5cm]{equation_images/sss.png}
+\begin{tabular}{@{}m{2.75cm}m{5.0cm}@{}}
+\small\textcolor{kuet}{\bfseries Lambert} & \includegraphics[height=0.46cm]{equation_images/lambert.png}\\[-2pt]
+\small\textcolor{kuet}{\bfseries Phong} & \includegraphics[height=0.68cm]{equation_images/phong.png}\\[-2pt]
+\small\textcolor{kuet}{\bfseries Blinn--Phong} & \includegraphics[height=0.68cm]{equation_images/blinn.png}\\[-2pt]
+\small\textcolor{kuet}{\bfseries Oren--Nayar} & \includegraphics[height=0.58cm]{equation_images/oren.png}\\[-2pt]
+\small\textcolor{kuet}{\bfseries Cook--Torrance} & \includegraphics[height=0.66cm]{equation_images/ct2.png}\\[-2pt]
+\small\textcolor{kuet}{\bfseries Subsurface} & \includegraphics[height=0.58cm]{equation_images/sss.png}
 \end{tabular}
 \end{panelbox}
-\column{0.35\textwidth}
+\column{0.38\textwidth}
 \begin{panelbox}{Light sources}
-\small Directional: sun, moon\\ Point: lamps, flashes\\ Spot: floodlights\\ Area: $4\times4$ samples
-\eqimg{0.98}{att}
+\eqimg{0.8}{att}
 \end{panelbox}
-\pic{0.95}{models.jpg}\\[1pt]{\scriptsize\centering Six models, one sphere each}
+\begin{panelbox}{Definitions}
+\eqimg{0.98}{defs}\eqimg{0.98}{ctdefs}
+\end{panelbox}
 \end{columns}
 \end{frame}
 
@@ -195,7 +195,7 @@ Layered engine; all content from code; modern renderer; a playable game (vehicle
 \footnotesize $\lambda=0.75$, $N=3$: cuts at 9.1, 24.2, 100\,m; normal-offset lookup, 8 rotated PCF taps.
 \end{block}
 \begin{block}{Fog and tone map}
-\eqimg{0.55}{fog}\eqimg{0.55}{aces}
+\eqimg{0.62}{fog}\eqimg{0.88}{aces}
 \end{block}
 \column{0.4\textwidth}
 \pic{1}{dusk.jpg}\\[1pt]{\small\centering Dusk: sun, sky, haze, shadows}\\[3pt]

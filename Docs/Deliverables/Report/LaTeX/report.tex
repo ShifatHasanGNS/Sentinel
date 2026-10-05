@@ -398,7 +398,7 @@ Each material is a \emph{recipe}: a small shader that answers ``what is the colo
 
 
 \emph{Gradient noise} (a rubber sheet pinned at random slopes) blends the four corner gradients of a grid cell with the smooth curve $s(t)=6t^5-15t^4+10t^3$, scaled by $\sqrt2$ so values lie in $[-1,1]$. Fractal noise sums octaves, each at double frequency and half strength:
-\begin{equation}F(\mathbf x)=\frac{\sum_{i=0}^{n-1}2^{-i}\,\nu(2^{i}\mathbf x)}{\sum_{i=0}^{n-1}2^{-i}}.\end{equation}
+\begin{equation}F(\mathbf x)=\frac{\displaystyle\sum\limits_{i=0}^{n-1}2^{-i}\,\nu\!\left(2^{i}\mathbf x\right)}{\displaystyle\sum\limits_{i=0}^{n-1}2^{-i}},\qquad F\in[-1,1].\end{equation}
 Choosing gradients from the cell index \emph{modulo the period} $P$ gives $F(\mathbf x+P\mathbf e)=F(\mathbf x)$: the picture tiles with no seam (tested exactly). \emph{Domain warping} $F(\mathbf x+s\,[F_1(\mathbf x),F_2(\mathbf x)])$ swirls the pattern (stone, wood, soil); \emph{ridged} noise $\sum a_i(1-|\nu_i|)^2$ makes cracks and bark; \emph{cellular} noise gives leaves and pebbles (Fig.~\ref{fig:noise}).
 
 \begin{figure}[H]
@@ -410,7 +410,7 @@ Choosing gradients from the cell index \emph{modulo the period} $P$ gives $F(\ma
 \textbf{Bumps without geometry.} A recipe's height map becomes a \emph{normal map} that fools the lighting into seeing bumps. The slope uses the Scharr $3\times3$ filter, the most direction-fair small filter, and crevices (height below the neighbours' average) darken the albedo and ambient occlusion:
 \begin{equation}h_x\approx\frac{3(h_{NE}+h_{SE}-h_{NW}-h_{SW})+10(h_E-h_W)}{32\,\Delta\,N},\qquad \hat n=\frac{(-k\,h_x,\,-k\,h_y,\,1)}{\lVert\cdot\rVert},\end{equation}
 where $\Delta$ is one texel and $N$ the cells per tile, so bump strength $k$ is scale-independent.
-Triplanar mapping (weights $w_i=|n_i|^4/\sum_j|n_j|^4$) avoids stretching.
+Triplanar mapping (weights $w_i=|n_i|^4\Big/\sum\limits_{j\in\{x,y,z\}}|n_j|^4$) avoids stretching.
 
 
 \subsection{The Rendering Pipeline}
@@ -434,7 +434,7 @@ Triplanar mapping (weights $w_i=|n_i|^4/\sum_j|n_j|^4$) avoids stretching.
 
 \subsection{Illumination Models and Light Sources}
 The lighting pass visits every pixel of the data poster and adds up the contribution of each light, then the sky's ambient light and the surface's own emission:
-\begin{equation}L_o=\sum_{j}\;f(\mathbf l_j,\mathbf v)\;L_j\,\mathrm{att}_j\,\mathrm{sh}_j\,\max(0,\mathbf n\!\cdot\!\mathbf l_j)\;+\;\underbrace{\text{ambient}\cdot\mathrm{AO}}_{\text{sky}}\;+\;\mathbf e.\end{equation}
+\begin{equation}L_o=\sum\limits_{j=1}^{N_L}\;f(\mathbf l_j,\mathbf v)\;L_j\,\mathrm{att}_j\,\mathrm{sh}_j\,\max(0,\mathbf n\!\cdot\!\mathbf l_j)\;+\;\underbrace{\text{ambient}\cdot\mathrm{AO}}_{\text{sky}}\;+\;\mathbf e,\qquad N_L=\text{number of lights}.\end{equation}
 Here $f$ is the \emph{illumination model} (the BRDF, the share of light from direction $\mathbf l$ that leaves toward the eye $\mathbf v$), $L_j$ the light's colour times intensity, $\mathrm{att}_j$ its distance falloff, $\mathrm{sh}_j\in[0,1]$ its shadow, $\mathbf n\!\cdot\!\mathbf l$ Lambert's cosine (light spreads over a larger area when it arrives at a slant), and $\mathbf e$ the emission of lamps and windows. Figure~\ref{fig:vectors} shows the four vectors every model uses; $\mathbf h=(\mathbf l+\mathbf v)/\lVert\mathbf l+\mathbf v\rVert$ is the half vector.
 
 \begin{figure}[H]
@@ -464,17 +464,18 @@ Here $f$ is the \emph{illumination model} (the BRDF, the share of light from dir
 	\caption{The geometry of lighting: surface normal, light, view and half vectors; sun, lamp, spotlight and rectangular panel.}\label{fig:vectors}
 \end{figure}
 
-\textbf{The six illumination models} are chosen per pixel from the G-buffer (Fig.~\ref{fig:models}). With $\mathbf c_d$ the diffuse colour (metals have none) and $F_0$ the base reflectance:
+\textbf{The six illumination models} are chosen per pixel from the G-buffer (Fig.~\ref{fig:models}). With $\mathbf c_d$ the diffuse colour (metals have none) and $F_0$ the base reflectance (Subsurface replaces the lighting cosine, so it is written for that term):
 \begin{align}
-\text{Lambert:}\quad & f=\frac{\mathbf c_d}{\pi}\\
-\text{Phong:}\quad & f=\frac{\mathbf c_d(1-F_0)}{\pi}+F_0\frac{m+2}{2\pi}\,(\mathbf r\!\cdot\!\mathbf v)^{m},\quad \mathbf r=2(\mathbf n\!\cdot\!\mathbf l)\mathbf n-\mathbf l\\
-\text{Blinn--Phong:}\quad & f=\frac{\mathbf c_d(1-F_0)}{\pi}+F_0\frac{m+8}{8\pi}\,(\mathbf n\!\cdot\!\mathbf h)^{m}\\
-\text{Oren--Nayar:}\quad & f=\frac{\mathbf c_d}{\pi}\big(A+B\max(0,\cos\Delta\varphi)\sin\alpha\tan\beta\big)\\
-\text{Cook--Torrance:}\quad & f=\frac{(1-F_l)(1-F_v)\,\mathbf c_d}{\pi}+D\,V\,F\\
-\text{Subsurface:}\quad & \text{Lambert with the cosine replaced by } \tfrac{\mathbf n\cdot\mathbf l+w}{1+w},\ w=0.5
+f_{\text{Lambert}}&=\frac{\mathbf c_d}{\pi}\\[4pt]
+f_{\text{Phong}}&=\frac{\mathbf c_d\,(1-F_0)}{\pi}+F_0\,\frac{m+2}{2\pi}\,\left(\mathbf r\!\cdot\!\mathbf v\right)^{m},\qquad \mathbf r=2(\mathbf n\!\cdot\!\mathbf l)\,\mathbf n-\mathbf l\\[4pt]
+f_{\text{Blinn--Phong}}&=\frac{\mathbf c_d\,(1-F_0)}{\pi}+F_0\,\frac{m+8}{8\pi}\,\left(\mathbf n\!\cdot\!\mathbf h\right)^{m}\\[4pt]
+f_{\text{Oren--Nayar}}&=\frac{\mathbf c_d}{\pi}\Big(A+B\,\max\!\left(0,\cos\Delta\varphi\right)\sin\alpha\,\tan\beta\Big)\\[4pt]
+f_{\text{Cook--Torrance}}&=\frac{(1-F_l)(1-F_v)\,\mathbf c_d}{\pi}+D\,V\,F\\[4pt]
+\langle\mathbf n\!\cdot\!\mathbf l\rangle_{\text{Subsurface}}&=\operatorname{clamp}\!\left(\frac{\mathbf n\!\cdot\!\mathbf l+w}{1+w},\,0,\,1\right),\qquad w=0.5
 \end{align}
 The shininess exponent comes from roughness $\rho$: $m=\max\!\big(2/(\rho^{2}+10^{-4})-2,\,1\big)$ (roughness $0.5\Rightarrow m=6$). Phong's mirror direction $\mathbf r$ is cheap but needs a reflection per light; Blinn--Phong replaces it by $\mathbf h$, which is cheaper and behaves better at glancing angles, and the factors $(m+2)/2\pi$ and $(m+8)/8\pi$ normalise the highlight so it does not gain energy as it sharpens. \emph{Oren--Nayar} treats a rough surface as many tiny Lambertian facets that scatter light back toward the source, so cloth and concrete look flat and do not darken at the edge like Lambert: with $\sigma=\rho$, $A=1-\frac{0.5\sigma^2}{\sigma^2+0.33}$, $B=\frac{0.45\sigma^2}{\sigma^2+0.09}$, $\alpha=\max(\theta_i,\theta_r)$, $\beta=\min(\theta_i,\theta_r)$ and $\Delta\varphi$ the azimuth between light and view around the normal. \emph{Subsurface} lets light wrap a little past the shadow line (the cosine ramps from 1 down to 0 as $\mathbf n\!\cdot\!\mathbf l$ goes from 1 to $-w$), imitating light scattering inside skin. \emph{Cook--Torrance} is the physically based default: $D$ is the GGX facet distribution, $V$ the Smith visibility and $F$ Schlick's Fresnel,
-\begin{equation}D=\frac{\alpha^{2}}{\pi\big((\mathbf n\!\cdot\!\mathbf h)^{2}(\alpha^{2}-1)+1\big)^{2}},\quad F=F_0+(1-F_0)(1-\mathbf v\!\cdot\!\mathbf h)^{5},\quad \alpha=\rho^{2}.\end{equation}
+\begin{equation}\begin{aligned}D&=\frac{\alpha^{2}}{\pi\left((\mathbf n\!\cdot\!\mathbf h)^{2}(\alpha^{2}-1)+1\right)^{2}}, & F&=F_0+(1-F_0)\left(1-\mathbf v\!\cdot\!\mathbf h\right)^{5}, & \alpha&=\rho^{2},\\[4pt]
+V&=\frac{0.5}{(\mathbf n\!\cdot\!\mathbf l)\sqrt{(\mathbf n\!\cdot\!\mathbf v)^2(1-\alpha^2)+\alpha^2}+(\mathbf n\!\cdot\!\mathbf v)\sqrt{(\mathbf n\!\cdot\!\mathbf l)^2(1-\alpha^2)+\alpha^2}}.\end{aligned}\end{equation}
 In the game, cloth and canvas use Oren--Nayar, skin uses Subsurface, and everything else uses Cook--Torrance (Table~\ref{tab:models}).
 
 \begin{table}[H]
@@ -499,8 +500,9 @@ In the game, cloth and canvas use Oren--Nayar, skin uses Subsurface, and everyth
 \end{figure}
 
 \textbf{Light sources} (Fig.~\ref{fig:vectors}b) differ only in how $L_j\,\mathrm{att}_j$ is found. A \emph{directional} light (sun, moon) has no falloff and parallel rays. A \emph{point} light (lamp, muzzle flash, explosion) uses the inverse-square law multiplied by a smooth window so it reaches exactly zero at its range $R$ and can be drawn as a bounded sphere:
-\begin{equation}\mathrm{att}(d)=\frac{\operatorname{clamp}\!\big(1-(d/R)^{4},0,1\big)^{2}}{d^{2}+1}.\end{equation}
-A \emph{spot} light (floodlight, flashlight) multiplies this by a cone factor that is 1 inside the inner angle and 0 outside the outer angle, $c=\operatorname{clamp}\!\big(\tfrac{\cos\theta-\cos\theta_o}{\cos\theta_i-\cos\theta_o},0,1\big)^{2}$. An \emph{area} light (ceiling panel) is a rectangle sampled as a $4\times4$ grid of point emitters, each with intensity$/16$ and weighted by its emission cosine, which gives soft highlights and soft shading. For $R=14$\,m: $\mathrm{att}(1)=0.50$, $\mathrm{att}(5)=0.037$, $\mathrm{att}(10)=0.0054$ and $\mathrm{att}(14)=0$ (checked by script, Fig.~\ref{fig:curves}).
+\begin{equation}\mathrm{att}(d)=\begin{cases}\dfrac{\left(1-(d/R)^{4}\right)^{2}}{d^{2}+1}, & 0\le d\le R,\\[8pt] 0, & d>R.\end{cases}\end{equation}
+A \emph{spot} light (floodlight, flashlight) multiplies this by a cone factor \begin{equation}c(\theta)=\begin{cases}1, & \theta\le\theta_i,\\[2pt]\left(\dfrac{\cos\theta-\cos\theta_o}{\cos\theta_i-\cos\theta_o}\right)^{2}, & \theta_i<\theta<\theta_o,\\[8pt]0, & \theta\ge\theta_o,\end{cases}\end{equation}
+where $\theta$ is the angle from the spot axis, $\theta_i$ the inner and $\theta_o$ the outer cone angle. An \emph{area} light (ceiling panel) is a rectangle sampled as a $4\times4$ grid of point emitters, each with intensity$/16$ and weighted by its emission cosine, which gives soft highlights and soft shading. For $R=14$\,m: $\mathrm{att}(1)=0.50$, $\mathrm{att}(5)=0.037$, $\mathrm{att}(10)=0.0054$ and $\mathrm{att}(14)=0$ (checked by script, Fig.~\ref{fig:curves}).
 
 \begin{figure}[H]
 	\centering
@@ -524,7 +526,7 @@ A \emph{spot} light (floodlight, flashlight) multiplies this by a cone factor th
 \begin{equation}z_i=\lambda\,n\Big(\frac{r}{n}\Big)^{i/N}+(1-\lambda)\Big(n+(r-n)\frac{i}{N}\Big),\quad i=1,\dots,N,\end{equation}
 a blend of logarithmic cuts (sharp shadows nearby) and even cuts, with $\lambda=0.75$, $N=3$, $n=0.1$\,m, $r=100$\,m, giving $9.1$, $24.2$ and $100$\,m. A pixel is looked up in the cascade containing its depth, moved a little along its normal (removes self-shadow acne), and compared against the stored depth with eight rotated percentage-closer taps, so the edge is soft. Spot lights have their own shadow maps, short ``contact'' rays darken crevices, and \emph{screen-space ambient occlusion} (SSAO) darkens corners where the sky is hidden.
 
-\textbf{Ambient light} is the sky seen from the surface. Diffuse ambient is the sky's cosine-weighted colour; specular ambient uses Karis's split-sum fit, $\text{prefiltered sky}\times(F_0\,A+B)$, where $(A,B)$ depends only on roughness and $\mathbf n\!\cdot\!\mathbf v$; rough surfaces see a blurred sky. Both are multiplied by the occlusion term AO and fade inside rooms (the room volumes mask the sky), so interiors are lit only by their lamps and the light entering by doors.
+\textbf{Ambient light} is the sky seen from the surface. Diffuse ambient is the sky's cosine-weighted colour; specular ambient uses Karis's split-sum fit, $\text{prefiltered sky}\times(F_0\,A+B)$, where $(A,B)$ depends only on roughness and $\mathbf n\!\cdot\!\mathbf v$; rough surfaces see a blurred sky. Both are multiplied by the occlusion term AO and fade inside rooms (the room volumes mask the sky), so interiors are lit by their lamps and the light entering by doors.
 
 \subsection{Sky, Time of Day and Clouds}
 The sun's height follows astronomy, $\sin(\text{elev})=\sin\varphi\sin\delta+\cos\varphi\cos\delta\cos h$ (latitude $\varphi$, declination $\delta$, hour angle $h$). The sky colour comes from Rayleigh and Mie scattering~[6]; the moon and a star field take over at night. Clouds live on two planes, cumulus at $H=1500$\,m and cirrus at 7\,km. A view ray with direction $\mathbf d$ meets the plane at
@@ -533,7 +535,7 @@ where $\mathbf w$ is the wind velocity: shifting the noise by $\mathbf wt$ makes
 
 \begin{figure}[H]
 	\centering
-	\begin{tikzpicture}[scale=0.62]
+	\begin{tikzpicture}[scale=0.5]
 		\draw[thick] (0,0) -- (7,0) node[right,font=\scriptsize]{ground};
 		\draw[blue!60,thick] (0,1.8) -- (7,1.8) node[right,font=\scriptsize]{cumulus, 1.5 km};
 		\draw[blue!40,thick] (0,2.8) -- (7,2.8) node[right,font=\scriptsize]{cirrus, 7 km};
@@ -547,13 +549,13 @@ where $\mathbf w$ is the wind velocity: shifting the noise by $\mathbf wt$ makes
 
 
 \subsection{Terrain, Trees, Physics and Gameplay}
-\textbf{Terrain} is warped, ridged fractal noise flattened into a plateau for the base and streamed in 64\,m chunks; grass, dirt, rock and sand blend by slope and height. \textbf{Trees} (oak, pine, birch, cypress) are tables of limbs and leaf lumps; each instance gets its own size, lean and tint, and the vertex shader bends it as a cantilever, $\Delta_x=2s\,(0.04+0.1g)(y/9)^2$ ($\Delta_z$ is 35\% of it), where $g=\tfrac12+\tfrac12\sin(1.3t+0.05x+0.03z)$ is a travelling gust.
+\textbf{Terrain} is warped, ridged noise on a base plateau, streamed in 64\,m chunks. \textbf{Trees} (oak, pine, birch, cypress) are tables of limbs and leaf lumps; each instance gets its own size, lean and tint, and the vertex shader bends it as a cantilever, $\Delta_x=2s\,(0.04+0.1g)(y/9)^2$ ($\Delta_z$ is 35\% of it), where $g=\tfrac12+\tfrac12\sin(1.3t+0.05x+0.03z)$ is a travelling gust.
 
 \textbf{Collision} uses rotatable boxes and a capsule player. Cars follow the bicycle model, $\dot\psi=v\tan\delta/L$, and engine power fades toward top speed, $\dot v=a_0(1-0.6|v|/v_{\max})$. \textbf{Ladders} are a four-state machine (none, mounting, climbing, topping out) in which the controller owns the body, so it cannot stick. A staged machine drives five mission goals; sounds are synthesised.
 
 
 
-\textbf{How transformations and lighting were verified.} Unit tests check that appending a mesh places geometry exactly by its matrix, that normals stay perpendicular under non-uniform scale, that a mirror keeps winding outward, that rotation keeps vertices on the same sphere, and that every primitive's volume and bounds match its formula. The lighting is probed on the GPU by a fixture shader that includes the \emph{real} GLSL: each illumination model is checked for reciprocity ($f(\mathbf l,\mathbf v)=f(\mathbf v,\mathbf l)$) and with a ``white furnace'' energy test (a model must never reflect more light than it receives), light falloff and light shapes are checked against their formulas, and the sun shadows are checked for acne and for shadows detached from their casters.
+\textbf{Verification.} Unit tests check that a mesh is placed exactly by its matrix, that normals stay perpendicular under non-uniform scale, and that a mirror keeps winding outward. A GPU fixture shader that includes the \emph{real} GLSL checks every illumination model for reciprocity ($f(\mathbf l,\mathbf v)=f(\mathbf v,\mathbf l)$) and with a ``white furnace'' energy test, and checks light falloff, light shapes and sun shadows (acne, detached shadows).
 
 \section{Conclusion}
 Small data-driven techniques give a deterministic world.

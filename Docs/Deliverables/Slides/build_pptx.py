@@ -205,12 +205,14 @@ textbox(s, 7.5, 5.38, 5.2, 0.35, ['A lower layer never knows a higher one.'], si
 
 # ================= 4 procedural
 s = new_slide('2. Procedural shapes and textures')
-p, w, h = picture(s, IMG + 'noise_stages.png', 1.9, 1.15, w=9.5, shadowed=True, border=False)
-caption(s, 1.9, 1.15 + h + 0.04, 9.5, 'gradient, fractal, warped, ridged and cellular noise')
-y0 = 1.15 + h + 0.5
-eq_panel(s, 0.6, y0, 6.0, 2.05, 'Fractal noise (tiles exactly)', ['fractal'], scale=1.45)
-eq_panel(s, 0.6, y0 + 2.2, 6.0, 6.95 - (y0 + 2.2), 'Vertex push by a noise deformer', ['push'], scale=1.3)
-textbox(s, 6.95, y0 + 0.1, 5.9, 3.7, ['18 recipes → 22 materials, baked once at 1024²', 'Scharr filter turns height into bumps; crevices darken', 'Objects are tables of primitives plus noise deformers', 'Soldiers: skeletons with two-bone IK legs'], size=20, bullets=True, space=11)
+p, w, h = picture(s, IMG + 'noise_stages.png', 0.6, 1.15, w=6.0, shadowed=True, border=False)
+caption(s, 0.6, 1.15 + h + 0.03, 6.0, 'gradient, fractal, warped, ridged and cellular noise')
+y0 = 1.15 + h + 0.45
+eq_panel(s, 0.6, y0, 6.0, 2.55, 'Fractal noise (tiles exactly)', ['fractal'])
+eq_panel(s, 0.6, y0 + 2.7, 6.0, 6.95 - (y0 + 2.7), 'Vertex push by a noise deformer', ['push'])
+textbox(s, 6.95, 1.2, 5.85, 3.3, ['18 recipes → 22 materials, baked once at 1024²', 'Scharr filter turns height into bumps; crevices darken', 'Objects are tables of primitives plus noise deformers', 'Soldiers: skeletons with two-bone IK legs'], size=19, bullets=True, space=9)
+p, w, h = picture(s, IMG + 'showroom.jpg', 7.4, 4.3, w=4.6, shadowed=True)
+caption(s, 7.4, 4.3 + h + 0.04, 4.6, 'The material showroom: one sphere per recipe')
 
 # ================= 5 transformations
 s = new_slide('3. Transformations: creating and combining objects')
@@ -223,23 +225,20 @@ eq_panel(s, 7.05, 5.75, 5.75, 1.2, 'World to screen', ['clip'], scale=1.5)
 
 # ================= 6 illumination
 s = new_slide('4. Illumination models and light sources')
-eq_panel(s, 0.6, 1.1, 8.8, 1.3, 'Direct light + ambient + emission', ['sum'])
-textbox(s, 9.6, 1.35, 3.3, 0.9, ['f = illumination model','att = falloff   sh = shadow'], size=13, color=SLATE, italic=True, space=0, check=False)
+eq_panel(s, 0.6, 1.1, 12.2, 1.3, 'Direct light + ambient + emission     (f: illumination model · att: falloff · sh: shadow · N_L: number of lights)', ['sum'])
 panel(s, 0.6, 2.55, 7.0, 4.4)
 rows = [('Lambert', 'lambert'), ('Phong', 'phong'), ('Blinn–Phong', 'blinn'), ('Oren–Nayar', 'oren'), ('Cook–Torrance', 'ct2'), ('Subsurface', 'sss')]
 y = 2.62
 for i, (name, img) in enumerate(rows):
-    textbox(s, 0.85, y + 0.06, 2.1, 0.55, [name], size=16, bold=True, color=TEAL, anchor=MSO_ANCHOR.MIDDLE, check=False)
-    eq(s, img, 3.0, y + 0.05, 4.4, 0.58, scale=2.0, align='left')
+    textbox(s, 0.85, y + 0.06, 2.0, 0.55, [name], size=16, bold=True, color=TEAL, anchor=MSO_ANCHOR.MIDDLE, check=False)
+    eq(s, img, 2.85, y + 0.05, 4.6, 0.6, scale=2.0, align='left')
     if i < len(rows) - 1:
         rect(s, 0.85, y + 0.69, 6.5, 0.012, fill=HAIR, shape=MSO_SHAPE.RECTANGLE)
     y += 0.71
-p, w, h = picture(s, IMG + 'models.jpg', 7.9, 2.55, w=4.9, shadowed=True)
-caption(s, 7.9, 2.55 + h + 0.03, 4.9, 'Lambert · Phong · Blinn–Phong · Oren–Nayar · Cook–Torrance · Subsurface')
-y2 = 2.55 + h + 0.42
-panel(s, 7.9, y2, 4.9, 6.95 - y2, 'Light sources')
-textbox(s, 8.15, y2 + 0.48, 4.5, 1.45, ['Directional: sun, moon', 'Point: lamps, flashes', 'Spot: floodlights (cone)', 'Area: 4×4 point samples'], size=15, bullets=True, space=2)
-eq(s, 'att', 8.0, 6.95 - 0.85, 4.7, 0.75, scale=2.0)
+panel(s, 7.9, 2.55, 4.9, 1.75, 'Light sources')
+textbox(s, 8.15, 2.95, 4.5, 0.4, ['Directional · Point · Spot · Area (4×4 samples)'], size=13, color=SLATE, check=False)
+eq(s, 'att', 8.0, 3.3, 4.7, 0.95, scale=2.0)
+eq_panel(s, 7.9, 4.45, 4.9, 2.5, 'Definitions used above', ['defs', 'ctdefs'], gap=0.12)
 
 # ================= 7 rendering pipeline
 s = new_slide('5. The rendering pipeline: shadows, ambient, tone map')
