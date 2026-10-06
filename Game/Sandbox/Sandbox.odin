@@ -339,6 +339,10 @@ Sandbox_Restart_Requested :: proc(sandbox: ^Sandbox) -> bool {
 	return sandbox.play.restart_requested
 }
 
+Sandbox_Is_Paused :: proc(sandbox: ^Sandbox) -> bool {
+	return sandbox.play.paused
+}
+
 Sandbox_Quit_Requested :: proc(sandbox: ^Sandbox) -> bool {
 	return sandbox.play.quit_requested
 }

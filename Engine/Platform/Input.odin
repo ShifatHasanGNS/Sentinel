@@ -8,15 +8,24 @@ Input :: struct {
 	mouse_delta:    [2]f32,
 	has_mouse:      bool,
 	captured:       bool,
+	focused:        bool, // False while another window is in front.
+	click_edge:     bool, // The left button went down this frame.
+	left_was_down:  bool,
+	swallow_left:   bool, // The click that captured the mouse must not also fire.
 }
 
 Input_Create :: proc(window: ^Window) -> Input {
-	return Input{window = window.handle}
+	return Input{window = window.handle, focused = true}
 }
 
 // Call once per frame after polling events.
 Input_Update :: proc(input: ^Input) {
 	x, y := glfw.GetCursorPos(input.window)
+	input.focused = glfw.GetWindowAttrib(input.window, glfw.FOCUSED) != 0
+	left_down := glfw.GetMouseButton(input.window, glfw.MOUSE_BUTTON_LEFT) == glfw.PRESS
+	input.click_edge = left_down && !input.left_was_down
+	input.left_was_down = left_down
+	if !left_down do input.swallow_left = false
 	if input.has_mouse {
 		input.mouse_delta = {f32(x - input.mouse_position.x), f32(y - input.mouse_position.y)}
 	}
@@ -99,6 +108,12 @@ Input_Key_Down :: proc(input: ^Input, key: Key) -> bool {
 	return glfw.GetKey(input.window, glfw_keys[key]) == glfw.PRESS
 }
 
+// A click inside the window takes the mouse (and is not also a shot).
+Input_Capture_By_Click :: proc(input: ^Input) {
+	Input_Capture_Mouse(input, true)
+	input.swallow_left = true
+}
+
 Input_Capture_Mouse :: proc(input: ^Input, captured: bool) {
 	mode: i32 = glfw.CURSOR_DISABLED if captured else glfw.CURSOR_NORMAL
 	glfw.SetInputMode(input.window, glfw.CURSOR, mode)
@@ -113,6 +128,7 @@ Mouse_Button :: enum {
 }
 
 Input_Mouse_Down :: proc(input: ^Input, button: Mouse_Button) -> bool {
+	if button == .Left && input.swallow_left do return false
 	glfw_button: i32 = glfw.MOUSE_BUTTON_LEFT if button == .Left else glfw.MOUSE_BUTTON_RIGHT
 	return glfw.GetMouseButton(input.window, glfw_button) == glfw.PRESS
 }

@@ -93,6 +93,7 @@ Play :: struct {
 	sound_muted:   bool,
 	quit_requested: bool,
 	paused:        bool,
+	mouse_free:    bool, // The cursor is free (before the first click, or after the window lost focus): show the click-to-play hint.
 	escape_was_down: bool,
 	next_variant:  Mission.Variant, // Which mission the next playthrough is (R repeats this one, N switches).
 	autoplay:      bool,
@@ -174,6 +175,7 @@ play_create :: proc(sandbox: ^Sandbox, demo: bool, fly: bool, drive: string, ove
 		}
 	}
 	if overlay == "pause" do play.paused = true
+	if overlay == "cursor" do play.mouse_free = true
 	if overlay == "ladder" && len(play.battle.collision.ladders) > 0 {
 		ladder := play.battle.collision.ladders[0]
 		outward := World.rotate_about_y({0, 0, 1}, ladder.yaw_radians)
@@ -562,6 +564,7 @@ play_draw_hud :: proc(sandbox: ^Sandbox, width, height: i32) {
 	map_draw_hud(sandbox, w, h, scale)
 	mission_draw_hud(play, w, h, scale)
 	if play.paused do draw_pause_screen(play, w, h, scale)
+	if play.mouse_free do draw_cursor_hint(play, w, h, scale)
 	Render.Hud_Flush(hud, width, height)
 }
 
@@ -698,15 +701,35 @@ play_handle_pause :: proc(sandbox: ^Sandbox, input: ^Platform.Input) -> bool {
 	play := &sandbox.play
 	if !play.pause_enabled do return false
 	escape_down := Platform.Input_Key_Down(input, .Escape)
-	if escape_down && !play.escape_was_down {
-		play.paused = !play.paused
-		Platform.Input_Capture_Mouse(input, !play.paused)
-		play.sound_muted = play.paused
-		if play.sound.device != nil do play.sound.device.mixer.master = 0 if play.paused else 0.8
+	if (escape_down && !play.escape_was_down) || (!input.focused && !play.paused) { // Switching to another window pauses the game.
+		set_paused(play, input, !play.paused)
 	}
 	play.escape_was_down = escape_down
+	play.mouse_free = !input.captured && !play.paused
 	if play.paused && Platform.Input_Key_Down(input, .Q) do play.quit_requested = true
 	return play.paused
+}
+
+@(private = "file")
+set_paused :: proc(play: ^Play, input: ^Platform.Input, paused: bool) {
+	play.paused = paused
+	Platform.Input_Capture_Mouse(input, !paused && input.focused)
+	play.sound_muted = paused
+	if play.sound.device != nil do play.sound.device.mixer.master = 0 if paused else 0.8
+}
+
+// A banner while the cursor is free: it says how to take the mouse and how to move or resize the window.
+draw_cursor_hint :: proc(play: ^Play, width, height, scale: f32) {
+	hud := &play.hud
+	lines := [?]string{"CLICK THE WINDOW TO PLAY", "THE MOUSE IS FREE: DRAG THE TITLE BAR TO MOVE, DRAG AN EDGE TO RESIZE", "ESC PAUSE   F11 FULLSCREEN"}
+	box_height := 14 * scale * 1.2 * f32(len(lines)) + 16 * scale
+	Render.Hud_Rect(hud, 0, height - box_height, width, box_height, {0, 0, 0, 0.55})
+	y := height - box_height + 8 * scale
+	for line, index in lines {
+		text_scale := scale * (1.6 if index == 0 else 1.0)
+		Render.Hud_Text(hud, (width - Render.Hud_Text_Width(line, text_scale)) / 2, y, line, text_scale, {1, 0.92, 0.5, 1} if index == 0 else {0.85, 0.9, 1, 0.9})
+		y += 14 * scale * (1.8 if index == 0 else 1.2)
+	}
 }
 
 draw_pause_screen :: proc(play: ^Play, width, height, scale: f32) {

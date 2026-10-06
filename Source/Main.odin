@@ -12,11 +12,10 @@ main :: proc() {
 	benchmarking := config.benchmark_frames > 0
 	width: i32 = 1920 if benchmarking else 1280
 	height: i32 = 1080 if benchmarking else 720
-	window, window_ok := Platform.Window_Create("Sentinel", width, height, interactive, !benchmarking, interactive && !benchmarking && config.fullscreen)
+	window, window_ok := Platform.Window_Create("Sentinel", width, height, false, !benchmarking, interactive && !benchmarking && config.fullscreen)
 	if !window_ok do os.exit(1)
 	defer Platform.Window_Destroy(&window)
 	input := Platform.Input_Create(&window)
-	if interactive && config.benchmark_frames == 0 do Platform.Input_Capture_Mouse(&input, true)
 	if config.benchmark_frames > 0 do Platform.Window_Set_Vsync(false)
 
 	switch config.scene {
@@ -59,6 +58,9 @@ play_sandbox_once :: proc(window: ^Platform.Window, input: ^Platform.Input, conf
 		handles_escape = config.capture_frames == 0 && config.benchmark_frames == 0,
 		wants_quit = proc(user: rawptr) -> bool {
 			return Sandbox.Sandbox_Quit_Requested((^Sandbox.Sandbox)(user))
+		},
+		cursor_stays_free = proc(user: rawptr) -> bool {
+			return Sandbox.Sandbox_Is_Paused((^Sandbox.Sandbox)(user))
 		},
 	})
 	return Sandbox.Sandbox_Restart_Requested(&sandbox), sandbox.play.next_variant

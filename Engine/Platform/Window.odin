@@ -27,6 +27,9 @@ Window_Create :: proc(title: cstring, width, height: i32, visible: bool, retina 
 	glfw.WindowHint(glfw.OPENGL_FORWARD_COMPAT, true)
 	glfw.WindowHint(glfw.VISIBLE, b32(visible))
 	glfw.WindowHint(glfw.COCOA_RETINA_FRAMEBUFFER, b32(retina))
+	glfw.WindowHint(glfw.RESIZABLE, true)
+	glfw.WindowHint(glfw.DECORATED, true)
+	glfw.WindowHint(glfw.FOCUS_ON_SHOW, true)
 
 	// Fullscreen takes the primary monitor at its current video mode: no title bar to grab, so the window cannot be dragged,
 	// minimised or resized with the mouse while it is captured.
@@ -42,11 +45,47 @@ Window_Create :: proc(title: cstring, width, height: i32, visible: bool, retina 
 		glfw.Terminate()
 		return {}, false
 	}
+	if monitor == nil {
+		glfw.SetWindowSizeLimits(window.handle, WINDOW_MIN_WIDTH, WINDOW_MIN_HEIGHT, glfw.DONT_CARE, glfw.DONT_CARE)
+		center_on_monitor(window.handle, width, height)
+	}
 	glfw.MakeContextCurrent(window.handle)
 	glfw.SwapInterval(1)
 	gl.load_up_to(GL_VERSION_MAJOR, GL_VERSION_MINOR, glfw.gl_set_proc_address)
 	window.framebuffer_width, window.framebuffer_height = glfw.GetFramebufferSize(window.handle)
 	return window, true
+}
+
+// A window smaller than this cannot show the HUD, so the user cannot shrink it past it.
+WINDOW_MIN_WIDTH :: 640
+WINDOW_MIN_HEIGHT :: 360
+
+// Centres a new window in the primary monitor's work area (the part not covered by the menu bar and dock).
+@(private = "file")
+center_on_monitor :: proc(handle: glfw.WindowHandle, width, height: i32) {
+	x, y, area_width, area_height := glfw.GetMonitorWorkarea(glfw.GetPrimaryMonitor())
+	if area_width <= 0 || area_height <= 0 do return
+	glfw.SetWindowPos(handle, x + max((area_width - width) / 2, 0), y + max((area_height - height) / 2, 0))
+}
+
+Window_Show :: proc(window: ^Window) {
+	glfw.ShowWindow(window.handle)
+	glfw.FocusWindow(window.handle)
+}
+
+Window_Is_Focused :: proc(window: Window) -> bool {
+	return glfw.GetWindowAttrib(window.handle, glfw.FOCUSED) != 0
+}
+
+// True while the window is minimised or has no drawable area; there is nothing to render then.
+Window_Is_Hidden :: proc(window: Window) -> bool {
+	return window.framebuffer_width <= 0 || window.framebuffer_height <= 0 || glfw.GetWindowAttrib(window.handle, glfw.ICONIFIED) != 0
+}
+
+// Sleeps until the window event (restore, resize, close) arrives, so a minimised game uses no CPU or GPU.
+Window_Wait_Events :: proc(window: ^Window) {
+	glfw.WaitEventsTimeout(0.1)
+	window.framebuffer_width, window.framebuffer_height = glfw.GetFramebufferSize(window.handle)
 }
 
 Window_Destroy :: proc(window: ^Window) {

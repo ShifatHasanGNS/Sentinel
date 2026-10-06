@@ -4,6 +4,7 @@ import "../Engine/GPU"
 import "../Engine/Platform"
 import "core:fmt"
 import "core:slice"
+import "vendor:glfw"
 
 BENCHMARK_WARMUP_FRAMES :: 10
 BENCHMARK_FRAME_SECONDS :: 1.0 / 60 // Scripted time advances by this per frame, whatever the real frame time.
@@ -17,6 +18,7 @@ Scene :: struct {
 	finished: proc(user: rawptr) -> bool, // Optional; the loop ends when this returns true (the scene wants to be recreated).
 	handles_escape: bool, // The scene reacts to Escape itself (a pause menu); the loop then leaves it alone.
 	wants_quit: proc(user: rawptr) -> bool, // Optional; true makes the loop close the window.
+	cursor_stays_free: proc(user: rawptr) -> bool, // Optional; true (a pause menu) stops a click from capturing the mouse.
 }
 
 Run_Loop :: proc(window: ^Platform.Window, input: ^Platform.Input, config: Config, scene: Scene) {
@@ -24,10 +26,26 @@ Run_Loop :: proc(window: ^Platform.Window, input: ^Platform.Input, config: Confi
 	fullscreen_was_down, cursor_was_down: bool
 	frame_milliseconds: [dynamic]f32
 	defer delete(frame_milliseconds)
+	interactive := config.capture_frames == 0
 	for frame := 1; !Platform.Window_Should_Close(window); frame += 1 {
+		if interactive && frame == 1 do Platform.Window_Show(window) // Shown only once the world is built, so the window never hangs half-drawn.
+		if interactive && Platform.Window_Is_Hidden(window^) { // Minimised: sleep until restored, and do not count the wait as game time.
+			if input.captured do Platform.Input_Capture_Mouse(input, false)
+			Platform.Window_Wait_Events(window)
+			clock.previous_seconds = glfw.GetTime()
+			frame -= 1
+			continue
+		}
 		Platform.Clock_Tick(&clock)
 		if config.capture_frames == 0 do Platform.Input_Update(input) // Captures must not depend on where the mouse happens to be.
 		if !input.captured do input.mouse_delta = {} // A free cursor must not turn the view.
+		// The mouse is free until the player clicks in the window, and is freed again when another window takes focus, so the
+		// title bar, the corners and the window buttons are always reachable.
+		if interactive && config.benchmark_frames == 0 {
+			if input.captured && !input.focused do Platform.Input_Capture_Mouse(input, false)
+			stays_free := scene.cursor_stays_free != nil && scene.cursor_stays_free(scene.user)
+			if !input.captured && input.focused && input.click_edge && !stays_free do Platform.Input_Capture_By_Click(input)
+		}
 		// F11 toggles fullscreen; F9 frees the cursor (to resize, move or minimise the window) and captures it again.
 		fullscreen_down, cursor_down := Platform.Input_Key_Down(input, .F11), Platform.Input_Key_Down(input, .F9)
 		if fullscreen_down && !fullscreen_was_down do Platform.Window_Toggle_Fullscreen(window)
