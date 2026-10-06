@@ -209,10 +209,10 @@ Layered engine; all content from code; modern renderer; a playable game (vehicle
 \column{0.5\textwidth}
 \begin{tikzpicture}
 \begin{axis}[xbar,width=6.2cm,height=3.2cm,symbolic y coords={Sky,Post,SSAO,Shadows,Lighting,Geometry},ytick=data,xmin=0,xmax=5.4,scaled x ticks=false,nodes near coords,every node near coord/.append style={font=\tiny},tick label style={font=\scriptsize},xlabel={GPU ms per frame},xlabel style={font=\scriptsize},bar width=6pt,enlarge y limits=0.12]
-\addplot[fill=kuet!60] coordinates {(0.05,Sky)(1.21,Post)(1.20,SSAO)(1.58,Shadows)(2.79,Lighting)(4.11,Geometry)};
+\addplot[fill=kuet!60] coordinates {(0.05,Sky)(1.28,Post)(1.23,SSAO)(1.56,Shadows)(2.76,Lighting)(4.43,Geometry)};
 \end{axis}
 \end{tikzpicture}\\[1pt]
-\small \textbf{10.9\,ms} of the 16.7\,ms budget at 1080p\\[3pt]
+\small \textbf{11.3\,ms} of the 16.7\,ms budget at 1080p\\[3pt]
 \begin{tabularx}{\linewidth}{lr}\toprule
 \scriptsize Unit tests (13 packages) & \scriptsize 281\\
 \scriptsize TextureCheck (exact tiling) & \scriptsize 8\,318\\

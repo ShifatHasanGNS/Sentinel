@@ -190,7 +190,7 @@ Most video games ship with gigabytes of files made by artists: 3D models, photog
 
 The engine is written in the Odin language on OpenGL~4.1, the newest version macOS offers (it has no compute shaders), and is organised in six layers that may only depend on the layers beneath them. A deferred renderer records what every pixel is made of and then lights it with a sun and moon, spot and point lamps, cascaded shadow maps, ambient occlusion, screen-space reflections, an atmospheric sky with wind-driven clouds, fog, bloom, tone mapping, colour grading and anti-aliasing. Surfaces come from 18 texture recipes built on periodic gradient noise, domain warping and cellular noise; normal maps are derived from height fields with a Scharr filter. Objects and characters are tables of primitives, each placed by a chain of $4\times4$ transformation matrices (scale, rotate, move, hierarchy, view, projection), and lit by six selectable illumination models (Lambert, Phong, Blinn--Phong, Oren--Nayar, Cook--Torrance, subsurface) under directional, point, spot and area lights.
 
-On top of the engine sit collision, a ladder state machine, four ground vehicles and a helicopter, enemy soldiers with stealth rules, synthesised audio, and a five-objective rescue mission in the spirit of \textit{Project I.G.I.} The work was measured and verified, not only drawn: at 1080p the GPU needs 10.9~ms per frame, and 281 unit tests, 30 GL checks, 8\,318 texture checks (including exact tiling of every material), 318\,567 renderer checks and two scripted full playthroughs pass. The report explains every technique in plain language, with its governing equations, diagrams and screenshots, and documents a debugging case in which a star in the fog colour painted a bright vertical line across the night scene.
+On top of the engine sit collision, a ladder state machine, four ground vehicles and a helicopter, enemy soldiers with stealth rules, synthesised audio, and a five-objective rescue mission in the spirit of \textit{Project I.G.I.} The work was measured and verified, not only drawn: at 1080p the GPU needs 11.3~ms per frame, and 281 unit tests, 30 GL checks, 8\,318 texture checks (including exact tiling of every material), 318\,567 renderer checks and two scripted full playthroughs pass. The report explains every technique in plain language, with its governing equations, diagrams and screenshots, and documents a debugging case in which a star in the fog colour painted a bright vertical line across the night scene.
 
 \textbf{Keywords:} procedural generation, game engine, OpenGL, deferred rendering, physically based shading, noise, texture synthesis, real-time graphics.
 
@@ -576,7 +576,7 @@ with yaw $\psi$, speed $v$, steering $\delta$, wheel base $L$. \textbf{Ladders} 
 This chapter states how the work was measured and shows what it produces.
 
 \section{Experimental Setup}
-An Apple-silicon Mac (macOS, OpenGL~4.1 core), release build (\code{-o:speed}): 164 Odin files (about 19\,200 lines) and 47 GLSL files (about 2\,000 lines). Benchmark: a scripted 1\,km flight at 1080p, 300 frames (Table~\ref{tab:setup}).
+An Apple-silicon Mac (macOS, OpenGL~4.1 core), release build (\code{-o:speed}): 168 Odin files (about 20\,000 lines) and 59 GLSL files (about 2\,250 lines). Benchmark: a scripted 1\,km flight at 1080p, 300 frames (Table~\ref{tab:setup}).
 
 \begin{table}[H]
 	\caption{Experimental setup}\label{tab:setup}
@@ -585,7 +585,7 @@ An Apple-silicon Mac (macOS, OpenGL~4.1 core), release build (\code{-o:speed}): 
 		\toprule \textbf{Item} & \textbf{Value}\\ \midrule
 		Machine & Apple-silicon Mac, macOS, OpenGL 4.1 core profile\\
 		Build & Odin dev-2026-09, \code{-o:speed}\\
-		Code size & 164 Odin files (about 19\,200 lines), 47 GLSL files (about 2\,000 lines)\\
+		Code size & 168 Odin files (about 20\,000 lines), 59 GLSL files (about 2\,250 lines)\\
 		Resolution & 1920$\times$1080 benchmark; 2560$\times$1440 screenshots\\
 		\bottomrule
 	\end{tabularx}
@@ -600,7 +600,7 @@ No dataset is used. All content comes from fixed seeds, so every run is reproduc
 
 \section{Implementation and Results}
 \subsection{Quantitative results}
-The display locks the average frame to 16.75\,ms (60\,Hz); the GPU work needs only 10.91\,ms (Table~\ref{tab:gpu}, Fig.~\ref{fig:gpu}). Verification: 281 unit tests (noise, meshes, IK, collision, ladders, vehicles, mission, audio), 30 GL checks, 8\,318 texture checks (exact tiling of every material), 318\,567 renderer checks (lighting, shadows, atmosphere, instancing), 141 window checks (resize, maximise, minimise, restore and full-screen toggling while rendering), 79 audio checks (every synthesised sound mixed offline, spatial panning and the output device) and two scripted playthroughs that both finish 5 of 5 objectives.
+The display locks the median frame to 16.65\,ms (60\,Hz); the GPU work needs only 11.28\,ms (Table~\ref{tab:gpu}, Fig.~\ref{fig:gpu}). Verification: 281 unit tests (noise, meshes, IK, collision, ladders, vehicles, mission, audio), 30 GL checks, 8\,318 texture checks (exact tiling of every material), 318\,567 renderer checks (lighting, shadows, atmosphere, instancing), 141 window checks (resize, maximise, minimise, restore and full-screen toggling while rendering), 79 audio checks (every synthesised sound mixed offline, spatial panning and the output device) and two scripted playthroughs that both finish 5 of 5 objectives.
 
 
 \begin{table}[H]
@@ -608,8 +608,8 @@ The display locks the average frame to 16.75\,ms (60\,Hz); the GPU work needs on
 	\small\setstretch{1.05}
 	\begin{tabularx}{\linewidth}{Xrr}
 		\toprule \textbf{Pass} & \textbf{Time (ms)} & \textbf{Share}\\ \midrule
-		Geometry (G-buffer) & 4.11 & 38\%\\ Lighting (sun, ambient, reflections, fog) & 2.79 & 26\%\\ Shadows (3 cascades) & 1.58 & 14\%\\ Post-processing & 1.21 & 11\%\\ Ambient occlusion & 1.20 & 11\%\\ Sky table & 0.02 & 0\%\\ \midrule
-		\textbf{GPU total} & \textbf{10.91} & 100\%\\ \bottomrule
+		Geometry (G-buffer) & 4.43 & 39\%\\ Lighting (sun, ambient, reflections, fog) & 2.76 & 24\%\\ Shadows (3 cascades) & 1.56 & 14\%\\ Post-processing & 1.28 & 11\%\\ Ambient occlusion & 1.23 & 11\%\\ Sky table & 0.02 & 0\%\\ \midrule
+		\textbf{GPU total} & \textbf{11.28} & 100\%\\ \bottomrule
 	\end{tabularx}
 \end{table}
 
@@ -618,10 +618,10 @@ The display locks the average frame to 16.75\,ms (60\,Hz); the GPU work needs on
 	\begin{tikzpicture}
 		\begin{axis}[xbar,width=0.85\linewidth,height=3.4cm,symbolic y coords={Sky table,Post,SSAO,Shadows,Lighting,Geometry},ytick=data,xmin=0,xmax=5,scaled x ticks=false,
 			nodes near coords,nodes near coords align={horizontal},every node near coord/.append style={font=\scriptsize},tick label style={font=\scriptsize},xlabel={ms per frame},xlabel style={font=\scriptsize},bar width=6pt,enlarge y limits=0.12]
-			\addplot[fill=blue!45] coordinates {(0.05,Sky table)(1.21,Post)(1.20,SSAO)(1.58,Shadows)(2.79,Lighting)(4.11,Geometry)};
+			\addplot[fill=blue!45] coordinates {(0.05,Sky table)(1.28,Post)(1.23,SSAO)(1.56,Shadows)(2.76,Lighting)(4.43,Geometry)};
 		\end{axis}
 	\end{tikzpicture}
-	\caption{GPU time per pass (total 10.91\,ms of the 16.7\,ms budget).}\label{fig:gpu}
+	\caption{GPU time per pass (total 11.28\,ms of the 16.7\,ms budget).}\label{fig:gpu}
 \end{figure}
 
 
@@ -658,10 +658,10 @@ Window handling follows a click-to-capture model: the cursor stays free until th
 
 
 \subsection{Analysis of the results}
-Geometry costs most (38\%), so instancing and per-chunk culling matter; the GPU uses two thirds of the budget. The streak was found by bisecting draw items, lights and effects.
+Geometry costs most (39\%), so instancing and per-chunk culling matter; the GPU uses two thirds of the budget. The streak was found by bisecting draw items, lights and effects.
 
 \section{Objective Achieved}
-(1) Six layers, downward-only. (2) No model, image or sound file. (3) Deferred PBR with shadows, SSAO, reflections, sky, bloom, ACES, FXAA. (4) Two playable missions. (5) 281 tests, 327\,000 GL checks, 220 window and audio checks, 10.9\,ms GPU time.
+(1) Six layers, downward-only. (2) No model, image or sound file. (3) Deferred PBR with shadows, SSAO, reflections, sky, bloom, ACES, FXAA. (4) Two playable missions. (5) 281 tests, 327\,000 GL checks, 220 window and audio checks, 11.3\,ms GPU time.
 
 
 
@@ -735,7 +735,7 @@ The project used modern resources (compiler, GPU timers, test runners, version c
 \chapter{Conclusions}
 
 \section{Summary}
-Sentinel shows that a complete 3D game, from surfaces and shapes to weather and sound, can be generated entirely by code under an OpenGL~4.1 limit: a six-layer engine, a deferred physically based renderer, noise-based recipes, table-driven content, a mission game and a large test suite fit in about 21\,000 lines and run within a 60 fps budget (10.9\,ms of GPU time). Most of what looks like ``art'' is a few simple ideas applied consistently and tested.
+Sentinel shows that a complete 3D game, from surfaces and shapes to weather and sound, can be generated entirely by code under an OpenGL~4.1 limit: a six-layer engine, a deferred physically based renderer, noise-based recipes, table-driven content, a mission game and a large test suite fit in about 22\,000 lines and run within a 60 fps budget (11.3\,ms of GPU time). Most of what looks like ``art'' is a few simple ideas applied consistently and tested.
 
 \section{Limitations}
 Models are blocky (primitives plus noise), and characters are simple. There is no true global illumination or ray tracing; indirect light and reflections are screen-space approximations. Foliage is lumpy volume, the beacon is a solid column, soldiers cannot pick up weapons, and tuning used scripts and screenshots.

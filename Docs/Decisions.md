@@ -18,7 +18,7 @@
 - Deferred renderer: G-buffer = SRGB8_A8 (albedo + model id), RGBA16F (octahedral normal, roughness, metallic), RGBA16F (emission, occlusion), Depth32F. World position is rebuilt from depth. Sun, ambient, sky and emission shade in one fullscreen pass; each point, spot and area light is an additive proxy sphere of radius `range` drawn with front faces culled, so the camera may stand inside it. Spot and area lights use the sphere too (a cone volume is a later optimisation).
 - Ambient is analytic (sky gradient + split-sum environment BRDF fit), not prefiltered cubemaps. Cubemap IBL regenerated as the sun moves arrives with the atmosphere in M5.
 - Cook-Torrance diffuse uses (1 - F(n.l))(1 - F(n.v)), not (1 - F(v.h)): the white-furnace check showed the latter exceeds 1 at grazing view. The product form also keeps the BRDF reciprocal.
-- Deferred to later milestones: spot-light shadows (needs a perspective shadow array), point-light shadows, anisotropic GGX (needs a tangent in the G-buffer), bloom (M9).
+- Deferred to later milestones: spot-light shadows, bloom (both done in M9); point-light shadows and anisotropic GGX (needs a tangent in the G-buffer) remain unimplemented and are listed as future work.
 - Shadows: 3 cascades, 2048^2 depth array, practical splits (lambda 0.75), bounding-sphere fit snapped to texels, normal-offset bias plus 3x3 hardware PCF. The acne check only fails when polygon offset, normal offset and depth bias are all removed; any one of them is enough alone, and the pipeline keeps all three.
 - Post: HDR -> exposure, ACES, vignette, sRGB into an RGBA8 target -> FXAA to the screen. FXAA runs after tonemapping because it works on perceptual luma.
 - World = 64 m chunks (32 x 32 cells) streamed in rings; the stream's unload radius (6) exceeds its load radius (4). At most one chunk is built per frame, nearest first, so streaming never hitches the frame; the first frame builds everything synchronously.
@@ -28,7 +28,7 @@
 - Single scattering makes the horizon yellow; 35% of the gradient colour is blended in as a multiple-scattering fill.
 - Captures ignore input (the fly camera used to read the real mouse). Remaining run-to-run noise is 0.18% of bytes, from map iteration order.
 - Shadow casters outside the camera frustum are kept (all loaded chunks and props), so a tree behind the camera still shades the scene. Terrain chunks are not culled against cascade boxes yet (2.4 ms total, deferred).
-- Deferred to M9: threaded chunk building, per-chunk prop culling and LOD, distance fog from the sky LUT, bloom.
+- Deferred to M9: threaded chunk building (dropped: a chunk builds in 0.5 ms), per-chunk prop culling and LOD, distance fog from the sky LUT, bloom (all done).
 - Objects are `Part` tables (primitive, deformers, stretch, rotation, position, material, emission, solid). `Part.deformers` is a fixed `[3]Deformer` stored inline: a slice literal inside a returning proc dangled and crashed.
 - Instanced meshes keep their instance count in a heap cell shared by the owner and its shadow proxies. A pointer from a proxy to its owner struct dangled when structs were copied by value returns; a regression check moves the owner and updates it through the copy.
 - Collision boxes are the AABBs of parts marked `solid`; the same parts form the shadow-caster mesh, so thin wires, bars and window panes cost nothing in the shadow pass.

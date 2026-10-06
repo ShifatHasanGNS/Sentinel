@@ -15,7 +15,7 @@
 \contentsline {figure}{\numberline {3.7}{\ignorespaces The same painted-metal sphere under the six illumination models (left to right: Lambert, Phong, Blinn--Phong, Oren--Nayar, Cook--Torrance, Subsurface), lit by the same sun and sky. Lambert has no highlight; Phong and Blinn--Phong add a hot spot; Oren--Nayar flattens the falloff; Cook--Torrance adds Fresnel and a microfacet highlight.}}{12}{figure.caption.14}%
 \contentsline {figure}{\numberline {3.8}{\ignorespaces Two curves behind the lighting: distance falloff and glancing-angle reflection.}}{13}{figure.caption.15}%
 \ttl@tocsep 
-\contentsline {figure}{\numberline {4.1}{\ignorespaces GPU time per pass (total 10.91\,ms of the 16.7\,ms budget).}}{16}{figure.caption.18}%
+\contentsline {figure}{\numberline {4.1}{\ignorespaces GPU time per pass (total 11.28\,ms of the 16.7\,ms budget).}}{16}{figure.caption.18}%
 \contentsline {figure}{\numberline {4.2}{\ignorespaces The engine and game in action; (h) and (i) show the streak bug and its fix.}}{17}{figure.caption.19}%
 \contentsline {figure}{\numberline {4.3}{\ignorespaces The polished compound and the redesigned tactical map.}}{18}{figure.caption.20}%
 \ttl@tocsep 

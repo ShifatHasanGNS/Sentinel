@@ -257,14 +257,14 @@ textbox(s, 7.85, 2.2 + h + 0.55, 5.0, 1.5, ['Sun, moon, lamps, cascaded shadows,
 s = new_slide('6. Results, verification and a bug fixed')
 panel(s, 0.6, 1.15, 6.3, 3.05)
 cd = CategoryChartData(); cd.categories = ['Sky table', 'Post', 'SSAO', 'Shadows', 'Lighting', 'Geometry']
-cd.add_series('GPU ms', (0.02, 1.21, 1.20, 1.58, 2.79, 4.11))
+cd.add_series('GPU ms', (0.02, 1.28, 1.23, 1.56, 2.76, 4.43))
 gf = s.shapes.add_chart(XL_CHART_TYPE.BAR_CLUSTERED, Inches(0.8), Inches(1.2), Inches(6.0), Inches(2.95), cd); ch = gf.chart
 ch.has_legend = False; ch.has_title = True; ch.chart_title.text_frame.text = 'GPU time per pass (ms)'
 r0 = ch.chart_title.text_frame.paragraphs[0].runs[0]; r0.font.size = Pt(13); r0.font.bold = True; r0.font.color.rgb = INK
 pl = ch.plots[0]; pl.gap_width = 50; pl.has_data_labels = True; pl.data_labels.font.size = Pt(11); pl.data_labels.number_format = '0.00'; pl.data_labels.number_format_is_linked = False
 pl.series[0].format.fill.solid(); pl.series[0].format.fill.fore_color.rgb = TEAL
 ch.category_axis.tick_labels.font.size = Pt(12); ch.value_axis.tick_labels.font.size = Pt(10); ch.value_axis.has_major_gridlines = False
-textbox(s, 0.6, 4.3, 6.3, 0.45, [[('10.9 ms', {'bold': True, 'color': TEAL}), (' of the 16.7 ms budget at 1080p', {})]], size=19)
+textbox(s, 0.6, 4.3, 6.3, 0.45, [[('11.3 ms', {'bold': True, 'color': TEAL}), (' of the 16.7 ms budget at 1080p', {})]], size=19)
 rows = [('Verification', 'Count'), ('Unit tests (13 packages)', '281'), ('TextureCheck (exact tiling)', '8,318'), ('RenderCheck (lighting probes)', '318,567'), ('Gpu, Window, Audio checks', '30, 141, 79'), ('Playthroughs, 5/5 objectives', '2')]
 tshape = s.shapes.add_table(len(rows), 2, Inches(0.6), Inches(4.85), Inches(6.3), Inches(2.1))
 tbl = tshape.table

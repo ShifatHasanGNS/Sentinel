@@ -141,7 +141,7 @@ Bicycle model: wheel base $L$, steering angle $\delta$, speed $v$; the car turns
 
 \section{G10. Evaluation metrics}
 \[t=\frac{1000}{\text{fps}}\ \text{ms},\qquad \varepsilon=\max_{\mathbf u}\left|f(\mathbf u+\mathbf k)-f(\mathbf u)\right|,\ \mathbf k\in\mathbb Z^{2}\]
-Frame time for a 60 fps budget is $16.7$\,ms; our GPU work is $10.9$\,ms (the display waits for refresh). The tiling error $\varepsilon$ is the largest difference between a texture and itself shifted by whole tiles; it must be exactly $0$ for every material (TextureCheck).
+Frame time for a 60 fps budget is $16.7$\,ms; our GPU work is $11.3$\,ms (the display waits for refresh). The tiling error $\varepsilon$ is the largest difference between a texture and itself shifted by whole tiles; it must be exactly $0$ for every material (TextureCheck).
 
 \section*{Likely questions}
 \begin{itemize}[leftmargin=0.25in,itemsep=1pt]
@@ -152,6 +152,6 @@ Frame time for a 60 fps budget is $16.7$\,ms; our GPU work is $10.9$\,ms (the di
 	\item \textbf{Why Blinn--Phong over Phong?} The half vector is cheaper and behaves better at glancing angles.
 	\item \textbf{Why $(1-F_l)(1-F_v)$ on the diffuse term?} Mirror-reflected light cannot also scatter inside; this keeps energy $\le1$.
 	\item \textbf{Why cascades?} Near shadows need fine texels, far ones can be coarse; $\lambda$ blends logarithmic and even cuts.
-	\item \textbf{GPU 10.9\,ms but frame 16.7\,ms?} The display waits for the 60\,Hz refresh; the rest is idle headroom.
+	\item \textbf{GPU 11.3\,ms but frame 16.7\,ms?} The display waits for the 60\,Hz refresh; the rest is idle headroom.
 \end{itemize}
 \end{document}
