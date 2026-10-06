@@ -600,7 +600,7 @@ No dataset is used. All content comes from fixed seeds, so every run is reproduc
 
 \section{Implementation and Results}
 \subsection{Quantitative results}
-The display locks the average frame to 16.75\,ms (60\,Hz); the GPU work needs only 10.91\,ms (Table~\ref{tab:gpu}, Fig.~\ref{fig:gpu}). Verification: 281 unit tests (noise, meshes, IK, collision, ladders, vehicles, mission, audio), 30 GL checks, 8\,318 texture checks (exact tiling of every material), 318\,567 renderer checks (lighting, shadows, atmosphere, instancing) and two scripted playthroughs that both finish 5 of 5 objectives.
+The display locks the average frame to 16.75\,ms (60\,Hz); the GPU work needs only 10.91\,ms (Table~\ref{tab:gpu}, Fig.~\ref{fig:gpu}). Verification: 281 unit tests (noise, meshes, IK, collision, ladders, vehicles, mission, audio), 30 GL checks, 8\,318 texture checks (exact tiling of every material), 318\,567 renderer checks (lighting, shadows, atmosphere, instancing), 141 window checks (resize, maximise, minimise, restore and full-screen toggling while rendering), 79 audio checks (every synthesised sound mixed offline, spatial panning and the output device) and two scripted playthroughs that both finish 5 of 5 objectives.
 
 
 \begin{table}[H]
@@ -643,11 +643,25 @@ Figure~\ref{fig:shots1} shows the running game: the base, a firefight with alarm
 \end{figure}
 
 
+\subsection{Compound, map, window and sound polish}
+The compound now stands on a mown grass surround that fades into dirt only at the plateau edge. Paved roads, a parade ground, walkways, a vehicle apron and two lawns are ordinary catalogue objects (a table of flat, non-solid slabs), so they follow the same rules as every building and are checked by the same footprint and size tests (Fig.~\ref{fig:polish}). The tactical map was redrawn as a slate panel with a metre grid, the paving, outlined and named buildings, a scale bar, a north arrow, a legend and objective labels on dark pills, with the current goal pulsing and showing its distance.
+
+Window handling follows a click-to-capture model: the cursor stays free until the first click, the game pauses and frees the cursor when focus is lost, a minimised window sleeps instead of spinning, and a minimum size applies to mouse drags (a drag to $300\times200$ stops at $640\times392$). Sound gained cues for taking a hit, dying, confirming a hit, switching weapon, an empty magazine, jumping and landing, hacking beeps, toggles, boarding and enemy footsteps, plus wind, night crickets and daytime bird calls, all synthesised in code.
+
+\begin{figure}[H]
+	\centering
+	\begin{subfigure}{0.31\linewidth}\includegraphics[width=\linewidth]{images/compound_gate.jpg}\caption{Gate and grass surround}\end{subfigure}\hfill
+	\begin{subfigure}{0.31\linewidth}\includegraphics[width=\linewidth]{images/yard.jpg}\caption{Paved yard}\end{subfigure}\hfill
+	\begin{subfigure}{0.31\linewidth}\includegraphics[width=\linewidth]{images/map.jpg}\caption{Tactical map}\end{subfigure}
+	\caption{The polished compound and the redesigned tactical map.}\label{fig:polish}
+\end{figure}
+
+
 \subsection{Analysis of the results}
 Geometry costs most (38\%), so instancing and per-chunk culling matter; the GPU uses two thirds of the budget. The streak was found by bisecting draw items, lights and effects.
 
 \section{Objective Achieved}
-(1) Six layers, downward-only. (2) No model, image or sound file. (3) Deferred PBR with shadows, SSAO, reflections, sky, bloom, ACES, FXAA. (4) Two playable missions. (5) 281 tests, 327\,000 GL checks, 10.9\,ms GPU time.
+(1) Six layers, downward-only. (2) No model, image or sound file. (3) Deferred PBR with shadows, SSAO, reflections, sky, bloom, ACES, FXAA. (4) Two playable missions. (5) 281 tests, 327\,000 GL checks, 220 window and audio checks, 10.9\,ms GPU time.
 
 
 

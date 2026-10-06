@@ -265,7 +265,7 @@ pl = ch.plots[0]; pl.gap_width = 50; pl.has_data_labels = True; pl.data_labels.f
 pl.series[0].format.fill.solid(); pl.series[0].format.fill.fore_color.rgb = TEAL
 ch.category_axis.tick_labels.font.size = Pt(12); ch.value_axis.tick_labels.font.size = Pt(10); ch.value_axis.has_major_gridlines = False
 textbox(s, 0.6, 4.3, 6.3, 0.45, [[('10.9 ms', {'bold': True, 'color': TEAL}), (' of the 16.7 ms budget at 1080p', {})]], size=19)
-rows = [('Verification', 'Count'), ('Unit tests (13 packages)', '281'), ('TextureCheck (exact tiling)', '8,318'), ('RenderCheck (lighting probes)', '318,567'), ('GpuCheck', '30'), ('Playthroughs, 5/5 objectives', '2')]
+rows = [('Verification', 'Count'), ('Unit tests (13 packages)', '281'), ('TextureCheck (exact tiling)', '8,318'), ('RenderCheck (lighting probes)', '318,567'), ('Gpu, Window, Audio checks', '30, 141, 79'), ('Playthroughs, 5/5 objectives', '2')]
 tshape = s.shapes.add_table(len(rows), 2, Inches(0.6), Inches(4.85), Inches(6.3), Inches(2.1))
 tbl = tshape.table
 tbl.columns[0].width = Inches(4.7); tbl.columns[1].width = Inches(1.6)
