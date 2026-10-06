@@ -194,3 +194,7 @@
 | Display grading and dithering | Shaders/PostTonemap.glsl: grade, interleaved_gradient_noise |
 | Wandering terrain layer boundaries | Shaders/Include/TerrainBlend.glsl: terrain_weights |
 | Warped and ridged terrain heights | Engine/Procedural/Terrain.odin: Terrain_Noise |
+| Window: free cursor until first click, focus-loss pause, minimise sleep, minimum size, centred, shown after load | Source/Loop.odin: Run_Loop; Engine/Platform/Window.odin; Engine/Platform/Input.odin: Input_Capture_By_Click; Tests/WindowCheck |
+| Sound feedback: hurt, death, hit confirm, weapon switch, empty click, landing, jump, hack beeps, toggles, boarding, enemy steps | Game/Sandbox/SoundFeedback.odin: feedback_sounds |
+| Ambience: wind, night crickets, daytime bird calls; tank cannon sound | Game/Sandbox/SoundFeedback.odin: ambience, vehicle_gun_sound; Engine/Audio/Synth.odin |
+| Audio end-to-end check (every sound mixed offline, device opens) | Tests/AudioCheck |

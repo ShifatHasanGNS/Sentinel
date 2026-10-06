@@ -12,7 +12,7 @@ for package in Engine/GPU Engine/Procedural Engine/Render Engine/World Game/Cata
 	*) printf 'FAIL  %s\n%s\n' "$package" "$output" | tail -15; status=1 ;;
 	esac
 done
-for check in GpuCheck TextureCheck RenderCheck WindowCheck; do
+for check in GpuCheck TextureCheck RenderCheck WindowCheck AudioCheck; do
 	output=$(odin run Tests/$check -out:/tmp/sentinel_$check 2>&1)
 	case "$output" in
 	*" 0 failed"*) printf 'ok    Tests/%s  %s\n' "$check" "$(printf '%s\n' "$output" | tail -1)" ;;

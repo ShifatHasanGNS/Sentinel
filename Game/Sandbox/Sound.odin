@@ -18,7 +18,9 @@ Sound_Bank :: struct {
 	rifle, sniper, pistol, launcher, explosion, silenced: Audio.Sound,
 	step_a, step_b, click, impact, ricochet, chime, creak: Audio.Sound,
 	engine_light, engine_heavy, rotor, alarm: Audio.Sound,
-	engine_voice, rotor_voice, alarm_voice: u32,
+	thud, heavy_thud, beep, wind, crickets, bird_high, bird_low: Audio.Sound,
+	engine_voice, rotor_voice, alarm_voice, wind_voice, cricket_voice: u32,
+	feedback:      Feedback_State,
 	step_distance: f32,
 	step_flip:     bool,
 	was_reloading: bool,
@@ -45,13 +47,17 @@ sound_create :: proc(enabled: bool) -> (bank: Sound_Bank) {
 	bank.engine_light, bank.engine_heavy = Audio.Synth_Engine(34, 22), Audio.Synth_Engine(20, 23)
 	bank.rotor = Audio.Synth_Rotor(24)
 	bank.alarm = Audio.Synth_Alarm()
+	bank.thud, bank.heavy_thud = Audio.Synth_Thud(95, 0.28, 30), Audio.Synth_Thud(55, 0.6, 33)
+	bank.beep = Audio.Synth_Beep(1500, 0.09)
+	bank.wind, bank.crickets = Audio.Synth_Wind(31), Audio.Synth_Crickets(32)
+	bank.bird_high, bank.bird_low = Audio.Synth_Bird(3100), Audio.Synth_Bird(2200)
 	return bank
 }
 
 sound_destroy :: proc(bank: ^Sound_Bank) {
 	if bank.device == nil do return
 	Audio.Device_Destroy(bank.device)
-	for sound in ([]^Audio.Sound{&bank.rifle, &bank.sniper, &bank.pistol, &bank.launcher, &bank.explosion, &bank.silenced, &bank.step_a, &bank.step_b, &bank.click, &bank.impact, &bank.ricochet, &bank.chime, &bank.creak, &bank.engine_light, &bank.engine_heavy, &bank.rotor, &bank.alarm}) {
+	for sound in ([]^Audio.Sound{&bank.rifle, &bank.sniper, &bank.pistol, &bank.launcher, &bank.explosion, &bank.silenced, &bank.step_a, &bank.step_b, &bank.click, &bank.impact, &bank.ricochet, &bank.chime, &bank.creak, &bank.engine_light, &bank.engine_heavy, &bank.rotor, &bank.alarm, &bank.thud, &bank.heavy_thud, &bank.beep, &bank.wind, &bank.crickets, &bank.bird_high, &bank.bird_low}) {
 		Audio.Sound_Destroy(sound)
 	}
 	bank^ = {}
@@ -70,7 +76,6 @@ spatialize :: proc(base_volume: f32, position, eye: [3]f32, yaw: f32) -> (volume
 	return volume, pan
 }
 
-@(private = "file")
 play_at :: proc(play: ^Play, sound: ^Audio.Sound, base_volume: f32, position: [3]f32, pitch: f32 = 1) {
 	eye := Gameplay.Player_Eye(play.battle.player)
 	volume, pan := spatialize(base_volume, position, eye, play.battle.player.yaw_radians)
@@ -78,7 +83,6 @@ play_at :: proc(play: ^Play, sound: ^Audio.Sound, base_volume: f32, position: [3
 	Audio.Mixer_Play(&play.sound.device.mixer, sound, volume, pan, pitch)
 }
 
-@(private = "file")
 play_here :: proc(play: ^Play, sound: ^Audio.Sound, volume: f32, pitch: f32 = 1) {
 	Audio.Mixer_Play(&play.sound.device.mixer, sound, volume, 0, pitch)
 }
@@ -105,7 +109,7 @@ sound_update :: proc(sandbox: ^Sandbox, delta_seconds: f32) {
 		case .Muzzle_Flash:
 			own := la.length(effect.position - Gameplay.Player_Eye(player)) < 2
 			sound := weapon_sound(&play.sound, player.current) if own else &play.sound.rifle
-			if play.driving != nil && own do sound = &play.sound.rifle
+			sound = vehicle_gun_sound(play, sound, effect.position)
 			if effect.silenced do sound = &play.sound.silenced
 			play_at(play, sound, 0.9, effect.position, 1 if own else 0.95 + 0.1 * f32(int(effect.position.x * 7) % 3))
 		case .Impact:
@@ -117,6 +121,8 @@ sound_update :: proc(sandbox: ^Sandbox, delta_seconds: f32) {
 		}
 	}
 	footsteps(play, delta_seconds)
+	feedback_sounds(sandbox, delta_seconds)
+	ambience(sandbox, delta_seconds)
 	ladder_sounds(play)
 	reload_click(play)
 	vehicle_sounds(play)
@@ -215,4 +221,34 @@ ladder_sounds :: proc(play: ^Play) {
 		play_here(play, &bank.step_a, 0.45, 0.8)
 	}
 	bank.ladder_rung, bank.ladder_phase = grip.rung, grip.phase
+}
+
+// A named view of the bank's sounds, for Tests/AudioCheck. The device is not opened.
+Sound_Entry :: struct {
+	name:  string,
+	sound: ^Audio.Sound,
+	loop:  bool,
+}
+
+sound_create_for_test :: proc() -> (bank: Sound_Bank) {
+	bank = sound_create(true)
+	return bank
+}
+
+sound_destroy_for_test :: proc(bank: ^Sound_Bank) {
+	sound_destroy(bank)
+}
+
+sound_list_for_test :: proc(bank: ^Sound_Bank) -> []Sound_Entry {
+	@(static) entries: [24]Sound_Entry
+	list := [?]Sound_Entry{
+		{"rifle", &bank.rifle, false}, {"sniper", &bank.sniper, false}, {"pistol", &bank.pistol, false}, {"launcher", &bank.launcher, false},
+		{"explosion", &bank.explosion, false}, {"silenced", &bank.silenced, false}, {"step_a", &bank.step_a, false}, {"step_b", &bank.step_b, false},
+		{"click", &bank.click, false}, {"impact", &bank.impact, false}, {"ricochet", &bank.ricochet, false}, {"chime", &bank.chime, false},
+		{"creak", &bank.creak, false}, {"engine_light", &bank.engine_light, true}, {"engine_heavy", &bank.engine_heavy, true}, {"rotor", &bank.rotor, true},
+		{"alarm", &bank.alarm, true}, {"thud", &bank.thud, false}, {"heavy_thud", &bank.heavy_thud, false}, {"beep", &bank.beep, false},
+		{"wind", &bank.wind, true}, {"crickets", &bank.crickets, true}, {"bird_high", &bank.bird_high, false}, {"bird_low", &bank.bird_low, false},
+	}
+	for entry, index in list do entries[index] = entry
+	return entries[:len(list)]
 }

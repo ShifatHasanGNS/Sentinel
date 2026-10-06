@@ -9,6 +9,7 @@ all_sounds :: proc() -> [dynamic]Sound {
 	sounds := make([dynamic]Sound)
 	append(&sounds, Synth_Gunshot(0.05, 90, 6000, 1, 1), Synth_Gunshot(0.02, 140, 1200, 0.5, 2), Synth_Explosion(3), Synth_Footstep(0.3, 4), Synth_Click(5))
 	append(&sounds, Synth_Impact(false, 6), Synth_Impact(true, 7), Synth_Engine(30, 8), Synth_Rotor(9), Synth_Alarm(), Synth_Chime(660), Synth_Creak(10))
+	append(&sounds, Synth_Thud(70, 0.4, 30), Synth_Beep(1500, 0.08), Synth_Wind(31), Synth_Crickets(32), Synth_Bird(2600))
 	return sounds
 }
 
@@ -67,7 +68,7 @@ test_sounds_are_deterministic_per_seed_and_differ_between_seeds :: proc(t: ^test
 // A loop must join smoothly: the step from the last sample to the first is no larger than a typical step inside the sound.
 @(test)
 test_loopable_sounds_join_without_a_click :: proc(t: ^testing.T) {
-	for sound in ([]Sound{Synth_Engine(30, 8), Synth_Rotor(9), Synth_Alarm()}) {
+	for sound in ([]Sound{Synth_Engine(30, 8), Synth_Rotor(9), Synth_Alarm(), Synth_Wind(31), Synth_Crickets(32)}) {
 		sound := sound
 		defer Sound_Destroy(&sound)
 		testing.expect(t, sound.loopable)

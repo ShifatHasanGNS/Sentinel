@@ -217,6 +217,87 @@ Synth_Creak :: proc(seed: u32) -> Sound {
 	return Sound{samples = buffer}
 }
 
+// A low body thump: a sine that falls in pitch over a burst of dull noise. `pitch_hz` sets the note, `seconds` the length. Used for
+// landings, hits taken, doors shutting and a body falling.
+Synth_Thud :: proc(pitch_hz, seconds: f32, seed: u32) -> Sound {
+	buffer := make_buffer(seconds)
+	noise := Noise{seed}
+	filtered: f32
+	phase: f32
+	for index in 0 ..< len(buffer) {
+		t := f32(index) / SAMPLE_RATE
+		envelope := math.exp(-t / (seconds * 0.22)) * (1 - math.exp(-t / 0.002))
+		phase += 2 * math.PI * (pitch_hz * (0.55 + 0.45 * math.exp(-t / 0.05))) / SAMPLE_RATE
+		filtered += smoothing(420) * (next_noise(&noise) - filtered)
+		buffer[index] = (math.sin(phase) * 0.8 + filtered * 0.7) * envelope * 0.8
+	}
+	return Sound{samples = buffer}
+}
+
+// A short electronic tick used for hit confirmation and the hacking progress beeps: a sine with a hard attack and quick decay.
+Synth_Beep :: proc(frequency_hz, seconds: f32) -> Sound {
+	buffer := make_buffer(seconds)
+	for index in 0 ..< len(buffer) {
+		t := f32(index) / SAMPLE_RATE
+		envelope := math.exp(-t / (seconds * 0.35)) * (1 - math.exp(-t / 0.001))
+		buffer[index] = (math.sin(2 * math.PI * frequency_hz * t) + 0.25 * math.sin(4 * math.PI * frequency_hz * t)) * envelope * 0.45
+	}
+	return Sound{samples = buffer}
+}
+
+// Wind: low-passed noise whose cutoff and level swell and fade slowly (gusts), looped on a whole number of gust cycles.
+Synth_Wind :: proc(seed: u32) -> Sound {
+	seconds: f32 = 6.0
+	buffer := make_loop_buffer(seconds)
+	noise := Noise{seed}
+	low, band: f32
+	for index in 0 ..< len(buffer) {
+		t := f32(index) / SAMPLE_RATE
+		gust := 0.55 + 0.45 * math.sin(2 * math.PI * t / seconds * 2) * math.sin(2 * math.PI * t / seconds * 3 + 1.1)
+		white := next_noise(&noise)
+		low += smoothing(180 + 220 * gust) * (white - low)
+		band += smoothing(900) * (low - band)
+		buffer[index] = (low * 0.9 + (low - band) * 0.5) * (0.35 + 0.65 * gust) * 0.9
+	}
+	return Sound{samples = close_loop(buffer), loopable = true}
+}
+
+// Night insects: bursts of a high tone chopped at a chirp rate, several voices slightly apart in pitch, looped on whole bursts.
+Synth_Crickets :: proc(seed: u32) -> Sound {
+	seconds: f32 = 4.0
+	buffer := make_loop_buffer(seconds)
+	noise := Noise{seed}
+	pitches := [3]f32{4300, 4780, 5200}
+	rates := [3]f32{11, 13, 9}
+	for index in 0 ..< len(buffer) {
+		t := f32(index) / SAMPLE_RATE
+		sample: f32
+		for voice in 0 ..< 3 {
+			burst := math.mod(t * (0.75 + 0.15 * f32(voice)), 1)
+			chirp := math.max(0, math.sin(2 * math.PI * rates[voice] * t)) * (burst < 0.55 ? 1 : 0)
+			sample += math.sin(2 * math.PI * pitches[voice] * t) * chirp * 0.22
+		}
+		buffer[index] = sample + next_noise(&noise) * 0.004
+	}
+	return Sound{samples = close_loop(buffer), loopable = true}
+}
+
+// A bird call: two quick rising whistles with a vibrato, each fading out. `base_hz` picks the species (about 2000 to 3500).
+Synth_Bird :: proc(base_hz: f32) -> Sound {
+	buffer := make_buffer(0.55)
+	phase: f32
+	for index in 0 ..< len(buffer) {
+		t := f32(index) / SAMPLE_RATE
+		local := math.mod(t, 0.2)
+		active := t < 0.4
+		sweep := base_hz * (1 + 0.45 * local / 0.2) * (1 + 0.012 * math.sin(2 * math.PI * 38 * t))
+		phase += 2 * math.PI * sweep / SAMPLE_RATE
+		envelope := active ? math.sin(math.PI * local / 0.2) : 0
+		buffer[index] = math.sin(phase) * envelope * 0.35
+	}
+	return Sound{samples = buffer}
+}
+
 Sound_Destroy :: proc(sound: ^Sound) {
 	delete(sound.samples)
 	sound^ = {}
