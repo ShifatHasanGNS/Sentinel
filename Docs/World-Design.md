@@ -7,8 +7,8 @@ Open-world military base. Catalogue (built as `Part` tables):
 - Props: crates, barrels, pallets, tents, camo netting, floodlights, signs, flag.
 - Weapons: rifle, pistol, rocket launcher, grenade, mounted turret.
 - Characters: rifleman, officer, sniper, guard, enemy variant.
-Layout (see `Game/Base/Layout.odin`): a fenced circular compound of radius 62 m on the plateau, gate on the south side with guard posts, sandbags and Hesco barriers outside; command area (HQ, three barracks, mess hall, generator, fuel, water tower, radar, mast, bunkers, T-walls) in the north and west, airfield (hangar, helipad and helicopter) in the east, motor pool (jeeps, trucks, carriers, tanks under a camouflage net) by the gate, a supply yard, tents, and floodlights.
-Gameplay: walk/run/jump/crouch, hitscan and projectile weapons, health, enemy AI (patrol, spot, chase, shoot, dead). Out of scope: audio, inventory, quests, save/load, multiplayer.
+Layout (see `Game/Base/Layout.odin`): a fenced circular compound of radius 62 m on the plateau, gate on the south side with guard posts, sandbags and Hesco barriers outside; command area (HQ, three barracks, mess hall, generator, fuel, water tower, radar, mast, bunkers, T-walls) in the north and west, airfield (hangar, helipad and helicopter) in the east, motor pool (jeeps, trucks, carriers, tanks under a camouflage net) by the gate, a supply yard, tents, and floodlights. Paving ties it together: a road from the gate to the parade ground with a cross road, walkways beside the barracks, an apron at the motor pool and two lawns, all on a mown grass surround that fades to dirt only at the plateau edge.
+Gameplay: walk/run/jump/crouch, hitscan and projectile weapons, health, enemy AI (patrol, spot, chase, shoot, dead). Audio is synthesised in code (see `Docs/Features.md`). Out of scope: inventory, quests, save/load, multiplayer.
 
 ## Combat rules (numbers live in `Game/Gameplay`)
 - Enemy senses: sight 50 m inside a 100 degree cone, plus awareness of anything within 5 m from any direction; a wall or hill between eye and target blocks sight. Heard shots alert enemies within 70 m. An enemy turns at 3.5 rad/s, so flanking works.

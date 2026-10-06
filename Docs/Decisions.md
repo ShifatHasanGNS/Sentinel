@@ -39,3 +39,6 @@
 - The gait is foot-path based: stance feet slide back at exactly the body speed, so cycle time is stride / (duty * speed). A test moves a body through its stance and requires the world position of the foot to stay fixed.
 - Hit reactions use the exact critically damped spring solution: stable for any step, no overshoot, step-size independent.
 - A soldier is one set of body-segment tables worn through a `Palette`; five palettes give five variants. Rendering is one instanced mesh per variant, segment and material: any number of soldiers costs the same number of draws.
+- Cursor: free until the first click, auto-freed and paused on focus loss. Rationale: a captured cursor made the window impossible to move or resize; GLFW size limits apply only to mouse drags, so tests cannot assert them through `SetWindowSize`.
+- Audio is synthesised, never loaded: one-shot cues fire on state changes detected frame to frame (`Feedback_State`), ambience is looped voices crossfaded at the seam.
+- Paving is catalogue objects (non-solid slabs), not terrain painting, so roads obey the same footprint, size and collision tests and the tactical map reuses the placements.

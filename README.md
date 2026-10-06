@@ -6,4 +6,6 @@ Run: `odin run Source -out:Sentinel`. Check everything: `Tools/CheckAll.sh`. Rul
 
 Mission: enter the compound, hack the HQ computer, destroy the radar, rescue the hostage, reach the green beacon.
 
-Controls: WASD move, mouse look, Shift run, C crouch, Space jump, left mouse fire, R reload, 1-6 weapons (6 is the silenced pistol), right mouse aims, F flashlight, E use (doors, hacking, rescue, vehicles), B binoculars, M map, Tab fly camera, F11 fullscreen, F9 free the cursor (to resize or move the window), Enter respawn, Esc pause (then Q to quit). In vehicles: WASD drive, mouse aims the turret, V view; helicopter: Space/Ctrl climb and descend, Q/E strafe.
+Controls: WASD move, mouse look, Shift run, C crouch, Space jump, left mouse fire, R reload, 1-6 weapons (6 is the silenced pistol), right mouse aims, F flashlight, E use (doors, hacking, rescue, vehicles), B binoculars, M map, Tab fly camera, F11 fullscreen, click the window to capture the mouse, F9 frees it again (to resize or move the window; focus loss pauses and frees it automatically), Enter respawn, Esc pause (then Q to quit). In vehicles: WASD drive, mouse aims the turret, V view; helicopter: Space/Ctrl climb and descend, Q/E strafe.
+
+All sound is synthesised in code (shots, steps, hit and hack cues, wind, night crickets, bird calls); the window is resizable, with a minimum size, and a minimised game sleeps.
