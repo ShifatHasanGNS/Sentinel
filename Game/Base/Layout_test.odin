@@ -99,6 +99,7 @@ test_the_base_has_everything_it_needs :: proc(t: ^testing.T) {
 		.Fence_Section = 100, .Gate = 1, .Barrier_Arm = 1, .T_Wall = 4, .Hesco_Barrier = 4, .Sandbag_Wall = 2,
 		.Jeep = 2, .Cargo_Truck = 2, .Armored_Carrier = 2, .Battle_Tank = 2, .Helicopter = 1,
 		.Crate = 4, .Barrel = 4, .Pallet = 2, .Tent = 3, .Camo_Net = 1, .Floodlight = 4, .Sign = 2, .Flag = 1, .Ammo_Box = 4,
+		.Road = 8, .Parade_Ground = 1, .Walkway = 4, .Apron = 1, .Lawn = 2,
 	}
 	for kind in Catalogue.Object_Kind do testing.expectf(t, counts[kind] >= minimums[kind], "%v: %d placed, need at least %d", kind, counts[kind], minimums[kind])
 }

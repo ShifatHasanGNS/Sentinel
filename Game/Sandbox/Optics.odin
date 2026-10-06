@@ -19,9 +19,11 @@ BINOCULAR_ZOOM_MAX :: 10.0
 BINOCULAR_ZOOM_RATE :: 1.2 // Natural-log units per second while Z or X is held: x3.3 each second.
 BINOCULAR_RAISE_PER_SECOND :: 5.0 // The lenses come up in a fifth of a second.
 BINOCULAR_RANGE_METERS :: 1500.0
-MAP_RADIUS_METERS :: 100.0 // Half the width of the world shown on the map.
+MAP_RADIUS_METERS :: f32(100.0) // Half the width of the world shown on the map.
 MAP_MIN_OBJECT_SIZE_METERS :: 2.0 // Smaller objects (crates, barrels) are left off the map.
 MAP_RING_SEGMENTS :: 64
+MAP_GRID_METERS :: f32(25.0)
+MAP_PLATEAU_METERS :: 80.0 // Where the cleared ground around the compound ends, for the map's ground disc.
 MAP_DOT_METERS :: 2.6
 
 // B raises and lowers the binoculars (smoothly), Z and X zoom in and out while held, M shows the map; the first two only on foot.
@@ -139,41 +141,172 @@ map_draw_hud :: proc(sandbox: ^Sandbox, width, height, scale: f32) {
 	play := &sandbox.play
 	if !play.map_open do return
 	hud := &play.hud
-	half := min(width, height) * 0.45
-	center := [2]f32{width / 2, height / 2}
-	meters_to_pixels := half / MAP_RADIUS_METERS
-	to_screen :: proc(center: [2]f32, factor: f32, x, z: f32) -> [2]f32 {
-		return center + {x, z} * factor
-	}
-	Render.Hud_Rect(hud, 0, 0, width, height, {0, 0.03, 0.02, 0.82})
-	Render.Hud_Rect(hud, center.x - half, center.y - half, 2 * half, 2 * half, {0.08, 0.2, 0.12, 0.9})
-	draw_map_ring(hud, center, Base.PERIMETER_RADIUS_METERS * meters_to_pixels, {0.8, 0.8, 0.8, 0.9}, scale)
-	for placement in sandbox.base.layout.placements {
-		info := Catalogue.Catalogue_Info(placement.kind)
-		if max(info.highest.x - info.lowest.x, info.highest.z - info.lowest.z) < MAP_MIN_OBJECT_SIZE_METERS || placement.kind == .Fence_Section do continue
-		corners := Base.Footprint_Corners(placement)
-		// corners_of orders them by bit pattern (0: -x -z, 1: +x -z, 2: -x +z, 3: +x +z); around the rectangle that is 0, 1, 3, 2.
-		order := [4]int{0, 1, 3, 2}
-		quad: [4][2]f32
-		for index in 0 ..< 4 do quad[index] = to_screen(center, meters_to_pixels, corners[order[index]].x, corners[order[index]].y)
-		Render.Hud_Quad(hud, quad, map_color(placement.kind))
-	}
-	draw_map_markers(play, center, meters_to_pixels, scale)
+	half := min(width, height) * 0.43
+	center := [2]f32{width / 2, height / 2 + 4 * scale}
+	factor := half / MAP_RADIUS_METERS
+	Render.Hud_Rect(hud, 0, 0, width, height, {0.01, 0.02, 0.04, 0.78})
+	draw_map_frame(hud, center, half, scale)
+	draw_map_ground(hud, center, factor, scale)
+	draw_map_paving(sandbox, center, factor)
+	draw_map_buildings(sandbox, center, factor, scale)
+	draw_map_ring(hud, center, Base.PERIMETER_RADIUS_METERS * factor, {0.78, 0.84, 0.9, 0.55}, scale)
+	draw_map_markers(play, center, factor, scale)
 	player := play.battle.player
-	draw_map_arrow(hud, to_screen(center, meters_to_pixels, player.controller.position.x, player.controller.position.z), {-math.sin(player.yaw_radians), -math.cos(player.yaw_radians)}, 4.5 * scale, {1, 1, 0.3, 1})
-	Render.Hud_Text(hud, center.x - half, center.y - half - 10 * scale, "TACTICAL MAP    M CLOSE    N IS UP", scale, {0.8, 1, 0.8, 0.95})
-	Render.Hud_Text(hud, center.x - half, center.y + half + 3 * scale, "ARROW YOU   RED SOLDIER   AMBER CAMERA   BLUE VEHICLE   GLOWING YELLOW NEXT GOAL", scale * 0.9, {0.8, 1, 0.8, 0.9})
+	at := center + {player.controller.position.x, player.controller.position.z} * factor
+	direction := [2]f32{-math.sin(player.yaw_radians), -math.cos(player.yaw_radians)}
+	draw_map_arrow(hud, at, direction, 5.6 * scale, {0.02, 0.05, 0.08, 1})
+	draw_map_arrow(hud, at, direction, 4.2 * scale, {1, 0.95, 0.35, 1})
+	draw_map_legend(hud, center, half, width, scale)
+}
+
+// The panel: a dark slate square with a pale edge, a title bar, a faint 25 m grid, tick marks, the north arrow and a scale bar.
+@(private = "file")
+draw_map_frame :: proc(hud: ^Render.Hud, center: [2]f32, half: f32, scale: f32) {
+	left, top := center.x - half, center.y - half
+	edge := max(scale * 1.2, 1.5)
+	Render.Hud_Rect(hud, left - edge, top - edge, 2 * half + 2 * edge, 2 * half + 2 * edge, {0.55, 0.65, 0.75, 0.55})
+	Render.Hud_Rect(hud, left, top, 2 * half, 2 * half, {0.055, 0.085, 0.11, 0.97})
+	factor := half / MAP_RADIUS_METERS
+	for meters := -MAP_RADIUS_METERS + MAP_GRID_METERS; meters < MAP_RADIUS_METERS; meters += MAP_GRID_METERS {
+		strong := int(meters) % 50 == 0
+		color := [4]f32{0.5, 0.62, 0.72, 0.16 if strong else 0.07}
+		Render.Hud_Rect(hud, center.x + meters * factor, top, max(scale * 0.5, 1), 2 * half, color)
+		Render.Hud_Rect(hud, left, center.y + meters * factor, 2 * half, max(scale * 0.5, 1), color)
+	}
+	Render.Hud_Rect(hud, left, top - 16 * scale, 2 * half, 14 * scale, {0.1, 0.15, 0.2, 0.97})
+	Render.Hud_Text(hud, left + 6 * scale, top - 14 * scale, "TACTICAL MAP", scale * 1.1, {0.9, 0.95, 1, 1})
+	hint := "M CLOSE"
+	Render.Hud_Text(hud, left + 2 * half - Render.Hud_Text_Width(hint, scale) - 6 * scale, top - 13 * scale, hint, scale, {0.6, 0.72, 0.82, 1})
+	// North arrow in the corner, and a 50 m scale bar under the map.
+	north := [2]f32{left + 20 * scale, top + 26 * scale}
+	Render.Hud_Quad(hud, {north + {0, -11 * scale}, north + {6 * scale, 6 * scale}, north + {0, 2 * scale}, north + {-6 * scale, 6 * scale}}, {0.95, 0.95, 1, 0.9})
+	Render.Hud_Text(hud, north.x - 3 * scale, north.y + 9 * scale, "N", scale, {0.95, 0.95, 1, 0.9})
+	bar_length := 50 * factor
+	bar_y := top + 2 * half - 12 * scale
+	Render.Hud_Rect(hud, left + 10 * scale, bar_y, bar_length, max(scale * 1.5, 2), {0.9, 0.95, 1, 0.9})
+	Render.Hud_Rect(hud, left + 10 * scale, bar_y - 3 * scale, max(scale, 1.5), 7 * scale, {0.9, 0.95, 1, 0.9})
+	Render.Hud_Rect(hud, left + 10 * scale + bar_length, bar_y - 3 * scale, max(scale, 1.5), 7 * scale, {0.9, 0.95, 1, 0.9})
+	Render.Hud_Text(hud, left + 10 * scale + bar_length + 6 * scale, bar_y - 3 * scale, "50 M", scale, {0.9, 0.95, 1, 0.9})
+}
+
+// The land: the cleared plateau as a pale disc under the compound's slightly lighter one.
+@(private = "file")
+draw_map_ground :: proc(hud: ^Render.Hud, center: [2]f32, factor, scale: f32) {
+	draw_map_disc(hud, center, MAP_PLATEAU_METERS * factor, {0.13, 0.19, 0.15, 1})
+	draw_map_disc(hud, center, Base.PERIMETER_RADIUS_METERS * factor, {0.17, 0.23, 0.18, 1})
+}
+
+@(private = "file")
+draw_map_disc :: proc(hud: ^Render.Hud, center: [2]f32, radius: f32, color: [4]f32) {
+	for index in 0 ..< MAP_RING_SEGMENTS {
+		a0 := f32(index) / MAP_RING_SEGMENTS * 2 * math.PI
+		a1 := f32(index + 1) / MAP_RING_SEGMENTS * 2 * math.PI
+		Render.Hud_Quad(hud, {center, center + {math.cos(a0), math.sin(a0)} * radius, center + {math.cos(a1), math.sin(a1)} * radius, center + {math.cos(a1), math.sin(a1)} * radius}, color)
+	}
+}
+
+@(private = "file")
+map_quad :: proc(placement: Base.Placement, center: [2]f32, factor: f32, grow: f32) -> (quad: [4][2]f32) {
+	corners := Base.Footprint_Corners(placement)
+	middle := (corners[0] + corners[3]) / 2
+	order := [4]int{0, 1, 3, 2} // corners_of orders them by bit pattern; around the rectangle that is 0, 1, 3, 2.
+	for index in 0 ..< 4 {
+		point := corners[order[index]]
+		outward := la.normalize0(point - middle)
+		quad[index] = center + (point + outward * grow) * factor
+	}
+	return
+}
+
+// Roads, plazas, paths and lawns, drawn first so buildings sit on them.
+@(private = "file")
+draw_map_paving :: proc(sandbox: ^Sandbox, center: [2]f32, factor: f32) {
+	hud := &sandbox.play.hud
+	for pass in 0 ..< 2 { // Wide slabs first, then the narrow ones that lie on them.
+		for placement in sandbox.base.layout.placements {
+			if placement.kind not_in Catalogue.PAVING do continue
+			wide := placement.kind == .Apron || placement.kind == .Parade_Ground || placement.kind == .Lawn
+			if wide != (pass == 0) do continue
+			Render.Hud_Quad(hud, map_quad(placement, center, factor, 0), paving_color(placement.kind))
+		}
+	}
+}
+
+@(private = "file")
+paving_color :: proc(kind: Catalogue.Object_Kind) -> [4]f32 {
+	#partial switch kind {
+	case .Road: return {0.36, 0.4, 0.45, 1}
+	case .Parade_Ground: return {0.27, 0.3, 0.35, 1}
+	case .Apron: return {0.24, 0.27, 0.32, 1}
+	case .Walkway: return {0.5, 0.54, 0.58, 1}
+	case .Lawn: return {0.2, 0.36, 0.24, 1}
+	}
+	return {0.3, 0.3, 0.3, 1}
+}
+
+// Buildings and equipment: a dark outline under a filled footprint, and a short name on the large ones.
+@(private = "file")
+draw_map_buildings :: proc(sandbox: ^Sandbox, center: [2]f32, factor, scale: f32) {
+	hud := &sandbox.play.hud
+	outline := max(0.45 * scale / factor, 0.2)
+	for placement in sandbox.base.layout.placements {
+		if placement.kind in Catalogue.PAVING || placement.kind == .Fence_Section do continue
+		info := Catalogue.Catalogue_Info(placement.kind)
+		if max(info.highest.x - info.lowest.x, info.highest.z - info.lowest.z) < MAP_MIN_OBJECT_SIZE_METERS do continue
+		Render.Hud_Quad(hud, map_quad(placement, center, factor, outline), {0.03, 0.05, 0.07, 0.95})
+		Render.Hud_Quad(hud, map_quad(placement, center, factor, 0), map_color(placement.kind))
+	}
+	for placement in sandbox.base.layout.placements {
+		name, named := map_name(placement.kind)
+		if !named do continue
+		footprint := Base.placement_footprint(placement)
+		at := center + footprint.center * factor
+		width := Render.Hud_Text_Width(name, scale * 0.85)
+		Render.Hud_Text(hud, at.x - width / 2, at.y - 3 * scale, name, scale * 0.85, {0.93, 0.96, 1, 0.8})
+	}
+}
+
+@(private = "file")
+map_name :: proc(kind: Catalogue.Object_Kind) -> (name: string, named: bool) {
+	#partial switch kind {
+	case .Headquarters: return "HQ", true
+	case .Barracks: return "BARRACKS", true
+	case .Hangar: return "HANGAR", true
+	case .Mess_Hall: return "MESS", true
+	case .Helipad: return "HELIPAD", true
+	}
+	return "", false
 }
 
 @(private = "file")
 map_color :: proc(kind: Catalogue.Object_Kind) -> [4]f32 {
 	#partial switch kind {
-	case .Barracks, .Headquarters, .Mess_Hall, .Generator_Shed, .Guard_Post, .Bunker, .Hangar: return {0.55, 0.55, 0.6, 0.95}
-	case .Radar_Station: return {0.9, 0.3, 0.25, 0.95}
-	case .Jeep, .Cargo_Truck, .Armored_Carrier, .Battle_Tank: return {0.3, 0.5, 0.9, 0.9}
-	case .Helicopter, .Helipad: return {0.4, 0.7, 0.95, 0.9}
+	case .Barracks, .Headquarters, .Mess_Hall, .Generator_Shed, .Guard_Post, .Bunker, .Hangar: return {0.52, 0.6, 0.68, 1}
+	case .Watchtower, .Water_Tower, .Radio_Mast: return {0.42, 0.46, 0.5, 1}
+	case .Radar_Station: return {0.9, 0.32, 0.28, 1}
+	case .Jeep, .Cargo_Truck, .Armored_Carrier, .Battle_Tank: return {0.3, 0.55, 0.95, 1}
+	case .Helicopter, .Helipad: return {0.35, 0.8, 0.9, 1}
 	}
-	return {0.35, 0.4, 0.35, 0.9}
+	return {0.34, 0.4, 0.38, 1}
+}
+
+// Colour swatches under the map, one per symbol.
+@(private = "file")
+draw_map_legend :: proc(hud: ^Render.Hud, center: [2]f32, half: f32, width, scale: f32) {
+	items := [?]struct {
+		name:  string,
+		color: [4]f32,
+	}{{"YOU", {1, 0.95, 0.35, 1}}, {"SOLDIER", {1, 0.25, 0.25, 1}}, {"CAMERA", {1, 0.75, 0.1, 1}}, {"VEHICLE", {0.3, 0.55, 0.95, 1}}, {"BUILDING", {0.52, 0.6, 0.68, 1}}, {"NEXT GOAL", {1, 0.9, 0.2, 1}}}
+	total: f32
+	for item in items do total += Render.Hud_Text_Width(item.name, scale * 0.9) + 22 * scale
+	x := center.x - total / 2
+	y := center.y + half + 8 * scale
+	Render.Hud_Rect(hud, x - 8 * scale, y - 4 * scale, total + 6 * scale, 16 * scale, {0.08, 0.12, 0.16, 0.95})
+	for item in items {
+		Render.Hud_Rect(hud, x, y + scale, 7 * scale, 7 * scale, item.color)
+		Render.Hud_Text(hud, x + 11 * scale, y, item.name, scale * 0.9, {0.85, 0.92, 1, 1})
+		x += Render.Hud_Text_Width(item.name, scale * 0.9) + 22 * scale
+	}
 }
 
 @(private = "file")
@@ -264,11 +397,9 @@ draw_objective_markers :: proc(play: ^Play, center: [2]f32, factor, scale: f32) 
 		Render.Hud_Rect(hud, at.x - size / 2, at.y - size / 2, size, size, color)
 		label := OBJECTIVE_LABELS[objective]
 		if done do label = fmt.tprintf("%s OK", label)
+		if is_current do label = fmt.tprintf("%s  %d M", label, int(la.length([2]f32{position.x - player.x, position.z - player.z})))
+		Render.Hud_Rect(hud, at.x + size - 3 * scale, at.y - 7 * scale, Render.Hud_Text_Width(label, scale) + 6 * scale, 14 * scale, {0.03, 0.05, 0.07, 0.88})
 		Render.Hud_Text(hud, at.x + size, at.y - 4 * scale, label, scale, color)
-		if is_current {
-			meters := int(la.length([2]f32{position.x - player.x, position.z - player.z}))
-			Render.Hud_Text(hud, at.x + size, at.y + 5 * scale, fmt.tprintf("%d M", meters), scale, color)
-		}
 	}
 }
 

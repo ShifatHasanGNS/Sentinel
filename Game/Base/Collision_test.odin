@@ -12,7 +12,7 @@ flat :: proc(data: rawptr, x, z: f32) -> f32 {
 	return 0
 }
 
-PASS_THROUGH :: bit_set[Catalogue.Object_Kind]{.Helipad, .Ammo_Box, .Camo_Net, .Water_Tower, .Gate}
+PASS_THROUGH :: bit_set[Catalogue.Object_Kind]{.Helipad, .Ammo_Box, .Camo_Net, .Water_Tower, .Gate} | Catalogue.PAVING
 
 // The body starts 8 m behind the object (-Z, away from any door) and walks along the object's own centre line (x = 0).
 @(test)

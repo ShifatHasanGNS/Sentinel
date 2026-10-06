@@ -73,7 +73,7 @@ Placements_May_Overlap :: proc(a, b: Catalogue.Object_Kind) -> bool {
 		}
 		return false
 	}
-	return covers(a, b) || covers(b, a)
+	return covers(a, b) || covers(b, a) || a in Catalogue.PAVING || b in Catalogue.PAVING // Surfacing lies under and between things.
 }
 
 // A placement's collision as solids turned with the object. Boxes are in the object's own frame (y = 0 is its ground point),

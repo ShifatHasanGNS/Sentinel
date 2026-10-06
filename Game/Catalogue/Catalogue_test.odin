@@ -45,6 +45,11 @@ size_ranges := [Object_Kind]Size_Range{
 	.Sign = {{1, 1.8, 0.05}, {2, 2.8, 0.3}},
 	.Flag = {{0.8, 5, 0.05}, {2.2, 8, 0.4}},
 	.Ammo_Box = {{0.3, 0.18, 0.15}, {0.7, 0.4, 0.4}},
+	.Road = {{5.5, 0.03, 15}, {7, 0.12, 17}},
+	.Parade_Ground = {{20, 0.03, 12}, {28, 0.12, 18}},
+	.Walkway = {{1.8, 0.03, 15}, {3, 0.12, 17}},
+	.Apron = {{36, 0.02, 12}, {48, 0.12, 20}},
+	.Lawn = {{8, 0.03, 4}, {12, 0.15, 8}},
 }
 
 TRIANGLE_BUDGET_PER_OBJECT :: 30000
@@ -115,6 +120,10 @@ test_collision_boxes_hug_the_visible_object :: proc(t: ^testing.T) {
 		defer Procedural.Assembly_Destroy(&assembly)
 		if len(assembly.groups) == 0 do continue
 		lowest, highest := Procedural.Assembly_Bounds(assembly)
+		if kind in PAVING { // Flat surfacing is never solid.
+			testing.expect_value(t, len(assembly.collision_boxes), 0)
+			continue
+		}
 		testing.expectf(t, len(assembly.collision_boxes) > 0, "%s: no collision boxes", object_name(kind))
 		if len(assembly.collision_boxes) == 0 do continue
 		box_lowest, box_highest := assembly.collision_boxes[0].lowest, assembly.collision_boxes[0].highest
@@ -143,7 +152,7 @@ test_shadow_meshes_are_a_cheaper_subset_of_each_object :: proc(t: ^testing.T) {
 		full_triangles, shadow_triangles := 0, 0
 		for group in full.groups do full_triangles += len(group.mesh.indices) / 3
 		for group in shadow.groups do shadow_triangles += len(group.mesh.indices) / 3
-		testing.expectf(t, shadow_triangles > 0, "%s: empty shadow mesh", object_name(kind))
+		if kind not_in PAVING do testing.expectf(t, shadow_triangles > 0, "%s: empty shadow mesh", object_name(kind))
 		testing.expectf(t, shadow_triangles <= full_triangles, "%s: shadow mesh is bigger than the object", object_name(kind))
 	}
 	fence_full, fence_shadow := Catalogue_Build(.Fence_Section), Catalogue_Build_Shadow(.Fence_Section)

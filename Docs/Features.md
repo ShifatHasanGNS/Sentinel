@@ -198,3 +198,6 @@
 | Sound feedback: hurt, death, hit confirm, weapon switch, empty click, landing, jump, hack beeps, toggles, boarding, enemy steps | Game/Sandbox/SoundFeedback.odin: feedback_sounds |
 | Ambience: wind, night crickets, daytime bird calls; tank cannon sound | Game/Sandbox/SoundFeedback.odin: ambience, vehicle_gun_sound; Engine/Audio/Synth.odin |
 | Audio end-to-end check (every sound mixed offline, device opens) | Tests/AudioCheck |
+| Paving (roads, parade ground, walkways, apron, lawns) | `Game/Catalogue/Paving.odin`: `PAVING` objects, placed by `Game/Base/Layout.odin:add_paving` |
+| Terrain dirt fade around the plateau (grass surround) | `Shaders/Include/TerrainBlend.glsl` |
+| Tactical map: grid, paving, outlined buildings, labelled objectives, scale bar, legend | `Game/Sandbox/Optics.odin:map_draw_hud` |

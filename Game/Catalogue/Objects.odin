@@ -46,6 +46,12 @@ Object_Kind :: enum {
 	Sign,
 	Flag,
 	Ammo_Box,
+	// Paving (flat ground surfacing; see Paving.odin).
+	Road,
+	Parade_Ground,
+	Walkway,
+	Apron,
+	Lawn,
 }
 
 Catalogue_Build :: proc(kind: Object_Kind) -> Procedural.Assembly {
@@ -113,6 +119,11 @@ object_parts :: proc(kind: Object_Kind) -> Parts {
 	case .Sign: return sign()
 	case .Flag: return flag()
 	case .Ammo_Box: return ammo_box()
+	case .Road: return road()
+	case .Parade_Ground: return parade_ground()
+	case .Walkway: return walkway()
+	case .Apron: return apron()
+	case .Lawn: return lawn()
 	}
 	unreachable()
 }

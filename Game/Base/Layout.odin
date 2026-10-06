@@ -27,6 +27,7 @@ Layout_Create :: proc(seed: u32, plateau_radius_meters: f32) -> (layout: Layout)
 	add_supply_yard(&layout)
 	add_camp(&layout)
 	add_gate_approach(&layout)
+	add_paving(&layout)
 	return layout
 }
 
@@ -117,6 +118,19 @@ add_gate_approach :: proc(layout: ^Layout) {
 	}
 	place(layout, .Barrier_Arm, 3, 70, 0)
 	for x in ([4]f32{-14, -8, 8, 14}) do place(layout, .Hesco_Barrier, x, 68 + abs(x) * 0.3, 0)
+}
+
+// The compound's surfacing: a main road from the gate to the headquarters forecourt, a cross road, a parade ground in front of the
+// headquarters, a footpath beside the barracks, the motor pool's apron and two lawns. All flat and non-solid.
+@(private = "file")
+add_paving :: proc(layout: ^Layout) {
+	for z in ([4]f32{70, 54, 38, 22}) do place(layout, .Road, 0, z, 0)
+	for x in ([4]f32{-24, -8, 8, 24}) do place(layout, .Road, x, 28, 90)
+	place(layout, .Parade_Ground, 0, 7, 0)
+	for z in ([4]f32{-24, -8, 8, 24}) do place(layout, .Walkway, -37, z, 0)
+	place(layout, .Apron, 10, 46, 0)
+	place(layout, .Lawn, -14, 14, 0)
+	place(layout, .Lawn, 14, 14, 0)
 }
 
 @(private = "file")

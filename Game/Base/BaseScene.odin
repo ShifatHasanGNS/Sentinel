@@ -40,7 +40,7 @@ Base_Scene_Create :: proc(layout: Layout, ground_height_meters: f32) -> (scene: 
 			Render.Mesh_Set_Instances(&mesh, instances[:])
 			append(&scene.groups[kind], Group_Render{mesh, group.material, group.emission})
 		}
-		scene.shadow[kind] = upload_shadow(kind, &scene.groups[kind][0].mesh)
+		if kind not_in Catalogue.PAVING do scene.shadow[kind] = upload_shadow(kind, &scene.groups[kind][0].mesh) // Flat surfacing casts no shadow.
 	}
 	return scene
 }
