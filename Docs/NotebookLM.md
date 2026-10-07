@@ -8,15 +8,15 @@ This document explains the whole Sentinel project in detail: what it is, why it 
 
 ### 1.1 In one paragraph
 
-Sentinel is a game engine and a game built together from scratch for a computer graphics course. The engine is a set of reusable code layers that open a window, talk to the graphics card, generate shapes, textures and sounds, light a scene realistically and run simple physics. The game on top is a small military infiltration mission in the spirit of the 2000 game *Project I.G.I.: I'm Going In*. The player sneaks into an enemy compound, hacks a computer, destroys a radar station, rescues a hostage and reaches an extraction point, while soldiers patrol, security cameras sweep and an alarm can call reinforcements.
+Sentinel is a game engine and a game built together from scratch for a computer graphics course. The engine is a set of reusable code layers that open a window, talk to the graphics card, generate shapes, textures and sounds, light a scene realistically and run simple physics. The game on top is a small military infiltration mission in the spirit of the 2000 game _Project I.G.I.: I'm Going In_. The player sneaks into an enemy compound, hacks a computer, destroys a radar station, rescues a hostage and reaches an extraction point, while soldiers patrol, security cameras sweep and an alarm can call reinforcements.
 
 ### 1.2 The hard rule: everything is generated
 
-The single most important design rule is that **no pre-made content is stored on disk**. There are no 3D model files, no image or texture files, no sound files. The only files read at run time are the shader text files (the small programs that run on the graphics card). Everything else is computed by code from a *seed*, a fixed number that makes randomness repeatable. Run it twice and you get the identical world.
+The single most important design rule is that **no pre-made content is stored on disk**. There are no 3D model files, no image or texture files, no sound files. The only files read at run time are the shader text files (the small programs that run on the graphics card). Everything else is computed by code from a _seed_, a fixed number that makes randomness repeatable. Run it twice and you get the identical world.
 
 Consequences of this rule, which explain many later decisions:
 
-- A tank, a soldier or a barracks is built out of simple primitives (boxes, spheres, cylinders, cones, capsules, tori, wedges), moved and sized by transforms, then bent and roughened by *deformers* (noise bumps, twists, tapers, bends).
+- A tank, a soldier or a barracks is built out of simple primitives (boxes, spheres, cylinders, cones, capsules, tori, wedges), moved and sized by transforms, then bent and roughened by _deformers_ (noise bumps, twists, tapers, bends).
 - A texture such as concrete or camouflage is not a picture. It is a small formula (a shader "recipe") that is rendered once at start-up into the graphics card's memory.
 - A gunshot or a wind loop is not a recording. It is a mathematical waveform computed at start-up.
 - Because nothing is stored, the project is tiny on disk, fully reproducible, and the rules about licensing are trivial: there are no third-party assets.
@@ -59,7 +59,7 @@ Why it matters: the engine can be understood and tested without the game. For ex
 - One package per folder. One feature per file, named after the feature.
 - Names are full words with units last: `range_meters`, `fov_degrees`, `delay_seconds`. No abbreviations.
 - Procedures are short (about 40 lines at most) and do one job. The rule "put `if` in the parent and `for` in the helpers" keeps branching in one place.
-- Content is *data*: an object is a table of parts, not branching builder code.
+- Content is _data_: an object is a table of parts, not branching builder code.
 - Comments appear only where the maths is invisible in the code, and then they name the formula and say why. The theory itself lives in `Docs/Graphics-Theory.md`.
 - Preconditions are asserted and every GL call is error-checked. Failures are never swallowed.
 
@@ -308,7 +308,7 @@ Pure logic with no drawing, so it is unit-tested (58 tests).
 ## Part 13. The mission (`Game/Mission`)
 
 - `Mission.odin` is a **pure state machine**. It never touches the world. It is fed an `Observation` ("the player is within reach of the terminal and pressing E", "the radar is destroyed", "the player is on the extraction beacon") and updates its objectives. This makes it easy to unit-test (16 tests).
-- Objectives for the day mission *Rescue*: enter the compound (the gate), hack the HQ computer (hold E for 2.5 s; progress drains twice as fast as it builds if you let go), destroy the radar, rescue the hostage (E near them) and reach the extraction beacon. Enter first; hack, radar and hostage in any order; extraction last. The second mission *Night Raid* replaces the hostage with blowing up two fuel tanks, starts at 21:30 and keeps its own best time.
+- Objectives for the day mission _Rescue_: enter the compound (the gate), hack the HQ computer (hold E for 2.5 s; progress drains twice as fast as it builds if you let go), destroy the radar, rescue the hostage (E near them) and reach the extraction beacon. Enter first; hack, radar and hostage in any order; extraction last. The second mission _Night Raid_ replaces the hostage with blowing up two fuel tanks, starts at 21:30 and keeps its own best time.
 - `SecurityCamera.odin`: sweeping cameras with a range and line-of-sight test and a suspicion timer. Seen long enough raises the base-wide alarm (`Alarm_Raise`), which calls reinforcements. Hacking the computer disables cameras. Cameras can also be shot.
 - `Save.odin`: a plain-text save format with a damage-tolerant parser: checkpoints after each objective and a best-time record per mission. `--continue` resumes.
 
@@ -352,7 +352,7 @@ The sandbox is the playable level and the only place where the Game layer's piec
 
 ## Part 17. Follow one event end to end
 
-*The player presses E next to the hostage.*
+_The player presses E next to the hostage._
 
 1. `Input` records the key in `Engine/Platform`; `Loop` calls the sandbox update.
 2. `MissionPlay` checks the player is within `HOSTAGE_REACH_METERS` of the hostage and has line of sight (`Line_Of_Sight_Clear` in `Engine/World/Raycast.odin`), and packs this into an `Observation`.
