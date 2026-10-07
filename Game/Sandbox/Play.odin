@@ -390,16 +390,10 @@ play_items :: proc(sandbox: ^Sandbox, items, shadow_items: ^[dynamic]Render.Draw
 	play := &sandbox.play
 	lights = make([dynamic]Render.Light, context.temp_allocator)
 	characters := make([dynamic]Characters.Character, context.temp_allocator)
-	skip_text, _ := os.lookup_env("BISECT_CHAR", context.temp_allocator)
-	skip, _ := strconv.parse_int(skip_text)
-	for enemy, enemy_index in play.battle.enemies {
-		if enemy_index == skip - 1 do continue
-		append(&characters, enemy.character)
-		if skip == 0 && enemy_index == 0 {}
-	}
+	for enemy in play.battle.enemies do append(&characters, enemy.character)
 	body_shown := !Gameplay.Health_Is_Dead(play.battle.player.health) && play.driving == nil
 	if body_shown do append(&characters, play.body)
-	if false do if hostage, present := mission_hostage_character(play).?; present do append(&characters, hostage)
+	if hostage, present := mission_hostage_character(play).?; present do append(&characters, hostage)
 	for item in Characters.Character_Renderer_Items(&play.soldiers, characters[:]) {
 		append(items, item)
 		append(shadow_items, item)

@@ -175,7 +175,7 @@ camera_for_view :: proc(view: string) -> Fly_Camera {
 	case "player": return Fly_Camera_Looking_At({4, 12.4, 107}, {0, 11.2, 100})
 	case "hq": return Fly_Camera_Looking_At({-6, 11.7, 14}, {0, 12.0, -1})
 	case "inside": return Fly_Camera_Looking_At({3, 11.75, -2.6}, {-3.5, 11.2, -10})
-	case "barracks": return Fly_Camera_Looking_At({-31, 11.7, -4}, {-44, 11.5, -2})
+	case "barracks": return Fly_Camera_Looking_At({-45.5, 12.9, -5.2}, {-42.8, 12.1, -2})
 	case "camera": return Fly_Camera_Looking_At({-30, 15.5, 33}, {-43.8, 16, 43.8})
 	case "field": return Fly_Camera_Looking_At({10, 9, 215}, {10, 5, 190})
 	case "tower": return Fly_Camera_Looking_At({-36, 16, 58}, {-43.8, 16, 43.8})
