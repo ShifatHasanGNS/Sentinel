@@ -4,7 +4,7 @@ A ten-minute read. It explains what each group of files does, in plain words wit
 
 ## 1. The big idea
 
-Sentinel is a small game engine plus a game, and **nothing is loaded from disk except shader text**. There are no 3D models, no pictures, no sound files. Every shape, texture and sound is computed by code from a number called a *seed*, so the same seed always gives the same world.
+Sentinel is a small game engine plus a game, and **nothing is loaded from disk except shader text**. There are no 3D models, no pictures, no sound files. Every shape, texture and sound is computed by code from a number called a _seed_, so the same seed always gives the same world.
 
 The code is stacked in layers. A layer may use the layers below it, never above:
 
@@ -23,7 +23,7 @@ Game              the mission, soldiers, weapons, base layout
 
 - **Main.odin**: a table of contents. Start up, loop, shut down.
 - **Config.odin**: one settings struct filled from the command-line flags (`--scene`, `--view`, `--mission`...).
-- **Loop.odin**: the heartbeat. Every frame it does *input, then update, then render*. It also handles window life: pausing when you click away, sleeping when minimised.
+- **Loop.odin**: the heartbeat. Every frame it does _input, then update, then render_. It also handles window life: pausing when you click away, sleeping when minimised.
 
 Everything else is reached from here in three or four calls.
 
@@ -59,7 +59,7 @@ macOS stops at OpenGL 4.1: no compute shaders. So every "bake" or filter is done
 
 ## 6. Drawing a frame (`Engine/Render` + `Shaders/`)
 
-The renderer is **deferred**: first draw every object's surface data (colour, normal, roughness) into several hidden images (the *G-buffer*), then light the whole screen in one pass. This makes many lights cheap.
+The renderer is **deferred**: first draw every object's surface data (colour, normal, roughness) into several hidden images (the _G-buffer_), then light the whole screen in one pass. This makes many lights cheap.
 
 Order of a frame (`Renderer.odin`):
 
@@ -86,12 +86,12 @@ Pure logic, no drawing:
 - **Synth**: builds each sound from maths (noise bursts for gunshots, sine tones for beeps, filtered noise for wind).
 - **Mixer**: plays up to 48 sounds at once, positions them left or right by direction and volume by distance, and limits peaks so it never clips.
 - **Device**: opens the speakers through miniaudio.
-- `Sound.odin` creates the sound bank; `SoundFeedback.odin` watches the game each frame and fires the right cue when something *changes* (you got hit, you landed, a soldier died), and keeps wind, crickets and birds going.
+- `Sound.odin` creates the sound bank; `SoundFeedback.odin` watches the game each frame and fires the right cue when something _changes_ (you got hit, you landed, a soldier died), and keeps wind, crickets and birds going.
 
 ## 9. Looks of the game objects (`Game/Materials`, `Game/Catalogue`)
 
 - **Materials**: one table row per surface (concrete, camo, rust...) tying a name to its recipe and light model.
-- **Catalogue**: every object is a *table of parts* (shape, size, bends, material), not code. `Buildings`, `Fortifications`, `Props`, `Vehicles`, `Doors`, `Paving` (roads, lawns) and `Objects` (the master list) hold the tables. Its tests check each object has a realistic real-world size.
+- **Catalogue**: every object is a _table of parts_ (shape, size, bends, material), not code. `Buildings`, `Fortifications`, `Props`, `Vehicles`, `Doors`, `Paving` (roads, lawns) and `Objects` (the master list) hold the tables. Its tests check each object has a realistic real-world size.
 
 ## 10. The base (`Game/Base`)
 
@@ -102,7 +102,7 @@ Pure logic, no drawing:
 
 ## 11. People and weapons (`Game/Characters`, `Game/Weapons`)
 
-- **Skeleton, Ik, Gait**: a soldier is joint *positions*; legs and arms are placed by two-bone inverse kinematics and a walking cycle that keeps feet planted.
+- **Skeleton, Ik, Gait**: a soldier is joint _positions_; legs and arms are placed by two-bone inverse kinematics and a walking cycle that keeps feet planted.
 - **Soldier / Character / CharacterRender**: body-part tables worn in five colour variants; all soldiers of a variant draw in one batch.
 - **Weapons / Behavior**: stats (damage, rate, magazine) and firing behaviour for the rifle, pistol, sniper, launcher and so on.
 
@@ -116,7 +116,7 @@ Pure logic, no drawing:
 
 ## 13. The mission (`Game/Mission`)
 
-- **Mission**: a small state machine: get inside, hack the HQ computer, destroy the radar, rescue the hostage, reach the beacon. It only receives *observations* ("player is near the terminal and pressing E") and answers with progress, so it is easy to test.
+- **Mission**: a small state machine: get inside, hack the HQ computer, destroy the radar, rescue the hostage, reach the beacon. It only receives _observations_ ("player is near the terminal and pressing E") and answers with progress, so it is easy to test.
 - **SecurityCamera**: cameras that spot you and raise the alarm. **Save**: checkpoint data.
 
 ## 14. Gluing it all together (`Game/Sandbox`)
@@ -137,7 +137,7 @@ The Sandbox is the playable level and the place where all layers meet.
 
 ## 16. Follow one event end to end
 
-*You press E next to the hostage.*
+_You press E next to the hostage._
 
 1. `Input` records the key. `Loop` calls the Sandbox update.
 2. `MissionPlay` sees you are within reach and in line of sight, and passes an observation to `Mission`.
